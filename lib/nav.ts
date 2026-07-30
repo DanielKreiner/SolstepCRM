@@ -37,6 +37,8 @@ export const NAV: NavGroup[] = [
       { label: "Abwesenheiten", href: "/abwesenheiten", icon: "abwesenheit", area: null },
       { label: "Mitarbeiter", href: "/mitarbeiter", icon: "mitarbeiter", area: "mitarbeiter" },
       { label: "Dokumente", href: "/dokumente", icon: "dokumente", area: null },
+      { label: "Meine Zeiten", href: "/meine-zeiten", icon: "konto", area: null },
+      { label: "Meine Dokumente", href: "/meine-dokumente", icon: "dokumente", area: null },
       { label: "Chat", href: "/chat", icon: "chat", area: null },
       { label: "Bewerber", href: "/bewerber", icon: "bewerber", area: "mitarbeiter" },
     ],
