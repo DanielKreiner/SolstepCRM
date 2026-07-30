@@ -80,7 +80,7 @@ export function DataTable<T>({
               <Link
                 key={getKey(row)}
                 href={hrefFor(row)}
-                className={`${className} hover:bg-panel`}
+                className={`${className} text-ink hover:bg-panel`}
                 style={{ gridTemplateColumns: template }}
               >
                 {cells}

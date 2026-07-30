@@ -143,7 +143,7 @@ export default async function CockpitPage() {
                     <li key={j.id}>
                       <Link
                         href={`/auftraege/${j.id}`}
-                        className="flex flex-wrap items-center gap-3 rounded-input bg-panel px-4 py-3 transition-colors hover:bg-sunk"
+                        className="flex flex-wrap items-center gap-3 rounded-input bg-panel px-4 py-3 text-ink transition-colors hover:bg-sunk"
                       >
                         <span className="num text-[13px] font-semibold">
                           {j.number}
@@ -178,7 +178,7 @@ export default async function CockpitPage() {
                     <li key={j.id}>
                       <Link
                         href={`/auftraege/${j.id}`}
-                        className="flex flex-wrap items-center gap-3 rounded-input bg-panel px-4 py-3 transition-colors hover:bg-sunk"
+                        className="flex flex-wrap items-center gap-3 rounded-input bg-panel px-4 py-3 text-ink transition-colors hover:bg-sunk"
                       >
                         <span className="num w-[92px] shrink-0 text-[12.5px] text-muted">
                           {date(j.scheduled_from)}
@@ -234,7 +234,7 @@ export default async function CockpitPage() {
                   <li key={j.id}>
                     <Link
                       href={`/auftraege/${j.id}`}
-                      className="flex items-center gap-3 rounded-input bg-panel px-4 py-3 transition-colors hover:bg-sunk"
+                      className="flex items-center gap-3 rounded-input bg-panel px-4 py-3 text-ink transition-colors hover:bg-sunk"
                     >
                       <span className="num text-[13px] font-semibold">
                         {j.number}
@@ -260,7 +260,7 @@ export default async function CockpitPage() {
                   <li key={a.id}>
                     <Link
                       href={`/lager/${a.id}`}
-                      className="flex items-center gap-3 rounded-input bg-panel px-4 py-3 transition-colors hover:bg-sunk"
+                      className="flex items-center gap-3 rounded-input bg-panel px-4 py-3 text-ink transition-colors hover:bg-sunk"
                     >
                       <span className="num text-[12px] text-muted">{a.sku}</span>
                       <span className="min-w-0 flex-1 truncate text-[13px]">

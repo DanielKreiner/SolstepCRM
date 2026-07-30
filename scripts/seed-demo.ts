@@ -285,6 +285,94 @@ async function seedMovements(admin: SupabaseClient) {
   }
 
   console.log(`${timeRows.length} Zeitbuchungen, ${moveRows.length} Lagerbewegungen.`);
+
+  await seedPipelines(admin, byMail);
+}
+
+/*
+ * Angebote und Servicetickets — die beiden anderen Pipelines.
+ * Geschrieben wird phase_id, nicht status: der Trigger aus 0006 zieht den
+ * technischen Status anhand von system_key nach.
+ */
+async function seedPipelines(admin: SupabaseClient, byMail: Map<string, string>) {
+  const [{ data: customers }, { data: phases }] = await Promise.all([
+    admin.from("customer").select("id, name").eq("company_id", COMPANY_A),
+    admin
+      .from("pipeline_phase")
+      .select("id, key, pipeline:pipeline_id ( kind )")
+      .eq("company_id", COMPANY_A),
+  ]);
+
+  const byName = new Map((customers ?? []).map((c) => [c.name as string, c.id as string]));
+  const phaseId = (kind: string, key: string) =>
+    (phases ?? []).find(
+      (p) =>
+        (p.pipeline as unknown as { kind: string } | null)?.kind === kind &&
+        p.key === key,
+    )?.id as string | undefined;
+
+  await admin.from("service_ticket").delete().eq("company_id", COMPANY_A);
+  await admin.from("quote").delete().eq("company_id", COMPANY_A);
+
+  const inDays = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const quotes = [
+    ["AN-2026-0107", "Landwirtschaft Grubmüller", "qualifiziert", 48900, 31200, 21],
+    ["AN-2026-0106", "Tischlerei Aigner GmbH", "gesendet", 74900, 48200, 9],
+    ["AN-2026-0105", "Familie Brandstätter", "angenommen", 28400, 16800, -14],
+    ["AN-2026-0104", "Landwirtschaft Grubmüller", "neu", 12400, 7900, 30],
+    ["AN-2026-0103", "Tischlerei Aigner GmbH", "verloren", 33500, 22100, -40],
+  ] as const;
+
+  const quoteRows = quotes
+    .filter(([, kunde, key]) => byName.has(kunde) && phaseId("vertrieb", key))
+    .map(([number, kunde, key, netto, kosten, faellig]) => ({
+      company_id: COMPANY_A,
+      customer_id: byName.get(kunde)!,
+      number,
+      phase_id: phaseId("vertrieb", key)!,
+      net_total: netto,
+      cost_total: kosten,
+      valid_until: inDays(faellig),
+      owner_id: byMail.get("buero@hofstaetter.example.com") ?? null,
+    }));
+
+  if (quoteRows.length) {
+    const { error } = await admin.from("quote").insert(quoteRows);
+    if (error) throw error;
+  }
+
+  const tickets = [
+    ["S-2026-0031", "Familie Brandstätter", "offen", "stoerung", 1, "Wechselrichter meldet Fehler 301 seit heute früh."],
+    ["S-2026-0030", "Tischlerei Aigner GmbH", "diagnose", "stoerung", 2, "Ertrag seit zwei Wochen rund 20 Prozent unter Vorjahr."],
+    ["S-2026-0029", "Familie Brandstätter", "termin", "frage", 3, "Bitte um Einweisung in die App für den Speicher."],
+    ["S-2026-0028", "Tischlerei Aigner GmbH", "behoben", "rechnung", 3, "Rückfrage zur Schlussrechnung, geklärt."],
+  ] as const;
+
+  const ticketRows = tickets
+    .filter(([, kunde, key]) => byName.has(kunde) && phaseId("service", key))
+    .map(([number, kunde, key, kategorie, schwere, body]) => ({
+      company_id: COMPANY_A,
+      customer_id: byName.get(kunde)!,
+      number,
+      phase_id: phaseId("service", key)!,
+      category: kategorie,
+      severity: schwere,
+      body,
+      source: "portal",
+      assignee_id: byMail.get("bauleitung@hofstaetter.example.com") ?? null,
+    }));
+
+  if (ticketRows.length) {
+    const { error } = await admin.from("service_ticket").insert(ticketRows);
+    if (error) throw error;
+  }
+
+  console.log(`${quoteRows.length} Angebote, ${ticketRows.length} Servicetickets.`);
 }
 
 /** Wiener Wanduhrzeit als UTC-Instant, ohne date-fns-tz im Skript. */

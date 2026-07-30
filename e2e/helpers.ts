@@ -10,6 +10,15 @@ export const DEMO = {
   fremd: "gf@zweitbetrieb.example.com",
 } as const;
 
+/*
+ * Der Service-Role-Client umgeht RLS und sieht beide Mandanten. Jede
+ * Kontrollabfrage muss deshalb selbst auf den Demomandanten einschränken —
+ * sonst greift man sich die gleichnamige Phase oder Auftragsnummer des
+ * Fremdmandanten. Genau das ist hier einmal passiert.
+ */
+export const COMPANY_A = "11111111-1111-4111-8111-111111111111";
+export const COMPANY_B = "22222222-2222-4222-8222-222222222222";
+
 export function password(): string {
   const p = process.env.SEED_PASSWORD;
   if (!p) throw new Error("SEED_PASSWORD fehlt.");
@@ -37,6 +46,7 @@ export async function stockOf(sku: string): Promise<number> {
   const { data, error } = await admin()
     .from("article")
     .select("stock")
+    .eq("company_id", COMPANY_A)
     .eq("sku", sku)
     .single();
   if (error) throw error;
@@ -48,6 +58,7 @@ export async function jobHours(number: string): Promise<number> {
   const { data: job, error: e1 } = await db
     .from("job")
     .select("id")
+    .eq("company_id", COMPANY_A)
     .eq("number", number)
     .single();
   if (e1) throw e1;

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { DEMO, admin, jobHours, login, stockOf } from "./helpers";
+import { COMPANY_A, DEMO, admin, jobHours, login, stockOf } from "./helpers";
 
 /*
  * Definition of Done Meilenstein 1 (CLAUDE.md Abschnitt 12):
@@ -17,6 +17,7 @@ async function jobId(number: string): Promise<string> {
   const { data, error } = await admin()
     .from("job")
     .select("id")
+    .eq("company_id", COMPANY_A)
     .eq("number", number)
     .single();
   if (error) throw error;
@@ -27,6 +28,7 @@ async function articleId(sku: string): Promise<string> {
   const { data, error } = await admin()
     .from("article")
     .select("id")
+    .eq("company_id", COMPANY_A)
     .eq("sku", sku)
     .single();
   if (error) throw error;
