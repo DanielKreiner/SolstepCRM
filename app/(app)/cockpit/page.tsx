@@ -31,11 +31,12 @@ export default async function CockpitPage() {
   return (
     <main className="mx-auto max-w-[var(--content-max)] p-[14px]">
       <Panel className="p-[30px]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="text-[22px] font-bold tracking-[-0.02em]">Cockpit</h1>
             <p className="mt-[3px] text-[13px] text-muted">
-              Angemeldet als <span className="num">{user.email}</span>
+              Angemeldet als{" "}
+              <span className="num break-all">{user.email}</span>
             </p>
           </div>
           <form action={signOut}>
@@ -51,12 +52,14 @@ export default async function CockpitPage() {
               Mandant konnte nicht geladen werden: {error.message}
             </p>
           ) : company ? (
-            <div className="flex items-center gap-[10px]">
+            <div className="flex flex-wrap items-center gap-x-[10px] gap-y-[6px]">
               <span className="text-[15px] font-semibold">{company.name}</span>
               <Pill tone={company.status === "active" ? "done" : "warn"}>
                 {company.status}
               </Pill>
-              <span className="num text-[11px] text-faint">{company.id}</span>
+              <span className="num w-full truncate text-[11px] text-faint">
+                {company.id}
+              </span>
             </div>
           ) : (
             <p className="text-[13px] text-muted">
