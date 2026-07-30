@@ -53,3 +53,6 @@ yarn-error.log*
 
 # Claude Design Support-Datei (wird nicht mitgeliefert)
 design/support.js
+
+# Build-Verzeichnis, getrennt vom Dev-Server
+/.next-build/

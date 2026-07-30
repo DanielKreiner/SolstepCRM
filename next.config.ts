@@ -3,6 +3,12 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  /*
+   * Getrennte Verzeichnisse für dev und build. Sonst überschreibt ein
+   * "pnpm build" die Chunks des laufenden Dev-Servers, und der antwortet
+   * bis zum Neustart mit "Cannot find module ./317.js".
+   */
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   typescript: {
     // Kein Build, der Typfehler durchwinkt.
     ignoreBuildErrors: false,

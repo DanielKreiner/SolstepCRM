@@ -18,6 +18,7 @@ const eslintConfig = [
     ignores: [
       "node_modules/**",
       ".next/**",
+      ".next-build/**",
       "design/**", // Mockups, read-only Referenz
       "supabase/**",
       "next-env.d.ts",
