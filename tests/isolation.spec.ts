@@ -24,6 +24,7 @@ let clientA: SupabaseClient;
 let clientB: SupabaseClient;
 let admin: SupabaseClient;
 let tables: string[] = [];
+let relations: { name: string; type: string }[] = [];
 
 function anonClient(): SupabaseClient {
   return createClient(
@@ -60,9 +61,16 @@ beforeAll(async () => {
     signIn(USER_B, password),
   ]);
 
-  const { data, error } = await clientA.from("v_tenant_table").select("table_name");
+  const { data, error } = await clientA
+    .from("v_tenant_table")
+    .select("table_name, table_type");
   if (error) throw error;
-  tables = (data ?? []).map((r) => r.table_name as string).sort();
+
+  relations = (data ?? []).map((r) => ({
+    name: r.table_name as string,
+    type: r.table_type as string,
+  }));
+  tables = relations.map((r) => r.name).sort();
 });
 
 describe("Aufbau des Tests", () => {
@@ -71,6 +79,18 @@ describe("Aufbau des Tests", () => {
     // Stichproben quer durch die fachlichen Bereiche
     for (const t of ["job", "invoice", "time_entry", "absence", "customer"]) {
       expect(tables).toContain(t);
+    }
+  });
+
+  it("prüft auch Views, nicht nur Tabellen", () => {
+    // Views laufen in Postgres per Default mit Eigentümerrechten und umgehen
+    // damit die RLS ihrer Basistabellen. Genau so ist search_index einmal
+    // mandantenübergreifend lesbar gewesen (Migration 0003). Der Test darf
+    // sich nie wieder auf BASE TABLE beschränken.
+    const views = relations.filter((r) => r.type === "VIEW").map((r) => r.name);
+    expect(views.length).toBeGreaterThan(0);
+    for (const v of ["search_index", "v_job_kpi", "v_time_balance"]) {
+      expect(views).toContain(v);
     }
   });
 
