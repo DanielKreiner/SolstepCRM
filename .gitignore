@@ -1,0 +1,55 @@
+# Abhängigkeiten
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+
+# Next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Produktion
+/build
+/dist
+
+# Umgebung — NIEMALS committen
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Supabase
+/supabase/.branches
+/supabase/.temp
+/supabase/.env
+
+# Vercel
+.vercel
+
+# Test / Coverage
+/coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Betriebssystem / Editor
+.DS_Store
+*.pem
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Design Support-Datei (wird nicht mitgeliefert)
+design/support.js

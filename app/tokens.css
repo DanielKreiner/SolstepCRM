@@ -1,0 +1,72 @@
+/*
+ * Design-Tokens — Quelle: design/*.dc.html
+ *
+ * Diese Datei ist die einzige Stelle mit Hex-Werten. Komponenten benutzen
+ * ausschliesslich die Tailwind-Utilities aus globals.css (bg-surface, text-muted,
+ * rounded-card …). Kein Hex in einer Komponente — CLAUDE.md Abschnitt 9.
+ */
+
+:root {
+  /* Flaechen */
+  --app: #eae6e0;
+  --panel: #f8f6f3;
+  --surface: #ffffff;
+  --sunk: #f2eee9;
+  --line: #eae4dc;
+  --line-strong: #b8afa5;
+
+  /* Text */
+  --text: #151210;
+  --text-2: #6a625a;
+  --text-3: #9c9289;
+
+  /* Akzent */
+  --accent: #e8952b;
+  --accent-from: #f2a73f;
+  --accent-to: #c97918;
+  --accent-ink: #b4690e; /* Akzent auf heller Flaeche, Linkfarbe */
+  --accent-sunk: #f5f0ea; /* Akzentflaeche sehr hell, z. B. aktiver Navi-Eintrag */
+
+  /* Status — immer Flaeche UND Text, nie Farbe allein */
+  --s-new: #8b92a0;
+  --s-doing: #3e7bc6;
+  --s-waiting: #8465c4;
+  --s-done: #3e9e6b;
+  --s-warn: #e8952b;
+  --s-crit: #d2543f;
+
+  /* Radien */
+  --r-panel: 26px;
+  --r-card: 19px;
+  --r-pill: 99px;
+  --r-input: 14px;
+  --r-icon: 9px;
+
+  /* Tiefe und Bewegung */
+  --shadow: 0 1px 2px rgba(21, 18, 16, 0.04), 0 8px 24px rgba(21, 18, 16, 0.04);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Layout */
+  --sidebar-w: 246px;
+  --content-max: 1680px;
+  --row-h: 44px;
+  --row-h-compact: 36px;
+}
+
+[data-theme="dark"] {
+  --app: #0c0b0a;
+  --panel: #151211;
+  --surface: #1d1917;
+  --sunk: #221e1b;
+  --line: #2a2522;
+  --line-strong: #3a332e;
+
+  --text: #f2eee9;
+  --text-2: #a79e95;
+  --text-3: #7a726a;
+
+  --accent-ink: #f2a73f;
+  --accent-sunk: #2a2018;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}

@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--app:#EAE6E0;--panel:#F8F6F3;--surface:#FFFFFF;--sunk:#F2EEE9;--line:#EAE4DC;--t1:#151210;--t2:#6A625A;--t3:#9C9289;--amber:#E8952B;--shadow:0 1px 2px rgba(21,18,16,0.04),0 8px 24px rgba(21,18,16,0.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--app);color:var(--t1);font-family:'Inter Tight',system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-wrap:pretty;}
+  a{color:#C97918;text-decoration:none;}
+  a:hover{color:var(--amber);}
+  input,button,textarea{font-family:inherit;}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;}
+</style>
+</helmet>
+
+<div style="padding:22px 26px 40px;min-height:100vh;background:var(--app)">
+  <div style="display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:22px">
+    <div style="flex:1;min-width:280px">
+      <div style="font-size:30px;font-weight:700;letter-spacing:-0.03em">Mitarbeiter-App</div>
+      <div style="font-size:14.5px;color:var(--t2);margin-top:4px">Markus Grabner · Monteur · Mi 29.07.2026 · Zeit und Material immer auf den Auftrag</div>
+    </div>
+    <div style="display:flex;background:var(--surface);border-radius:99px;padding:4px;gap:3px;box-shadow:var(--shadow)">
+      <sc-for list="{{ modes }}" as="m" hint-placeholder-count="2">
+        <button onClick="{{ m.go }}" style="border:0;border-radius:99px;padding:11px 22px;font-size:14px;cursor:pointer;background:{{ m.bg }};color:{{ m.fg }};font-weight:{{ m.fw }}">{{ m.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- HANDY -->
+  <sc-if value="{{ isMobil }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;gap:22px;flex-wrap:wrap">
+
+      <div style="width:390px;flex:0 0 390px">
+        <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:9px">1 · Heute</div>
+        <div style="width:390px;height:844px;border-radius:34px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column">
+          <div style="height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)"><span>07:41</span><span>LTE</span></div>
+          <div style="flex:1;padding:4px 16px 12px;overflow-y:auto">
+            <div style="font-size:24px;font-weight:700;letter-spacing:-0.025em">Guten Morgen, Markus</div>
+            <div style="font-size:14px;color:var(--t2)">3 Termine · 7,7 h Soll heute</div>
+            <div style="margin-top:16px;border-radius:22px;padding:20px;background:linear-gradient(150deg,#E8952B,#B4690E);color:#fff;box-shadow:0 10px 26px rgba(180,105,14,0.22)">
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="font-size:12px;font-weight:600;border-radius:99px;padding:4px 11px;background:rgba(255,255,255,0.22)">Jetzt aktiv</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;opacity:0.9">A-2026-0412</span>
+              </div>
+              <div style="font-size:21px;font-weight:700;letter-spacing:-0.02em;margin-top:12px">Fam. Halbauer</div>
+              <div style="font-size:13.5px;opacity:0.92">Pfarrgasse 14, Oberpullendorf</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;opacity:0.88;margin-top:6px">9,84 kWp + 10 kWh · 42 von 56 h</div>
+              <div style="display:flex;gap:10px;margin-top:16px">
+                <button style="flex:1;height:58px;border:0;border-radius:99px;background:#fff;color:#151210;font-size:15px;font-weight:600;cursor:pointer">Navigation</button>
+                <button style="width:58px;height:58px;border:0;border-radius:99px;background:rgba(255,255,255,0.22);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center">{{ iconTelefon }}</button>
+              </div>
+            </div>
+            <div style="margin-top:14px;background:var(--surface);border-radius:22px;padding:18px;box-shadow:var(--shadow);text-align:center">
+              <div style="font-size:13px;color:var(--t2)">Laufende Zeit auf A-2026-0412</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:44px;font-weight:600;letter-spacing:-0.03em;margin-top:4px">00:41:12</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">Fahrtzeit seit 07:00 · 18 km</div>
+            </div>
+            <div style="font-size:13px;font-weight:600;color:var(--t2);margin-top:16px">Weiter heute</div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:9px">
+              <sc-for list="{{ termine }}" as="t" hint-placeholder-count="3">
+                <div style="background:var(--surface);border-radius:18px;padding:14px;box-shadow:var(--shadow);display:flex;gap:12px;align-items:center">
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--t2);width:50px">{{ t.zeit }}</div>
+                  <div style="flex:1">
+                    <div style="font-size:14.5px;font-weight:600">{{ t.titel }}</div>
+                    <div style="font-size:12.5px;color:var(--t2)">{{ t.ort }}</div>
+                  </div>
+                  <span style="width:9px;height:9px;border-radius:99px;background:{{ t.color }}"></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="height:82px;background:var(--surface);display:flex;align-items:center;padding:0 10px;box-shadow:0 -1px 0 var(--line)">
+            <sc-for list="{{ nav1 }}" as="n" hint-placeholder-count="5">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:{{ n.fg }}">
+                <div style="width:{{ n.size }};height:{{ n.size }};border-radius:{{ n.radius }};background:{{ n.bg }};display:flex;align-items:center;justify-content:center;color:{{ n.iconFg }}">{{ n.iconEl }}</div>
+                <span style="font-size:11px;font-weight:{{ n.fw }}">{{ n.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:390px;flex:0 0 390px">
+        <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:9px">2 · Stempeln</div>
+        <div style="width:390px;height:844px;border-radius:34px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column">
+          <div style="height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)"><span>12:58</span><span>LTE</span></div>
+          <div style="flex:1;padding:4px 16px 0;display:flex;flex-direction:column">
+            <div style="background:var(--surface);border-radius:20px;padding:16px;box-shadow:var(--shadow);display:flex;align-items:center;gap:12px">
+              <div style="flex:1">
+                <div style="font-size:12.5px;color:var(--t2)">Zeit läuft auf</div>
+                <div style="font-size:16px;font-weight:600;margin-top:2px">A-2026-0412 · Fam. Halbauer</div>
+              </div>
+              <span style="font-size:13px;color:#C97918;font-weight:600">wechseln</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center">
+              <div style="position:relative;width:250px;height:250px;border-radius:99px;background:conic-gradient(#E8952B 0turn 0.69turn,var(--sunk) 0.69turn 1turn)">
+                <div style="position:absolute;inset:18px;border-radius:99px;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;justify-content:center">
+                  <div style="font-size:12px;color:var(--t2);letter-spacing:0.06em;text-transform:uppercase">Montage seit 07:40</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:50px;font-weight:600;letter-spacing:-0.03em;line-height:1.1">05:18</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2)">47,3 von 56 h</div>
+                </div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2);margin-top:18px">Pause 12:00–12:30 abgezogen</div>
+            </div>
+            <button style="width:100%;height:88px;border:0;border-radius:26px;background:#D2543F;color:#fff;font-size:21px;font-weight:600;cursor:pointer;box-shadow:0 10px 24px rgba(210,84,63,0.26)">Ausstempeln</button>
+            <div style="display:flex;gap:10px;margin-top:12px;margin-bottom:16px">
+              <sc-for list="{{ stempelAktionen }}" as="a" hint-placeholder-count="3">
+                <button style="flex:1;height:66px;border:0;border-radius:20px;background:var(--surface);box-shadow:var(--shadow);color:var(--t1);font-size:14px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+                  <span>{{ a.label }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);font-weight:400">{{ a.meta }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="height:82px;background:var(--surface);display:flex;align-items:center;padding:0 10px;box-shadow:0 -1px 0 var(--line)">
+            <sc-for list="{{ nav2 }}" as="n" hint-placeholder-count="5">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:{{ n.fg }}">
+                <div style="width:{{ n.size }};height:{{ n.size }};border-radius:{{ n.radius }};background:{{ n.bg }};display:flex;align-items:center;justify-content:center;color:{{ n.iconFg }}">{{ n.iconEl }}</div>
+                <span style="font-size:11px;font-weight:{{ n.fw }}">{{ n.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:390px;flex:0 0 390px">
+        <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:9px">3 · Material buchen</div>
+        <div style="width:390px;height:844px;border-radius:34px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column">
+          <div style="height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)"><span>06:52</span><span>LTE</span></div>
+          <div style="height:200px;flex:0 0 200px;margin:4px 16px 0;border-radius:24px;background:#151210;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center">
+            <div style="width:224px;height:128px;border:2px solid var(--amber);border-radius:16px"></div>
+            <div style="position:absolute;left:24px;right:24px;top:50%;height:2px;background:rgba(232,149,43,0.7)"></div>
+            <div style="position:absolute;top:14px;left:14px;font-size:12px;font-weight:600;border-radius:99px;padding:6px 12px;background:rgba(255,255,255,0.16);color:#F5F0EA">Auftrag A-2026-0412</div>
+            <div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;color:#C6BEB5">Barcode in den Rahmen halten</div>
+          </div>
+          <div style="flex:1;padding:14px 16px 0;overflow-y:auto">
+            <div style="background:var(--surface);border-radius:18px;padding:14px;box-shadow:var(--shadow);display:flex;align-items:center;gap:12px">
+              <span style="width:10px;height:10px;border-radius:99px;background:#3E9E6B"></span>
+              <div style="flex:1">
+                <div style="font-size:14.5px;font-weight:600">JAM54D40-445 erkannt</div>
+                <div style="font-size:12.5px;color:var(--t2)">JA Solar 445 W · Lager 284 Stk</div>
+              </div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600">24</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
+              <div style="font-size:13px;font-weight:600;color:var(--t2)">Heute entnommen</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">4 Positionen</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+              <sc-for list="{{ material }}" as="m" hint-placeholder-count="3">
+                <div style="background:var(--surface);border-radius:18px;padding:14px;box-shadow:var(--shadow)">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div style="flex:1">
+                      <div style="font-size:14.5px;font-weight:600">{{ m.name }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)">{{ m.nr }}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <button onClick="{{ m.minus }}" style="width:42px;height:42px;border:0;border-radius:99px;background:var(--panel);font-size:18px;cursor:pointer;color:var(--t1)">−</button>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;min-width:60px;text-align:center">{{ m.menge }}</span>
+                      <button onClick="{{ m.plus }}" style="width:42px;height:42px;border:0;border-radius:99px;background:var(--panel);font-size:18px;cursor:pointer;color:var(--t1)">＋</button>
+                    </div>
+                  </div>
+                  <button style="width:100%;height:46px;margin-top:10px;border:0;border-radius:99px;background:var(--panel);color:var(--t2);font-size:13.5px;cursor:pointer">Zurück ins Lager</button>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:14px 16px 18px">
+            <button style="width:100%;height:62px;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 10px 24px rgba(201,121,24,0.24)">Auf Auftrag buchen</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:390px;flex:0 0 390px">
+        <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:9px">4 · Auftrag mobil</div>
+        <div style="width:390px;height:844px;border-radius:34px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column">
+          <div style="height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)"><span>14:12</span><span>LTE</span></div>
+          <div style="padding:4px 16px 14px;display:flex;align-items:center;gap:12px">
+            <span style="font-size:19px;color:var(--t2)">‹</span>
+            <div style="flex:1">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)">A-2026-0412</div>
+              <div style="font-size:19px;font-weight:700;letter-spacing:-0.02em">Fam. Halbauer</div>
+            </div>
+            <span style="font-size:12px;font-weight:600;border-radius:99px;padding:5px 12px;background:rgba(62,123,198,0.13);color:#3E7BC6">In Montage</span>
+          </div>
+          <div style="flex:1;padding:0 16px 12px;overflow-y:auto">
+            <div style="background:var(--surface);border-radius:20px;padding:16px;box-shadow:var(--shadow)">
+              <div style="font-size:14.5px;font-weight:600">Pfarrgasse 14, 7350 Oberpullendorf</div>
+              <div style="font-size:13px;color:var(--t2);margin-top:2px">Ansprechpartner Josef Halbauer</div>
+              <div style="display:flex;gap:10px;margin-top:14px">
+                <button style="flex:1;height:56px;border:0;border-radius:99px;background:var(--panel);color:var(--t1);font-size:14.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">{{ iconTelefon }}Anrufen</button>
+                <button style="flex:1;height:56px;border:0;border-radius:99px;background:#151210;color:#F5F0EA;font-size:14.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">{{ iconRoute }}Route</button>
+              </div>
+            </div>
+            <div style="font-size:13px;font-weight:600;color:var(--t2);margin-top:16px">Checkliste</div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:9px">
+              <sc-for list="{{ checkliste }}" as="c" hint-placeholder-count="5">
+                <div onClick="{{ c.toggle }}" style="background:var(--surface);border-radius:18px;padding:15px;box-shadow:var(--shadow);display:flex;align-items:center;gap:12px;min-height:58px;cursor:pointer">
+                  <span style="width:24px;height:24px;border-radius:99px;border:1.5px solid {{ c.color }};background:{{ c.fill }};color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center">{{ c.mark }}</span>
+                  <span style="flex:1;font-size:14.5px">{{ c.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
+              <div style="font-size:13px;font-weight:600;color:var(--t2)">Fotos</div>
+              <span style="font-size:13px;color:#C97918;font-weight:600;display:flex;align-items:center;gap:7px">{{ iconKamera }}Kamera öffnen</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:9px">
+              <sc-for list="{{ fotos }}" as="f" hint-placeholder-count="3">
+                <div style="aspect-ratio:1;border-radius:16px;background:repeating-linear-gradient(135deg,var(--sunk) 0 6px,var(--surface) 6px 12px);display:flex;align-items:flex-end;padding:8px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t3)">{{ f }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:14px 16px 18px">
+            <button style="width:100%;height:62px;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:16px;font-weight:600;cursor:pointer">Material buchen</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:390px;flex:0 0 390px">
+        <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:9px">5 · Abwesenheit und Monatsbericht</div>
+        <div style="width:390px;height:844px;border-radius:34px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column">
+          <div style="height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)"><span>17:05</span><span>WLAN</span></div>
+          <div style="flex:1;padding:4px 16px 12px;overflow-y:auto">
+            <div style="font-size:21px;font-weight:700;letter-spacing:-0.025em">Abwesenheit</div>
+            <div style="font-size:13.5px;color:var(--t2)">Urlaubsanspruch 25 Tage · 11 offen</div>
+            <div style="margin-top:14px;background:var(--surface);border-radius:22px;padding:16px;box-shadow:var(--shadow)">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div style="font-size:14.5px;font-weight:600">August 2026</div>
+                <div style="display:flex;gap:10px;color:var(--t2)"><span>‹</span><span>›</span></div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:12px">
+                <sc-for list="{{ wochentage }}" as="w" hint-placeholder-count="7">
+                  <div style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ w }}</div>
+                </sc-for>
+                <sc-for list="{{ kalender }}" as="d" hint-placeholder-count="35">
+                  <div style="aspect-ratio:1;border-radius:11px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:13px;background:{{ d.bg }};color:{{ d.fg }};font-weight:{{ d.fw }}">{{ d.n }}</div>
+                </sc-for>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2);margin-top:12px">17.08. – 21.08.2026 · 5 Arbeitstage</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+              <sc-for list="{{ arten }}" as="a" hint-placeholder-count="4">
+                <div onClick="{{ a.go }}" style="border-radius:18px;padding:14px;min-height:64px;background:{{ a.bg }};color:{{ a.fg }};box-shadow:var(--shadow);cursor:pointer">
+                  <div style="font-size:14px;font-weight:600">{{ a.label }}</div>
+                  <div style="font-size:11.5px;opacity:0.75">{{ a.meta }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:12px;background:var(--surface);border-radius:22px;padding:16px;box-shadow:var(--shadow)">
+              <div style="font-size:14.5px;font-weight:600">Monatsbericht Juli</div>
+              <div style="display:flex;gap:16px;margin-top:10px">
+                <div><div style="font-size:11.5px;color:var(--t2)">Ist</div><div style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:600">172,5</div></div>
+                <div><div style="font-size:11.5px;color:var(--t2)">Soll</div><div style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:600">165,0</div></div>
+                <div><div style="font-size:11.5px;color:var(--t2)">Saldo</div><div style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:600;color:#C97918">+7,5</div></div>
+              </div>
+              <div style="height:86px;border:1.5px dashed var(--line);border-radius:16px;margin-top:12px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:10px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3)">hier unterschreiben</span>
+              </div>
+            </div>
+          </div>
+          <div style="padding:14px 16px 18px;display:flex;gap:10px">
+            <button style="flex:1;height:60px;border:0;border-radius:99px;background:var(--surface);box-shadow:var(--shadow);color:var(--t1);font-size:14.5px;font-weight:600;cursor:pointer">Antrag senden</button>
+            <button style="flex:1;height:60px;border:0;border-radius:99px;background:#3E9E6B;color:#fff;font-size:14.5px;font-weight:600;cursor:pointer">Bericht bestätigen</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:390px;flex:0 0 390px">
+        <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:9px">6 · Offline im Keller</div>
+        <div style="width:390px;height:844px;border-radius:34px;background:#100E0C;color:#F2EEE9;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow)">
+          <div style="height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#A79E95"><span>09:14</span><span>kein Netz</span></div>
+          <div style="margin:4px 16px 0;border-radius:20px;padding:14px 16px;background:rgba(210,84,63,0.16);display:flex;align-items:center;gap:12px">
+            <span style="width:10px;height:10px;border-radius:99px;background:#D2543F"></span>
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600">Offline — 3 Buchungen werden nachgesendet</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#A79E95">letzter Kontakt 08:51</div>
+            </div>
+          </div>
+          <div style="flex:1;padding:16px 16px 0;display:flex;flex-direction:column">
+            <div style="background:#1D1917;border-radius:20px;padding:16px">
+              <div style="font-size:12.5px;color:#A79E95">Zeit läuft lokal weiter auf</div>
+              <div style="font-size:16px;font-weight:600;margin-top:2px">A-2026-0412 · Fam. Halbauer</div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:68px;font-weight:600;letter-spacing:-0.03em;line-height:1">02:29</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:13.5px;color:#A79E95">seit 06:45 · Speicher Keller</div>
+            </div>
+            <div style="font-size:13px;font-weight:600;color:#A79E95">Warteschlange</div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:9px">
+              <sc-for list="{{ warteschlange }}" as="q" hint-placeholder-count="3">
+                <div style="background:#1D1917;border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:12px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#A79E95;background:#100E0C;border-radius:8px;padding:4px 7px">{{ q.typ }}</span>
+                  <span style="flex:1;font-size:13.5px">{{ q.text }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#7A726A">{{ q.zeit }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <button style="width:100%;height:80px;margin-top:16px;margin-bottom:18px;border:0;border-radius:26px;background:var(--amber);color:#151210;font-size:20px;font-weight:600;cursor:pointer">Pause starten</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </sc-if>
+
+  <!-- DESKTOP -->
+  <sc-if value="{{ isDesktop }}">
+    <div style="display:flex;gap:14px;min-height:820px">
+      <aside style="width:232px;flex:0 0 232px;background:var(--surface);border-radius:26px;box-shadow:var(--shadow);padding:20px 14px;align-self:flex-start">
+        <div style="display:flex;align-items:center;gap:11px;padding:0 6px">
+          <div style="width:30px;height:30px;border-radius:10px;background:linear-gradient(150deg,#F2A73F,#C97918);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px">S</div>
+          <div>
+            <div style="font-weight:700;font-size:16px;letter-spacing:-0.02em">Solstep</div>
+            <div style="font-size:11px;color:var(--t2)">Mein Arbeitsplatz</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;margin-top:22px">
+          <sc-for list="{{ deskNav }}" as="n" hint-placeholder-count="6">
+            <button onClick="{{ n.go }}" style="display:flex;align-items:center;gap:11px;border:0;border-radius:14px;padding:11px;cursor:pointer;text-align:left;font-size:14px;background:{{ n.bg }};color:{{ n.fg }};font-weight:{{ n.fw }}">
+              <span style="width:26px;height:26px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:{{ n.iconBg }};color:{{ n.iconFg }}">{{ n.iconEl }}</span>
+              <span style="flex:1">{{ n.label }}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3)">{{ n.badge }}</span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="margin-top:22px;border-radius:20px;padding:16px;background:linear-gradient(160deg,#241D17,#100E0C);color:#F5F0EA;position:relative;overflow:hidden">
+          <div style="position:absolute;right:-40px;top:-30px;width:130px;height:130px;border-radius:99px;background:radial-gradient(circle,rgba(232,149,43,0.42),transparent 70%)"></div>
+          <div style="font-size:12.5px;color:#B8AFA5">Eingestempelt seit</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:600;margin-top:4px">06:45</div>
+          <button style="margin-top:12px;width:100%;border:0;border-radius:99px;background:var(--amber);color:#151210;font-size:13px;font-weight:600;padding:10px;cursor:pointer">Pause starten</button>
+        </div>
+      </aside>
+
+      <div style="flex:1;display:flex;flex-direction:column;gap:14px;min-width:0">
+        <header style="background:var(--surface);border-radius:22px;box-shadow:var(--shadow);padding:12px 18px;display:flex;align-items:center;gap:14px">
+          <div style="flex:1;max-width:420px;display:flex;align-items:center;gap:10px;background:var(--panel);border-radius:99px;padding:11px 16px">
+            <span style="color:var(--t3);display:flex">{{ iconSuche }}</span>
+            <input placeholder="Auftrag oder Kollegen suchen" style="flex:1;border:0;outline:0;background:transparent;color:var(--t1);font-size:14px">
+          </div>
+          <div style="flex:1"></div>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">Mi 29.07.2026 · 14:38</span>
+          <div style="display:flex;align-items:center;gap:11px">
+            <div style="width:40px;height:40px;border-radius:99px;background:#3E9E6B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:600">MG</div>
+            <div>
+              <div style="font-size:14px;font-weight:600">Markus Grabner</div>
+              <div style="font-size:12px;color:var(--t2)">Monteur · Oberpullendorf</div>
+            </div>
+          </div>
+        </header>
+
+        <main style="flex:1;background:var(--panel);border-radius:26px;box-shadow:var(--shadow);padding:24px 24px 30px">
+          <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+            <div style="flex:1;min-width:260px">
+              <div style="font-size:29px;font-weight:700;letter-spacing:-0.03em">{{ deskTitle }}</div>
+              <div style="font-size:14px;color:var(--t2);margin-top:5px">{{ deskSub }}</div>
+            </div>
+            <button style="display:flex;align-items:center;gap:9px;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:14px;font-weight:600;padding:13px 22px;cursor:pointer;box-shadow:0 6px 18px rgba(201,121,24,0.26)">{{ iconPlus }}{{ deskAction }}</button>
+          </div>
+
+          <sc-if value="{{ deskHeute }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+                <div style="border-radius:20px;padding:20px;background:linear-gradient(150deg,#E8952B,#B4690E);color:#fff;box-shadow:0 10px 26px rgba(180,105,14,0.22)">
+                  <div style="font-size:14.5px;font-weight:600">Heute gebucht</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:600;letter-spacing:-0.03em;margin-top:12px">7:23</div>
+                  <div style="font-size:12.5px;opacity:0.9;margin-top:6px">Soll 7:42 · läuft auf A-2026-0412</div>
+                </div>
+                <sc-for list="{{ deskKpis }}" as="k" hint-placeholder-count="3">
+                  <div style="border-radius:20px;padding:20px;background:var(--surface);box-shadow:var(--shadow)">
+                    <div style="font-size:14.5px;font-weight:600">{{ k.label }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:600;letter-spacing:-0.03em;margin-top:12px;color:{{ k.color }}">{{ k.value }}</div>
+                    <div style="font-size:12.5px;color:var(--t2);margin-top:6px">{{ k.note }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start">
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                  <div style="font-size:17px;font-weight:600">Meine Aufträge diese Woche</div>
+                  <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+                    <sc-for list="{{ meineAuftraege }}" as="a" hint-placeholder-count="4">
+                      <div style="display:flex;align-items:center;gap:14px;background:var(--panel);border-radius:16px;padding:14px 16px">
+                        <div style="flex:1">
+                          <div style="display:flex;align-items:center;gap:9px">
+                            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);background:var(--surface);border-radius:99px;padding:3px 9px">{{ a.nr }}</span>
+                            <span style="font-size:14.5px;font-weight:600">{{ a.kunde }}</span>
+                          </div>
+                          <div style="font-size:12.5px;color:var(--t2);margin-top:3px">{{ a.meta }}</div>
+                        </div>
+                        <div style="width:130px">
+                          <div style="height:6px;border-radius:99px;background:var(--surface);overflow:hidden"><div style="height:100%;border-radius:99px;width:{{ a.w }};background:{{ a.color }}"></div></div>
+                          <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3);margin-top:4px">{{ a.stunden }}</div>
+                        </div>
+                        <span style="font-size:11.5px;border-radius:99px;padding:4px 11px;white-space:nowrap;background:{{ a.bg }};color:{{ a.fg }}">{{ a.status }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:16px">
+                  <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                    <div style="font-size:17px;font-weight:600">Heutige Buchungen</div>
+                    <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                      <sc-for list="{{ buchungen }}" as="b" hint-placeholder-count="4">
+                        <div style="display:flex;align-items:center;gap:11px">
+                          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);width:96px">{{ b.zeit }}</span>
+                          <span style="flex:1;font-size:13.5px">{{ b.text }}</span>
+                          <span style="font-size:11.5px;border-radius:99px;padding:3px 10px;background:{{ b.bg }};color:{{ b.fg }}">{{ b.art }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                    <div style="font-size:17px;font-weight:600">Team im Einsatz</div>
+                    <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+                      <sc-for list="{{ team }}" as="t" hint-placeholder-count="4">
+                        <div style="display:flex;align-items:center;gap:11px">
+                          <div style="width:32px;height:32px;border-radius:99px;background:{{ t.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">{{ t.ini }}</div>
+                          <div style="flex:1;min-width:0">
+                            <div style="font-size:13.5px;font-weight:500">{{ t.name }}</div>
+                            <div style="font-size:12px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.wo }}</div>
+                          </div>
+                          <span style="width:9px;height:9px;border-radius:99px;background:{{ t.dot }}"></span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ deskZeiten }}">
+            <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+                <div style="display:grid;grid-template-columns:130px 150px 110px 1.4fr 130px 120px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                  <div style="padding:14px 6px">Tag</div><div style="padding:14px 6px">Zeit</div><div style="padding:14px 6px;text-align:right">Dauer</div><div style="padding:14px 6px">Auftrag</div><div style="padding:14px 6px">Zeitart</div><div style="padding:14px 6px">Status</div>
+                </div>
+                <sc-for list="{{ zeitRows }}" as="z" hint-placeholder-count="8">
+                  <div style="display:grid;grid-template-columns:130px 150px 110px 1.4fr 130px 120px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:52px">
+                    <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ z.tag }}</div>
+                    <div contenteditable="true" style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;outline:0;border-radius:8px">{{ z.zeit }}</div>
+                    <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600">{{ z.dauer }}</div>
+                    <div style="padding:8px 6px;font-size:13px"><a href="#">{{ z.nr }}</a> <span style="color:var(--t3)">{{ z.kunde }}</span></div>
+                    <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;background:{{ z.artBg }};color:{{ z.artFg }}">{{ z.art }}</span></div>
+                    <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;white-space:nowrap;background:{{ z.bg }};color:{{ z.fg }}">{{ z.status }}</span></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                  <div style="font-size:17px;font-weight:600">Mein Zeitkonto</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+                    <sc-for list="{{ kontoKpis }}" as="k" hint-placeholder-count="4">
+                      <div style="background:var(--panel);border-radius:14px;padding:12px 14px">
+                        <div style="font-size:11.5px;color:var(--t2)">{{ k.label }}</div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;color:{{ k.color }}">{{ k.value }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <button style="width:100%;margin-top:14px;border:0;border-radius:99px;background:#151210;color:#F5F0EA;font-size:13.5px;font-weight:600;padding:12px;cursor:pointer">Zeitausgleich beantragen</button>
+                </div>
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                  <div style="font-size:17px;font-weight:600">Korrektur beantragen</div>
+                  <div style="font-size:13px;color:var(--t2);margin-top:4px">Änderung geht an Michael Bruckner zur Freigabe.</div>
+                  <div contenteditable="true" style="margin-top:12px;background:var(--panel);border-radius:16px;padding:14px;min-height:88px;font-size:13.5px;outline:0">Di 28.07.: Ausstempeln vergessen, Baustelle um 16:20 verlassen.</div>
+                  <button style="width:100%;margin-top:12px;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:13.5px;font-weight:600;padding:12px;cursor:pointer">Antrag senden</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ deskLohn }}">
+            <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:start">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+                <div style="padding:20px 22px;font-size:17px;font-weight:600;border-bottom:1px solid var(--line)">Meine Dokumente</div>
+                <sc-for list="{{ dokumente }}" as="d" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:14px;padding:15px 22px;border-bottom:1px solid var(--line)">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2);background:var(--panel);border-radius:8px;padding:5px 8px">{{ d.typ }}</span>
+                    <div style="flex:1">
+                      <div style="font-size:14px;font-weight:500">{{ d.name }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3)">{{ d.datum }}</div>
+                    </div>
+                    <span style="font-size:11.5px;border-radius:99px;padding:4px 11px;background:{{ d.bg }};color:{{ d.fg }}">{{ d.status }}</span>
+                    <button style="border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);padding:8px 15px;font-size:12.5px;cursor:pointer">Öffnen</button>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                  <div style="font-size:17px;font-weight:600">Meine Abwesenheiten 2026</div>
+                  <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                    <sc-for list="{{ abwesenheiten }}" as="a" hint-placeholder-count="4">
+                      <div style="display:flex;align-items:center;gap:12px">
+                        <span style="width:9px;height:9px;border-radius:99px;background:{{ a.color }}"></span>
+                        <span style="flex:1;font-size:13.5px">{{ a.label }}</span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)">{{ a.tage }}</span>
+                        <span style="font-size:11.5px;border-radius:99px;padding:3px 10px;background:{{ a.bg }};color:{{ a.fg }}">{{ a.status }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                  <div style="font-size:17px;font-weight:600">Qualifikationen</div>
+                  <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                    <sc-for list="{{ quali }}" as="q" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:12px">
+                        <span style="width:9px;height:9px;border-radius:99px;background:{{ q.color }}"></span>
+                        <span style="flex:1;font-size:13.5px">{{ q.label }}</span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{{ q.color }}">{{ q.bis }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </main>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2500,&quot;height&quot;:1000}}">
+const C = {slate:'#8B92A0',blue:'#3E7BC6',violet:'#8465C4',green:'#3E9E6B',amber:'#E8952B',red:'#D2543F'};
+const tint = (hex,a) => { const n = parseInt(hex.slice(1),16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; };
+
+const h = React.createElement;
+const ico = (parts, size) => h('svg', { width: size || 16, height: size || 16, viewBox:'0 0 24 24', fill:'none',
+  stroke:'currentColor', strokeWidth:1.8, strokeLinecap:'round', strokeLinejoin:'round', style:{display:'block'} },
+  parts.map((p,i) => h(p[0], Object.assign({ key:i }, p[1]))));
+const R = (x,y,w,hh,r) => ['rect',{x,y,width:w,height:hh,rx:r||2}];
+const L = (x1,y1,x2,y2) => ['line',{x1,y1,x2,y2}];
+const Ci = (cx,cy,r) => ['circle',{cx,cy,r}];
+const P = d => ['path',{d}];
+const ICONS = {
+  heute: [R(3,5,18,16,2.5),L(3,10,21,10),L(8,3,8,6),L(16,3,16,6),L(9,15,15,15)],
+  auftraege: [R(5,3,14,18,2.5),L(9,9,15,9),L(9,13,15,13),L(9,17,12,17)],
+  stempeln: [Ci(12,12,8.5),L(12,7.5,12,12),L(12,12,15.5,14)],
+  team: [Ci(8.5,8,3),Ci(16.5,9,2.4),P('M3 19c0-2.9 2.5-4.8 5.5-4.8S14 16.1 14 19'),P('M15 19c0-2 .6-3.4 1.6-4.2 2 0 4.4 1.3 4.4 4.2')],
+  profil: [Ci(12,8,3.4),P('M5 20c0-3.6 3-6 7-6s7 2.4 7 6')],
+  zeiten: [Ci(12,12,8.5),L(12,7.5,12,12),L(12,12,15.5,14)],
+  lohn: [P('M8 3h6l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'),P('M14 3v4h4'),L(9.5,13,15,13),L(9.5,16.5,13.5,16.5)],
+  chat: [P('M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 13.5z')],
+  suche: [Ci(11,11,7),L(16,16,20.5,20.5)],
+  plus: [L(12,5,12,19),L(5,12,19,12)],
+  telefon: [P('M6 3.5h3l1.5 4-2 1.5a10.5 10.5 0 0 0 5 5l1.5-2 4 1.5v3A2.5 2.5 0 0 1 16.5 19C10.7 18.4 5.6 13.3 5 7.5A2.5 2.5 0 0 1 6 3.5z')],
+  route: [P('M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z'),Ci(12,10,2.5)],
+  kamera: [P('M4 8.5h3l1.5-2h7L17 8.5h3v10H4z'),Ci(12,13,3.2)]
+};
+
+function bottomNav(active) {
+  return [['Heute','heute'],['Aufträge','auftraege'],['Stempeln','stempeln'],['Team','team'],['Profil','profil']].map(([label,key],i) => {
+    const mid = i === 2, on = label === active;
+    return { label, iconEl: ico(ICONS[key], mid ? 22 : 18),
+      size: mid ? '54px' : '32px', radius: mid ? '18px' : '10px',
+      bg: mid ? 'linear-gradient(150deg,#F2A73F,#C97918)' : (on ? 'var(--sunk)' : 'transparent'),
+      iconFg: mid ? '#fff' : (on ? '#151210' : '#9C9289'),
+      fg: on || mid ? '#151210' : '#9C9289', fw: on || mid ? '600' : '400' };
+  });
+}
+
+const DESK = {
+  heute: ['Heute', 'Mein Tag, meine Aufträge, meine Buchungen', 'Zeit buchen'],
+  zeiten: ['Meine Zeiten', 'KW 31 · alle Buchungen mit Auftragsbezug', 'Buchung nachtragen'],
+  lohn: ['Dokumente und Abwesenheit', 'Lohnzettel, Urlaub, Qualifikationen', 'Urlaub beantragen']
+};
+
+class Component extends DCLogic {
+  state = { mode:'mobil', deskScreen:'heute', mengen:{}, checked:{}, art:'Urlaub' };
+
+  renderVals() {
+    const s = this.state;
+    const kal = [];
+    let d = 1;
+    for (let i = 0; i < 35; i++) {
+      if (i < 5 || d > 31) { kal.push({ n:'', bg:'transparent', fg:'transparent', fw:'400' }); continue; }
+      const day = d, weekend = (i % 7) >= 5, sel = day >= 17 && day <= 21;
+      kal.push({ n:String(day), bg: sel ? C.amber : (weekend ? 'var(--sunk)' : 'transparent'),
+        fg: sel ? '#fff' : (weekend ? '#9C9289' : '#151210'), fw: sel ? '600' : '400' });
+      d++;
+    }
+    const mat = [['JA Solar 445 W Bifazial','JAM54D40-445',24,'Stk'],['Fronius Symo GEN24 10.0','SYMO-GEN24-10',1,'Stk'],
+      ['K2 Dome 6 Süd','K2-DOME6',60,'lfm'],['Solarkabel 6 mm² schwarz','SOL-6MM-BK',150,'m']];
+    const [deskTitle, deskSub, deskAction] = DESK[s.deskScreen];
+
+    return {
+      modes: [['Handy','mobil'],['Desktop','desktop']].map(([label,m]) => ({
+        label, bg: s.mode === m ? 'var(--sunk)' : 'transparent', fg: s.mode === m ? 'var(--t1)' : 'var(--t2)',
+        fw: s.mode === m ? '600' : '400', go: () => this.setState({ mode: m })
+      })),
+      isMobil: s.mode === 'mobil', isDesktop: s.mode === 'desktop',
+      iconPlus: ico(ICONS.plus, 16), iconSuche: ico(ICONS.suche, 17), iconTelefon: ico(ICONS.telefon, 16),
+      iconRoute: ico(ICONS.route, 16), iconKamera: ico(ICONS.kamera, 15),
+
+      termine: [
+        { zeit:'12:30', titel:'Speicher BYD anschließen', ort:'A-2026-0412 · Halbauer, Keller', color:C.blue },
+        { zeit:'15:00', titel:'Material zurück ins Lager', ort:'Werkstatt Oberpullendorf', color:C.slate },
+        { zeit:'16:30', titel:'Voraufmaß Fam. Hofer', ort:'Kobersdorf · mit Bruckner', color:C.violet }
+      ],
+      stempelAktionen: [{ label:'Pause', meta:'12:00–12:30' }, { label:'Dienstgang', meta:'0:00 h' }, { label:'Fahrtzeit', meta:'0:40 h' }],
+      material: mat.map(([name,nr,def,einheit]) => {
+        const v = s.mengen[nr] === undefined ? def : s.mengen[nr];
+        return { name, nr, menge: v + ' ' + einheit,
+          plus: () => this.setState({ mengen: Object.assign({}, s.mengen, { [nr]: v + 1 }) }),
+          minus: () => this.setState({ mengen: Object.assign({}, s.mengen, { [nr]: Math.max(0, v - 1) }) }) };
+      }),
+      checkliste: [['Unterkonstruktion montiert',true],['Module gesetzt, 24 Stück',true],['Wechselrichter angeschlossen',false],
+        ['Speicher in Betrieb',false],['Baustelle aufgeräumt',false]].map(([label,def]) => {
+        const on = s.checked[label] === undefined ? def : s.checked[label];
+        return { label, mark: on ? '✓' : '', color: on ? C.green : 'var(--line)', fill: on ? C.green : 'transparent',
+          toggle: () => this.setState({ checked: Object.assign({}, s.checked, { [label]: !on }) }) };
+      }),
+      fotos: ['Dach Süd','Strang 2','Speicher'],
+      wochentage: ['Mo','Di','Mi','Do','Fr','Sa','So'],
+      kalender: kal,
+      arten: [['Urlaub','11 offen'],['Zeitausgleich','37,5 h'],['Pflegefreistellung','2 Tage'],['Sonderurlaub','Anlass']].map(([label,meta]) => ({
+        label, meta,
+        bg: s.art === label ? 'linear-gradient(150deg,#F2A73F,#C97918)' : 'var(--surface)',
+        fg: s.art === label ? '#fff' : 'var(--t1)',
+        go: () => this.setState({ art: label })
+      })),
+      warteschlange: [
+        { typ:'ZEIT', text:'Einstempeln A-2026-0412', zeit:'06:45' },
+        { typ:'MAT', text:'1× BYD HVS 10.2 entnommen', zeit:'06:52' },
+        { typ:'FOTO', text:'2 Fotos Speicher Keller', zeit:'08:47' }
+      ],
+      nav1: bottomNav('Heute'), nav2: bottomNav('Stempeln'),
+
+      deskNav: [['Heute','heute','HE',''],['Meine Zeiten','zeiten','ZE','3'],['Dokumente','lohn','DK','1'],
+        ['Aufträge','heute','AU','4'],['Chat','heute','CH','2'],['Profil','lohn','PR','']].map(([label,key,icon,badge]) => {
+        const on = s.deskScreen === key && (label === 'Heute' || label === 'Meine Zeiten' || label === 'Dokumente');
+        const map = { HE:'heute', ZE:'zeiten', DK:'lohn', AU:'auftraege', CH:'chat', PR:'profil' };
+        return { label, icon, badge, iconEl: ico(ICONS[map[icon]] || ICONS.heute, 15),
+          bg: on ? 'var(--sunk)' : 'transparent', fg: on ? 'var(--t1)' : 'var(--t2)', fw: on ? '600' : '400',
+          iconBg: on ? C.amber : 'var(--panel)', iconFg: on ? '#fff' : 'var(--t3)',
+          go: () => this.setState({ deskScreen: key }) };
+      }),
+      deskTitle, deskSub, deskAction,
+      deskHeute: s.deskScreen === 'heute', deskZeiten: s.deskScreen === 'zeiten', deskLohn: s.deskScreen === 'lohn',
+      deskKpis: [
+        { label:'Woche', value:'34:12', color:'var(--t1)', note:'Soll 38:30 · 4:18 offen' },
+        { label:'Überstunden', value:'+37,5', color:C.amber, note:'Saldo Jahr 2026' },
+        { label:'Urlaub Rest', value:'11', color:'var(--t1)', note:'Tage · nächster 17.08.' }
+      ],
+      meineAuftraege: [
+        { nr:'A-2026-0412', kunde:'Fam. Halbauer', meta:'Oberpullendorf · 9,84 kWp + 10 kWh', stunden:'42 / 56 h', w:'75%', color:C.amber, status:'heute', bg:tint(C.amber,0.14), fg:'#B4690E' },
+        { nr:'A-2026-0417', kunde:'Fam. Pinter', meta:'Weppersdorf · 11,5 kWp · ab Mo 03.08.', stunden:'0 / 52 h', w:'4%', color:C.blue, status:'terminiert', bg:tint(C.blue,0.13), fg:C.blue },
+        { nr:'A-2026-0419', kunde:'Fam. Wagner', meta:'Lackenbach · 6,4 kWp · KW 33', stunden:'0 / 36 h', w:'4%', color:C.violet, status:'Material offen', bg:tint(C.violet,0.13), fg:C.violet },
+        { nr:'A-2026-0405', kunde:'Fam. Trinkl', meta:'Piringsdorf · Zählertermin 06.08.', stunden:'44 / 48 h', w:'92%', color:C.green, status:'wartet Netz', bg:tint(C.green,0.13), fg:C.green }
+      ],
+      buchungen: [
+        { zeit:'06:45–jetzt', text:'Montage A-2026-0412', art:'Montage', bg:tint(C.blue,0.13), fg:C.blue },
+        { zeit:'07:00–07:40', text:'Fahrt Werkstatt → Pfarrgasse', art:'Fahrtzeit', bg:tint(C.slate,0.13), fg:C.slate },
+        { zeit:'06:52', text:'Material entnommen · 4 Positionen', art:'Material', bg:tint(C.amber,0.14), fg:'#B4690E' },
+        { zeit:'12:00–12:30', text:'Pause', art:'Pause', bg:'var(--panel)', fg:'var(--t2)' }
+      ],
+      team: [
+        { ini:'LB', name:'Lukas Berger', wo:'A-2026-0412 · mit dir vor Ort', color:C.violet, dot:C.green },
+        { ini:'SW', name:'Stefan Wallner', wo:'A-2026-0408 · Kern, Deutschkreutz', color:C.blue, dot:C.green },
+        { ini:'FY', name:'Fatih Yıldız', wo:'A-2026-0415 · Gruber, Draßmarkt', color:C.red, dot:C.green },
+        { ini:'MB', name:'Michael Bruckner', wo:'Baustellenrunde · Dienstgang', color:'#6A625A', dot:C.amber },
+        { ini:'DR', name:'Daniela Reiter', wo:'Krankenstand', color:C.green, dot:C.red }
+      ],
+      zeitRows: [
+        ['Mi 29.07.','06:45–laufend','7:23','A-2026-0412','Halbauer','Montage',C.blue,'läuft',C.blue],
+        ['Mi 29.07.','07:00–07:40','0:40','A-2026-0412','Halbauer','Fahrtzeit',C.slate,'gebucht',C.slate],
+        ['Di 28.07.','06:50–16:30','9:10','A-2026-0412','Halbauer','Montage',C.blue,'freigegeben',C.green],
+        ['Mo 27.07.','06:45–14:45','8:00','A-2026-0412','Halbauer','Montage',C.blue,'freigegeben',C.green],
+        ['Fr 24.07.','ganztägig','−7:42','—','Zeitausgleich','Ausgleich',C.green,'genehmigt',C.green],
+        ['Do 23.07.','06:40–15:25','8:45','A-2026-0405','Trinkl','Montage',C.blue,'freigegeben',C.green],
+        ['Mi 22.07.','Korrektur','+0:30','A-2026-0405','Trinkl','Korrektur',C.amber,'genehmigt',C.green],
+        ['Di 21.07.','08:00–10:00','2:00','A-2026-0408','Kern','Bauleitung',C.violet,'freigegeben',C.green]
+      ].map(([tag,zeit,dauer,nr,kunde,art,ac,status,sc]) => ({
+        tag, zeit, dauer, nr, kunde, art, artBg:tint(ac,0.13), artFg:ac, status, bg:tint(sc,0.13), fg:sc
+      })),
+      kontoKpis: [
+        { label:'Ist 2026', value:'1.250,0', color:'var(--t1)' }, { label:'Soll 2026', value:'1.212,5', color:'var(--t1)' },
+        { label:'Saldo', value:'+37,5 h', color:C.amber }, { label:'Urlaub Rest', value:'11 Tage', color:'var(--t1)' }
+      ],
+      dokumente: [
+        { typ:'PDF', name:'Lohnzettel Juli 2026', datum:'29.07.2026', status:'zu signieren', bg:tint(C.amber,0.14), fg:'#B4690E' },
+        { typ:'PDF', name:'Lohnzettel Juni 2026', datum:'28.06.2026', status:'signiert', bg:tint(C.green,0.13), fg:C.green },
+        { typ:'PDF', name:'Stundenbericht Juni 2026', datum:'01.07.2026', status:'bestätigt', bg:tint(C.green,0.13), fg:C.green },
+        { typ:'PDF', name:'Dienstvertrag', datum:'01.03.2019', status:'aktiv', bg:'var(--panel)', fg:'var(--t2)' },
+        { typ:'PDF', name:'Elektrotechnik-Befähigung', datum:'12.05.2018', status:'unbefristet', bg:'var(--panel)', fg:'var(--t2)' },
+        { typ:'PDF', name:'Sicherheitsunterweisung 2026', datum:'06.03.2026', status:'signiert', bg:tint(C.green,0.13), fg:C.green }
+      ],
+      abwesenheiten: [
+        { label:'Urlaub 17.–21.08.', tage:'5 Tage', status:'beantragt', color:C.amber, bg:tint(C.amber,0.14), fg:'#B4690E' },
+        { label:'Zeitausgleich 24.07.', tage:'1 Tag', status:'genehmigt', color:C.green, bg:tint(C.green,0.13), fg:C.green },
+        { label:'Urlaub 06.–17.01.', tage:'8 Tage', status:'konsumiert', color:C.slate, bg:'var(--panel)', fg:'var(--t2)' },
+        { label:'Krankenstand 11.–13.03.', tage:'3 Tage', status:'erfasst', color:C.red, bg:tint(C.red,0.13), fg:C.red }
+      ],
+      quali: [
+        { label:'Elektrotechnik-Befähigung', bis:'unbefristet', color:C.green },
+        { label:'Erste Hilfe', bis:'bis 04.2027', color:C.green },
+        { label:'Staplerschein', bis:'bis 11.2026', color:C.amber }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

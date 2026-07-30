@@ -1,0 +1,121 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* Theme-Umschaltung laeuft ueber [data-theme], nicht ueber prefers-color-scheme —
+   der Nutzer entscheidet, nicht das Betriebssystem. */
+@custom-variant dark ([data-theme="dark"] &);
+
+/* Tokens an Tailwind mappen. "inline" laesst Tailwind var() durchreichen,
+   statt den Wert aufzuloesen — nur so wirkt der Theme-Wechsel zur Laufzeit. */
+@theme inline {
+  --color-app: var(--app);
+  --color-panel: var(--panel);
+  --color-surface: var(--surface);
+  --color-sunk: var(--sunk);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-ink: var(--text);
+  --color-muted: var(--text-2);
+  --color-faint: var(--text-3);
+
+  --color-accent: var(--accent);
+  --color-accent-from: var(--accent-from);
+  --color-accent-to: var(--accent-to);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-sunk: var(--accent-sunk);
+
+  --color-s-new: var(--s-new);
+  --color-s-doing: var(--s-doing);
+  --color-s-waiting: var(--s-waiting);
+  --color-s-done: var(--s-done);
+  --color-s-warn: var(--s-warn);
+  --color-s-crit: var(--s-crit);
+
+  --radius-panel: var(--r-panel);
+  --radius-card: var(--r-card);
+  --radius-pill: var(--r-pill);
+  --radius-input: var(--r-input);
+  --radius-icon: var(--r-icon);
+
+  --shadow-soft: var(--shadow);
+
+  --font-sans: var(--font-inter-tight), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  --ease-out-quint: var(--ease);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background: var(--app);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-wrap: pretty;
+  }
+
+  a {
+    color: var(--accent-ink);
+    text-decoration: none;
+  }
+
+  a:hover {
+    color: var(--accent);
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font-family: inherit;
+  }
+
+  /* Alle Zahlen, Zeiten, IDs, Betraege, Artikelnummern laufen ueber .num —
+     Tabellenziffern ohne Ausnahme, CLAUDE.md Abschnitt 9. */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: var(--r-pill);
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Bewegung 160–220 ms. Wer Bewegung abbestellt hat, bekommt keine. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

@@ -1,0 +1,2366 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--app:#EAE6E0;--panel:#F8F6F3;--surface:#FFFFFF;--sunk:#F2EEE9;--line:#EAE4DC;--t1:#151210;--t2:#6A625A;--t3:#9C9289;--amber:#E8952B;--amberD:#C97918;--shadow:0 1px 2px rgba(21,18,16,0.04),0 8px 24px rgba(21,18,16,0.04);}
+  [data-theme="dark"]{--app:#0C0B0A;--panel:#151211;--surface:#1D1917;--sunk:#221E1B;--line:#2A2522;--t1:#F2EEE9;--t2:#A79E95;--t3:#7A726A;--shadow:0 1px 2px rgba(0,0,0,0.4);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--app);color:var(--t1);font-family:'Inter Tight',system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-wrap:pretty;}
+  a{color:var(--amberD);text-decoration:none;}
+  a:hover{color:var(--amber);}
+  input,button,textarea{font-family:inherit;}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+</style>
+</helmet>
+
+<div data-theme="{{ theme }}" style="display:flex;gap:14px;padding:14px;height:100vh;min-height:800px;background:var(--app);color:var(--t1);font-size:14px;line-height:1.45;overflow:hidden">
+
+  <!-- SIDEBAR -->
+  <aside style="width:246px;flex:0 0 246px;background:var(--surface);border-radius:26px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:22px 20px 8px;display:flex;align-items:center;gap:11px">
+      <div style="width:32px;height:32px;border-radius:11px;background:linear-gradient(150deg,#F2A73F,#C97918);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px">S</div>
+      <div style="font-weight:700;font-size:19px;letter-spacing:-0.025em">Solstep</div>
+    </div>
+
+    <button onClick="{{ cycleStandort }}" style="margin:14px 14px 4px;display:flex;align-items:center;gap:10px;background:var(--sunk);border:0;border-radius:14px;padding:10px 11px;cursor:pointer;text-align:left;color:var(--t1)">
+      <span style="width:26px;height:26px;border-radius:9px;background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--amber)">{{ iconStandort }}</span>
+      <span style="flex:1;overflow:hidden">
+        <span style="display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Hofstätter Energietechnik</span>
+        <span style="display:block;font-size:11px;color:var(--t2);white-space:nowrap">{{ standort }}</span>
+      </span>
+      <span style="color:var(--t3);font-size:10px">▾</span>
+    </button>
+
+    <nav style="flex:1;overflow-y:auto;padding:12px 12px 8px">
+      <sc-for list="{{ navGroups }}" as="grp" hint-placeholder-count="3">
+        <div style="margin-bottom:18px">
+          <div style="font-size:10.5px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--t3);padding:4px 10px 8px">{{ grp.title }}</div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <sc-for list="{{ grp.items }}" as="it" hint-placeholder-count="5">
+              <button onClick="{{ it.go }}" style="position:relative;display:flex;align-items:center;gap:12px;border:0;border-radius:14px;padding:10px 11px;cursor:pointer;text-align:left;font-size:14.5px;width:100%;background:{{ it.bg }};color:{{ it.fg }};font-weight:{{ it.fw }}">
+                <span style="position:absolute;left:-12px;top:12px;bottom:12px;width:4px;border-radius:99px;background:{{ it.mark }}"></span>
+                <span style="width:26px;height:26px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:{{ it.iconBg }};color:{{ it.iconFg }}">{{ it.iconEl }}</span>
+                <span style="flex:1">{{ it.label }}</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:1.5px 7px;border-radius:99px;background:{{ it.badgeBg }};color:{{ it.badgeFg }}">{{ it.badge }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </nav>
+
+    <div style="margin:8px 14px 14px;border-radius:20px;padding:16px;background:linear-gradient(160deg,#2A211A,#151210);color:#F5F0EA;overflow:hidden;position:relative">
+      <div style="position:absolute;right:-40px;top:-30px;width:130px;height:130px;border-radius:99px;background:radial-gradient(circle,rgba(232,149,43,0.5),transparent 70%)"></div>
+      <div style="font-size:15px;font-weight:600;letter-spacing:-0.01em"><span style="color:var(--amber)">Step-Planer</span> verbinden</div>
+      <div style="font-size:12px;color:#B8AFA5;margin-top:4px">Planung importieren, Angebot in 2 Minuten senden.</div>
+      <button style="margin-top:12px;width:100%;border:0;border-radius:99px;background:var(--amber);color:#151210;font-size:13px;font-weight:600;padding:9px;cursor:pointer">Planung importieren</button>
+    </div>
+  </aside>
+
+  <!-- RIGHT -->
+  <div style="flex:1;display:flex;flex-direction:column;gap:14px;min-width:0">
+    <header style="flex:0 0 auto;background:var(--surface);border-radius:22px;box-shadow:var(--shadow);padding:12px 16px;display:flex;align-items:center;gap:14px">
+      <div style="flex:1;max-width:520px;display:flex;align-items:center;gap:10px;background:var(--panel);border-radius:99px;padding:11px 16px">
+        <span style="color:var(--t3);display:flex">{{ iconSuche }}</span>
+        <input placeholder="Auftrag, Kunde, Artikel suchen" style="flex:1;border:0;outline:0;background:transparent;color:var(--t1);font-size:14px">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);background:var(--surface);border-radius:8px;padding:3px 7px">⌘K</span>
+      </div>
+      <div style="flex:1"></div>
+      <button onClick="{{ toggleEdit }}" style="display:flex;align-items:center;gap:9px;border:0;border-radius:99px;padding:11px 18px;font-size:13.5px;font-weight:600;cursor:pointer;background:{{ editBg }};color:{{ editFg }}">{{ iconStift }}{{ editLabel }}</button>
+      <button onClick="{{ toggleTheme }}" style="width:42px;height:42px;border-radius:99px;border:0;background:var(--panel);color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center">{{ iconTheme }}</button>
+      <button style="position:relative;width:42px;height:42px;border-radius:99px;border:0;background:var(--panel);color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center">
+        {{ iconGlocke }}
+        <span style="position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:99px;background:#D2543F"></span>
+      </button>
+      <div style="display:flex;align-items:center;gap:11px;padding-left:6px">
+        <div style="width:42px;height:42px;border-radius:99px;background:#3E7BC6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">AS</div>
+        <div>
+          <div style="font-size:14px;font-weight:600;letter-spacing:-0.01em">Andrea Steiner</div>
+          <div style="font-size:12px;color:var(--t2)">Geschäftsführung</div>
+        </div>
+      </div>
+    </header>
+
+    <main style="flex:1;background:var(--panel);border-radius:26px;box-shadow:var(--shadow);overflow:auto;padding:26px 26px 32px">
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:22px">
+        <div style="flex:1;min-width:280px">
+          <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;line-height:1.1">{{ screenTitle }}</div>
+          <div style="font-size:14.5px;color:var(--t2);margin-top:6px">{{ screenSub }}</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button style="display:flex;align-items:center;gap:9px;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:14px;font-weight:600;padding:13px 22px;cursor:pointer;box-shadow:0 6px 18px rgba(201,121,24,0.28)">{{ iconPlus }}{{ primaryAction }}</button>
+          <button style="border:1px solid var(--line);border-radius:99px;background:var(--surface);color:var(--t1);font-size:14px;font-weight:500;padding:13px 20px;cursor:pointer">{{ secondaryAction }}</button>
+        </div>
+      </div>
+
+      <!-- COCKPIT -->
+      <sc-if value="{{ isCockpit }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+            <div style="border-radius:20px;padding:20px;background:linear-gradient(150deg,#E8952B,#B4690E);color:#fff;box-shadow:0 10px 26px rgba(180,105,14,0.24)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                <div style="font-size:15px;font-weight:600">Auftragsbestand</div>
+                <span style="width:30px;height:30px;border-radius:99px;background:rgba(255,255,255,0.22);display:flex;align-items:center;justify-content:center;font-size:13px">↗</span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:600;letter-spacing:-0.03em;margin-top:14px">1,84 Mio</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(255,255,255,0.2);border-radius:99px;padding:2px 8px">+12 %</span>
+                <span style="font-size:12.5px;opacity:0.9">gegen Vormonat</span>
+              </div>
+            </div>
+            <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="3">
+              <div style="border-radius:20px;padding:20px;background:var(--surface);box-shadow:var(--shadow)">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                  <div style="font-size:15px;font-weight:600">{{ k.label }}</div>
+                  <span style="width:30px;height:30px;border-radius:99px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--t2)">↗</span>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:600;letter-spacing:-0.03em;margin-top:14px;color:{{ k.color }}">{{ k.value }}</div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;border-radius:99px;padding:2px 8px;background:{{ k.deltaBg }};color:{{ k.deltaFg }}">{{ k.delta }}</span>
+                  <span style="font-size:12.5px;color:var(--t2)">{{ k.note }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:16px">
+            <div style="border-radius:20px;padding:20px 22px;background:var(--surface);box-shadow:var(--shadow)">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="font-size:17px;font-weight:600;letter-spacing:-0.015em">Auslastung nach Woche</div>
+                <span style="font-size:12.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:5px 12px">Kapazität 320 h</span>
+              </div>
+              <div style="display:flex;align-items:flex-end;gap:12px;height:196px;margin-top:20px">
+                <sc-for list="{{ auslastung }}" as="w" hint-placeholder-count="8">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;justify-content:flex-end">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:{{ w.labelFg }};background:{{ w.labelBg }};border-radius:99px;padding:2px 7px">{{ w.pct }}</span>
+                    <div style="width:100%;max-width:44px;border-radius:99px;height:{{ w.h }};background:{{ w.fill }}"></div>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ w.kw }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="border-radius:20px;padding:20px 22px;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column">
+              <div style="font-size:17px;font-weight:600;letter-spacing:-0.015em">Nächster Termin</div>
+              <div style="font-size:22px;font-weight:700;letter-spacing:-0.02em;margin-top:14px;line-height:1.2">Zählerwechsel Halbauer</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--t2);margin-top:8px">06.08.2026 · 08:00–12:00</div>
+              <div style="font-size:13px;color:var(--t2);margin-top:2px">Netz Burgenland · Bruckner vor Ort</div>
+              <div style="flex:1"></div>
+              <button style="margin-top:16px;border:0;border-radius:99px;background:#151210;color:#F5F0EA;font-size:14px;font-weight:600;padding:13px;cursor:pointer">Zum Auftrag A-2026-0412</button>
+            </div>
+
+            <div style="border-radius:20px;padding:20px 22px;background:var(--surface);box-shadow:var(--shadow)">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="font-size:17px;font-weight:600;letter-spacing:-0.015em">Handlungsbedarf</div>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(210,84,63,0.12);color:#D2543F;border-radius:99px;padding:3px 9px">4</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                <sc-for list="{{ warnings }}" as="w" hint-placeholder-count="4">
+                  <div style="display:flex;gap:11px;align-items:flex-start">
+                    <span style="margin-top:4px;width:9px;height:9px;border-radius:99px;flex:0 0 9px;background:{{ w.color }}"></span>
+                    <div style="flex:1">
+                      <div style="font-size:13.5px;font-weight:500;line-height:1.3">{{ w.text }}</div>
+                      <div style="font-size:11.5px;color:var(--t2);font-family:'JetBrains Mono',monospace">{{ w.meta }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:16px">
+            <div style="border-radius:20px;padding:20px 22px;background:var(--surface);box-shadow:var(--shadow)">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="font-size:17px;font-weight:600;letter-spacing:-0.015em">Team heute</div>
+                <span style="font-size:12.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:5px 12px">6 eingestempelt</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+                <sc-for list="{{ teamHeute }}" as="t" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div style="width:38px;height:38px;border-radius:99px;background:{{ t.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600">{{ t.ini }}</div>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:14px;font-weight:600">{{ t.name }}</div>
+                      <div style="font-size:12.5px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.auftrag }}</div>
+                    </div>
+                    <span style="font-size:12px;font-weight:500;border-radius:99px;padding:4px 11px;background:{{ t.pillBg }};color:{{ t.pillFg }}">{{ t.status }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="border-radius:20px;padding:20px 22px;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center">
+              <div style="width:100%;font-size:17px;font-weight:600;letter-spacing:-0.015em">Pipeline-Fortschritt</div>
+              <div style="position:relative;width:186px;height:186px;margin-top:18px;border-radius:99px;background:conic-gradient(#3E9E6B 0turn 0.34turn,#E8952B 0.34turn 0.55turn,#3E7BC6 0.55turn 0.78turn,var(--sunk) 0.78turn 1turn)">
+                <div style="position:absolute;inset:26px;border-radius:99px;background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center">
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:600;letter-spacing:-0.03em">78 %</div>
+                  <div style="font-size:12px;color:var(--t2)">in Umsetzung</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;justify-content:center">
+                <sc-for list="{{ legende }}" as="l" hint-placeholder-count="4">
+                  <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2)"><span style="width:9px;height:9px;border-radius:99px;background:{{ l.color }}"></span>{{ l.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="border-radius:20px;padding:22px;background:linear-gradient(160deg,#241D17,#100E0C);color:#F5F0EA;position:relative;overflow:hidden;display:flex;flex-direction:column">
+              <div style="position:absolute;right:-50px;bottom:-60px;width:190px;height:190px;border-radius:99px;background:radial-gradient(circle,rgba(232,149,43,0.35),transparent 70%)"></div>
+              <div style="font-size:17px;font-weight:600;letter-spacing:-0.015em">Zeit läuft</div>
+              <div style="font-size:13px;color:#B8AFA5;margin-top:4px">A-2026-0412 · Grabner, Berger</div>
+              <div style="flex:1"></div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:40px;font-weight:600;letter-spacing:-0.03em">05:18:42</div>
+              <div style="display:flex;gap:10px;margin-top:14px">
+                <button style="flex:1;border:0;border-radius:99px;background:rgba(255,255,255,0.14);color:#F5F0EA;font-size:13.5px;font-weight:600;padding:11px;cursor:pointer">Pause</button>
+                <button style="flex:1;border:0;border-radius:99px;background:var(--amber);color:#151210;font-size:13.5px;font-weight:600;padding:11px;cursor:pointer">Zeiten prüfen</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- PIPELINES -->
+      <sc-if value="{{ isPipelines }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="display:flex;background:var(--surface);border-radius:99px;padding:4px;gap:3px;box-shadow:var(--shadow)">
+              <sc-for list="{{ pipelineTabs }}" as="p" hint-placeholder-count="3">
+                <button onClick="{{ p.go }}" style="display:flex;align-items:center;gap:9px;border:0;border-radius:99px;padding:9px 17px;font-size:13.5px;cursor:pointer;background:{{ p.bg }};color:{{ p.fg }};font-weight:{{ p.fw }}">
+                  <span style="width:8px;height:8px;border-radius:99px;background:{{ p.dot }}"></span>{{ p.label }}
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;opacity:0.7">{{ p.count }}</span>
+                </button>
+              </sc-for>
+            </div>
+            <div style="display:flex;background:var(--surface);border-radius:99px;padding:4px;gap:3px;box-shadow:var(--shadow)">
+              <sc-for list="{{ viewTabs }}" as="v" hint-placeholder-count="3">
+                <button onClick="{{ v.go }}" style="border:0;border-radius:99px;padding:9px 15px;font-size:13.5px;cursor:pointer;background:{{ v.bg }};color:{{ v.fg }};font-weight:{{ v.fw }}">{{ v.label }}</button>
+              </sc-for>
+            </div>
+            <sc-for list="{{ filterChips }}" as="c" hint-placeholder-count="3">
+              <button onClick="{{ c.go }}" style="border:0;border-radius:99px;box-shadow:var(--shadow);padding:10px 15px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;background:{{ c.bg }};color:{{ c.fg }}">
+                <span style="opacity:0.6">{{ c.k }}</span><span style="font-weight:500">{{ c.v }}</span><span style="opacity:0.5;font-size:10px">▾</span>
+              </button>
+            </sc-for>
+            <div style="flex:1"></div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ pipelineSummary }}</span>
+          </div>
+
+          <sc-if value="{{ isBoardView }}">
+            <div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;align-items:flex-start">
+              <sc-for list="{{ columns }}" as="col" hint-placeholder-count="5">
+                <div style="flex:0 0 282px;width:282px;display:flex;flex-direction:column;gap:12px">
+                  <div style="background:var(--surface);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow)">
+                    <div style="height:4px;border-radius:99px;background:{{ col.color }};width:44px"></div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:11px">
+                      <span style="font-size:14.5px;font-weight:600;flex:1;letter-spacing:-0.01em">{{ col.title }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:2px 9px">{{ col.count }}</span>
+                    </div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3);margin-top:4px">{{ col.sum }}</div>
+                  </div>
+                  <sc-for list="{{ col.cards }}" as="c" hint-placeholder-count="2">
+                    <div onClick="{{ c.open }}" style="background:var(--surface);border-radius:18px;padding:15px;box-shadow:var(--shadow);cursor:pointer;display:flex;flex-direction:column;gap:9px" style-hover="transform:translateY(-2px)">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);background:var(--panel);border-radius:99px;padding:3px 9px">{{ c.nr }}</span>
+                        <span style="font-size:11.5px;font-weight:500;border-radius:99px;padding:3px 9px;background:{{ c.tagBg }};color:{{ c.tagFg }}">{{ c.tag }}</span>
+                      </div>
+                      <div style="font-size:15.5px;font-weight:600;letter-spacing:-0.015em;line-height:1.25">{{ c.kunde }}</div>
+                      <div style="font-size:12.5px;color:var(--t2)">{{ c.sub }}</div>
+                      <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);margin-top:2px">
+                        <span>{{ c.metaL }}</span><span>{{ c.metaR }}</span>
+                      </div>
+                      <div style="height:6px;border-radius:99px;background:var(--panel);overflow:hidden">
+                        <div style="height:100%;border-radius:99px;width:{{ c.barW }};background:{{ c.barColor }}"></div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+                        <div style="display:flex">
+                          <sc-for list="{{ c.team }}" as="m" hint-placeholder-count="2">
+                            <div style="width:26px;height:26px;margin-right:-8px;border-radius:99px;border:2px solid var(--surface);background:{{ m.color }};color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ m.ini }}</div>
+                          </sc-for>
+                        </div>
+                        <div style="flex:1"></div>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{{ c.dbColor }}">{{ c.db }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <button style="border:1px dashed var(--line);background:transparent;color:var(--t3);border-radius:16px;padding:11px;font-size:13px;cursor:pointer">＋ Karte</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isTableView }}">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:grid;grid-template-columns:120px 1.5fr 1fr 1fr 130px 120px 110px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                <div style="padding:14px 6px">Nummer</div><div style="padding:14px 6px">Kunde</div><div style="padding:14px 6px">Ort / Anlage</div><div style="padding:14px 6px">Phase</div><div style="padding:14px 6px">Team</div><div style="padding:14px 6px">Stunden</div><div style="padding:14px 6px;text-align:right">DB</div>
+              </div>
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+                <div onClick="{{ r.open }}" style="display:grid;grid-template-columns:120px 1.5fr 1fr 1fr 130px 120px 110px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:52px;cursor:pointer" style-hover="background:var(--panel)">
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ r.nr }}</div>
+                  <div contenteditable="{{ editable }}" style="padding:8px 6px;font-size:14px;font-weight:500;outline:0">{{ r.kunde }}</div>
+                  <div style="padding:8px 6px;font-size:13px;color:var(--t2)">{{ r.sub }}</div>
+                  <div style="padding:8px 6px"><span style="font-size:11.5px;font-weight:500;border-radius:99px;padding:4px 11px;background:{{ r.tagBg }};color:{{ r.tagFg }}">{{ r.phase }}</span></div>
+                  <div style="padding:8px 6px;font-size:12.5px;color:var(--t2)">{{ r.teamText }}</div>
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:{{ r.hColor }}">{{ r.metaL }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:{{ r.dbColor }}">{{ r.db }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isTimelineView }}">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+              <div style="display:grid;grid-template-columns:200px 1fr;gap:14px;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--t3)">Auftrag</div>
+                <div style="display:grid;grid-template-columns:repeat(8,1fr)">
+                  <sc-for list="{{ kws }}" as="k" hint-placeholder-count="8">
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);text-align:center">{{ k }}</div>
+                  </sc-for>
+                </div>
+              </div>
+              <sc-for list="{{ gantt }}" as="g" hint-placeholder-count="6">
+                <div style="display:grid;grid-template-columns:200px 1fr;gap:14px;align-items:center;border-bottom:1px solid var(--line);min-height:52px">
+                  <div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ g.nr }}</div>
+                    <div style="font-size:13.5px;font-weight:500">{{ g.kunde }}</div>
+                  </div>
+                  <div style="position:relative;height:30px">
+                    <div style="position:absolute;top:5px;height:20px;border-radius:99px;display:flex;align-items:center;padding:0 11px;font-size:11px;color:#fff;font-weight:500;white-space:nowrap;overflow:hidden;left:{{ g.left }};width:{{ g.width }};background:{{ g.color }}">{{ g.label }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ANGEBOTE -->
+      <sc-if value="{{ isAngebote }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+            <sc-for list="{{ angebotKpis }}" as="k" hint-placeholder-count="4">
+              <div style="border-radius:20px;padding:18px 20px;background:var(--surface);box-shadow:var(--shadow)">
+                <div style="font-size:14px;font-weight:600;color:var(--t2)">{{ k.label }}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:600;letter-spacing:-0.03em;margin-top:10px;color:{{ k.color }}">{{ k.value }}</div>
+                <div style="font-size:12.5px;color:var(--t2);margin-top:4px">{{ k.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:grid;grid-template-columns:130px 1.4fr 110px minmax(210px,1fr) 130px 110px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                <div style="padding:14px 6px">Nummer</div><div style="padding:14px 6px">Kunde</div><div style="padding:14px 6px;text-align:right">Summe</div><div style="padding:14px 6px">Mail-Status</div><div style="padding:14px 6px">Gültig bis</div><div style="padding:14px 6px;text-align:right">Marge</div>
+              </div>
+              <sc-for list="{{ angebote }}" as="a" hint-placeholder-count="6">
+                <div onClick="{{ a.open }}" style="display:grid;grid-template-columns:130px 1.4fr 110px minmax(210px,1fr) 130px 110px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:58px;cursor:pointer;background:{{ a.rowBg }}" style-hover="background:var(--panel)">
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ a.nr }}</div>
+                  <div style="padding:8px 6px">
+                    <div style="font-size:14px;font-weight:500">{{ a.kunde }}</div>
+                    <div style="font-size:12px;color:var(--t2)">{{ a.anlage }}</div>
+                  </div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500">{{ a.summe }}</div>
+                  <div style="padding:8px 6px;display:flex;align-items:center;gap:8px;white-space:nowrap">
+                    <span style="font-size:11.5px;font-weight:500;border-radius:99px;padding:4px 11px;white-space:nowrap;background:{{ a.pillBg }};color:{{ a.pillFg }}">{{ a.status }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.opens }}</span>
+                  </div>
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:{{ a.dueColor }}">{{ a.due }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:{{ a.mColor }}">{{ a.marge }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:4px 10px">{{ sel.nr }}</span>
+                  <span style="font-size:11.5px;font-weight:500;border-radius:99px;padding:4px 11px;background:{{ sel.pillBg }};color:{{ sel.pillFg }}">{{ sel.status }}</span>
+                </div>
+                <div style="font-size:21px;font-weight:700;letter-spacing:-0.02em;margin-top:12px">{{ sel.kunde }}</div>
+                <div style="font-size:13.5px;color:var(--t2)">{{ sel.anlage }} · {{ sel.summe }} netto</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px">
+                  <div style="background:var(--panel);border-radius:14px;padding:12px 14px">
+                    <div style="font-size:11.5px;color:var(--t2)">Marge</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:600;color:#3E9E6B">{{ sel.marge }}</div>
+                  </div>
+                  <div style="background:var(--panel);border-radius:14px;padding:12px 14px">
+                    <div style="font-size:11.5px;color:var(--t2)">Gültig bis</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:600">{{ sel.due }}</div>
+                  </div>
+                </div>
+                <div style="font-size:14px;font-weight:600;margin-top:20px">Versand und Annahme</div>
+                <div style="display:flex;flex-direction:column;margin-top:12px">
+                  <sc-for list="{{ sel.events }}" as="e" hint-placeholder-count="5">
+                    <div style="display:grid;grid-template-columns:16px 1fr;gap:12px;padding-bottom:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center">
+                        <span style="width:10px;height:10px;border-radius:99px;margin-top:5px;background:{{ e.color }}"></span>
+                        <span style="flex:1;width:2px;background:var(--line);margin-top:4px;border-radius:99px"></span>
+                      </div>
+                      <div>
+                        <div style="font-size:13.5px;font-weight:500">{{ e.title }}</div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2)">{{ e.meta }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+                  <button style="border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:14px;font-weight:600;padding:13px;cursor:pointer">{{ sel.primary }}</button>
+                  <div style="display:flex;gap:10px">
+                    <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);font-size:13.5px;padding:11px;cursor:pointer">Erinnerung senden</button>
+                    <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);font-size:13.5px;padding:11px;cursor:pointer">PDF ansehen</button>
+                  </div>
+                </div>
+              </div>
+
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                <div style="font-size:14px;font-weight:600">Mail an den Kunden</div>
+                <div style="margin-top:12px;background:var(--panel);border-radius:16px;padding:16px">
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)">office@solstep.de → {{ sel.mail }}</div>
+                  <div style="font-size:14.5px;font-weight:600;margin-top:8px">Ihr Angebot für {{ sel.anlage }}</div>
+                  <div style="font-size:13px;color:var(--t2);margin-top:6px">Anhang: Angebot_{{ sel.nr }}.pdf · Planung als Share-Link · Annahme direkt im Kundenportal.</div>
+                  <div style="display:flex;gap:8px;margin-top:14px">
+                    <span style="border-radius:99px;background:var(--surface);font-size:12px;padding:8px 14px;font-weight:600">Angebot annehmen</span>
+                    <span style="border-radius:99px;background:var(--surface);font-size:12px;padding:8px 14px;color:var(--t2)">Rückfrage stellen</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CRM -->
+      <sc-if value="{{ isCrm }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="display:flex;background:var(--surface);border-radius:99px;padding:4px;gap:3px;box-shadow:var(--shadow)">
+              <sc-for list="{{ crmTabs }}" as="t" hint-placeholder-count="3">
+                <button onClick="{{ t.go }}" style="border:0;border-radius:99px;padding:9px 17px;font-size:13.5px;cursor:pointer;background:{{ t.bg }};color:{{ t.fg }};font-weight:{{ t.fw }}">{{ t.label }} <span style="font-family:'JetBrains Mono',monospace;font-size:11px;opacity:0.6">{{ t.count }}</span></button>
+              </sc-for>
+            </div>
+            <div style="display:flex;background:var(--surface);border-radius:99px;padding:4px;gap:3px;box-shadow:var(--shadow)">
+              <sc-for list="{{ crmViewTabs }}" as="v" hint-placeholder-count="2">
+                <button onClick="{{ v.go }}" style="border:0;border-radius:99px;padding:9px 15px;font-size:13.5px;cursor:pointer;background:{{ v.bg }};color:{{ v.fg }};font-weight:{{ v.fw }}">{{ v.label }}</button>
+              </sc-for>
+            </div>
+            <sc-for list="{{ crmPipelineChips }}" as="c" hint-placeholder-count="3">
+              <button onClick="{{ c.go }}" style="border:0;border-radius:99px;padding:10px 15px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;background:{{ c.bg }};color:{{ c.fg }};font-weight:{{ c.fw }};box-shadow:var(--shadow)">
+                <span style="width:8px;height:8px;border-radius:99px;background:{{ c.dot }}"></span>{{ c.label }}
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;opacity:0.65">{{ c.count }}</span>
+              </button>
+            </sc-for>
+            <div style="flex:1"></div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ crmSummary }}</span>
+          </div>
+
+          <sc-if value="{{ crmBoardView }}">
+            <div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;align-items:flex-start">
+              <sc-for list="{{ crmColumns }}" as="col" hint-placeholder-count="5">
+                <div style="flex:0 0 276px;width:276px;display:flex;flex-direction:column;gap:12px">
+                  <div style="background:var(--surface);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow)">
+                    <div style="height:4px;border-radius:99px;background:{{ col.color }};width:44px"></div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:11px">
+                      <span style="font-size:14.5px;font-weight:600;flex:1;letter-spacing:-0.01em">{{ col.title }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:2px 9px">{{ col.count }}</span>
+                    </div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3);margin-top:4px">{{ col.sum }}</div>
+                  </div>
+                  <sc-for list="{{ col.cards }}" as="c" hint-placeholder-count="2">
+                    <div onClick="{{ c.open }}" style="background:var(--surface);border-radius:18px;padding:15px;box-shadow:var(--shadow);cursor:pointer;display:flex;flex-direction:column;gap:9px;outline:{{ c.outline }}">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);background:var(--panel);border-radius:99px;padding:3px 9px">{{ c.nr }}</span>
+                        <span style="font-size:11.5px;font-weight:500;border-radius:99px;padding:3px 9px;white-space:nowrap;background:{{ c.tagBg }};color:{{ c.tagFg }}">{{ c.tag }}</span>
+                      </div>
+                      <div contenteditable="{{ editable }}" style="font-size:15.5px;font-weight:600;letter-spacing:-0.015em;line-height:1.25;outline:0">{{ c.kunde }}</div>
+                      <div style="font-size:12.5px;color:var(--t2)">{{ c.sub }}</div>
+                      <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)">
+                        <span>{{ c.wert }}</span><span>{{ c.naechster }}</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;margin-top:2px">
+                        <div style="width:26px;height:26px;border-radius:99px;background:{{ c.color }};color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ c.ini }}</div>
+                        <span style="font-size:12px;color:var(--t2);flex:1">{{ c.owner }}</span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{{ c.scoreColor }}">{{ c.score }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <button onClick="{{ addCard }}" style="border:1px dashed var(--line);background:transparent;color:var(--t3);border-radius:16px;padding:11px;font-size:13px;cursor:pointer">＋ Lead</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ crmListView }}">
+          <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:grid;grid-template-columns:1.5fr 1fr 130px 1fr 120px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                <div style="padding:14px 6px">Kunde</div><div style="padding:14px 6px">Ort</div><div style="padding:14px 6px">Anlagen</div><div style="padding:14px 6px">Letzte Aktivität</div><div style="padding:14px 6px;text-align:right">Umsatz</div>
+              </div>
+              <sc-for list="{{ crmRows }}" as="k" hint-placeholder-count="7">
+                <div onClick="{{ k.open }}" style="display:grid;grid-template-columns:1.5fr 1fr 130px 1fr 120px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:58px;cursor:pointer;background:{{ k.rowBg }}" style-hover="background:var(--panel)">
+                  <div style="padding:8px 6px;display:flex;align-items:center;gap:11px">
+                    <div style="width:32px;height:32px;border-radius:99px;background:{{ k.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600">{{ k.ini }}</div>
+                    <div>
+                      <div style="font-size:14px;font-weight:500">{{ k.name }}</div>
+                      <div style="font-size:11.5px;color:var(--t2)">{{ k.typ }}</div>
+                    </div>
+                  </div>
+                  <div style="padding:8px 6px;font-size:13px;color:var(--t2)">{{ k.ort }}</div>
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ k.anlagen }}</div>
+                  <div style="padding:8px 6px;font-size:12.5px;color:var(--t2)">{{ k.letzte }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:500">{{ k.umsatz }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:46px;height:46px;border-radius:99px;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;background:{{ crmSel.color }}">{{ crmSel.ini }}</div>
+                  <div style="flex:1">
+                    <div contenteditable="{{ editable }}" style="font-size:19px;font-weight:700;letter-spacing:-0.02em;outline:0">{{ crmSel.name }}</div>
+                    <div contenteditable="{{ editable }}" style="font-size:13px;color:var(--t2);outline:0">{{ crmSel.meta }}</div>
+                  </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px">
+                  <sc-for list="{{ crmDetailKpis }}" as="d" hint-placeholder-count="4">
+                    <div style="background:var(--panel);border-radius:14px;padding:12px 14px">
+                      <div style="font-size:11.5px;color:var(--t2)">{{ d.label }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:600;margin-top:2px;color:{{ d.color }}">{{ d.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:14px">
+                  <button style="flex:1;border:0;border-radius:99px;background:#151210;color:#F5F0EA;font-size:13.5px;font-weight:600;padding:12px;cursor:pointer">Anrufen</button>
+                  <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);font-size:13.5px;padding:12px;cursor:pointer">Mail schreiben</button>
+                  <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);font-size:13.5px;padding:12px;cursor:pointer">Aufgabe</button>
+                </div>
+              </div>
+
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                <div style="font-size:14px;font-weight:600">Aktivitäten</div>
+                <div style="display:flex;flex-direction:column;margin-top:12px">
+                  <sc-for list="{{ crmActivities }}" as="a" hint-placeholder-count="5">
+                    <div style="display:grid;grid-template-columns:16px 1fr;gap:12px;padding-bottom:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center">
+                        <span style="width:10px;height:10px;border-radius:99px;margin-top:5px;background:{{ a.color }}"></span>
+                        <span style="flex:1;width:2px;background:var(--line);margin-top:4px;border-radius:99px"></span>
+                      </div>
+                      <div>
+                        <div style="font-size:13.5px;font-weight:500">{{ a.title }}</div>
+                        <div style="font-size:12.5px;color:var(--t2)">{{ a.body }}</div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ a.when }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- LAGER -->
+      <sc-if value="{{ isLager }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="display:flex;background:var(--surface);border-radius:99px;padding:4px;gap:3px;box-shadow:var(--shadow)">
+              <sc-for list="{{ lagerTabs }}" as="t" hint-placeholder-count="4">
+                <button onClick="{{ t.go }}" style="border:0;border-radius:99px;padding:9px 17px;font-size:13.5px;cursor:pointer;background:{{ t.bg }};color:{{ t.fg }};font-weight:{{ t.fw }}">{{ t.label }}</button>
+              </sc-for>
+            </div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:99px;padding:9px 16px;box-shadow:var(--shadow)">
+              <span style="width:9px;height:9px;border-radius:99px;background:#D2543F"></span>
+              <span style="font-size:13px;font-weight:500">3 Artikel unter Mindestbestand</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)">3× SYMO-GEN24-10 fehlen für A-2026-0419</span>
+            </div>
+          </div>
+
+          <sc-if value="{{ lagerBestand }}">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:grid;grid-template-columns:60px 1.7fr 150px 110px 110px 110px 120px 110px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                <div style="padding:14px 6px"></div><div style="padding:14px 6px">Bezeichnung</div><div style="padding:14px 6px">Artikelnr.</div><div style="padding:14px 6px;text-align:right">Bestand</div><div style="padding:14px 6px;text-align:right">Reserviert</div><div style="padding:14px 6px;text-align:right">Verfügbar</div><div style="padding:14px 6px">Lagerort</div><div style="padding:14px 6px;text-align:right">EK</div>
+              </div>
+              <sc-for list="{{ artikel }}" as="a" hint-placeholder-count="5">
+                <div onClick="{{ a.open }}" style="display:grid;grid-template-columns:60px 1.7fr 150px 110px 110px 110px 120px 110px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:66px;cursor:pointer" style-hover="background:var(--panel)">
+                  <div style="padding:8px 6px"><div style="width:40px;height:40px;border-radius:12px;background:repeating-linear-gradient(135deg,var(--panel) 0 5px,var(--surface) 5px 10px)"></div></div>
+                  <div style="padding:8px 6px">
+                    <div style="font-size:14px;font-weight:500">{{ a.name }}</div>
+                    <div style="height:6px;border-radius:99px;background:var(--panel);margin-top:7px;overflow:hidden;max-width:230px"><div style="height:100%;border-radius:99px;background:{{ a.color }};width:{{ a.w }}"></div></div>
+                  </div>
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ a.nr }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:13.5px;font-weight:600;color:{{ a.color }}">{{ a.bestand }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ a.res }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ a.verf }}</div>
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)">{{ a.ort }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ a.ek }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ lagerArtikel }}">
+            <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px;align-items:start">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                <div style="display:flex;gap:16px">
+                  <div style="width:110px;height:110px;border-radius:18px;background:repeating-linear-gradient(135deg,var(--panel) 0 6px,var(--surface) 6px 12px);flex:0 0 110px"></div>
+                  <div style="flex:1">
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:3px 10px;display:inline-block">{{ art.nr }}</div>
+                    <div style="font-size:20px;font-weight:700;letter-spacing:-0.02em;margin-top:8px;line-height:1.2">{{ art.name }}</div>
+                    <div style="font-size:13px;color:var(--t2);margin-top:4px">{{ art.hersteller }} · {{ art.kategorie }}</div>
+                  </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px">
+                  <sc-for list="{{ art.kpis }}" as="k" hint-placeholder-count="6">
+                    <div style="background:var(--panel);border-radius:14px;padding:12px 14px">
+                      <div style="font-size:11.5px;color:var(--t2)">{{ k.label }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;margin-top:2px;color:{{ k.color }}">{{ k.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:16px">
+                  <button style="flex:1;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:13.5px;font-weight:600;padding:12px;cursor:pointer">Nachbestellen</button>
+                  <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);font-size:13.5px;padding:12px;cursor:pointer">Umlagern</button>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                  <div style="font-size:15px;font-weight:600">Lieferanten und Preise</div>
+                  <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+                    <sc-for list="{{ art.lieferanten }}" as="l" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:12px;background:var(--panel);border-radius:14px;padding:12px 14px">
+                        <div style="flex:1">
+                          <div style="font-size:13.5px;font-weight:500">{{ l.name }}</div>
+                          <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2)">{{ l.meta }}</div>
+                        </div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:{{ l.color }}">{{ l.preis }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                  <div style="font-size:15px;font-weight:600">Reserviert für Aufträge</div>
+                  <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+                    <sc-for list="{{ art.reserviert }}" as="r" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:12px">
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);background:var(--panel);border-radius:99px;padding:4px 10px">{{ r.nr }}</span>
+                        <span style="flex:1;font-size:13.5px">{{ r.kunde }}</span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:500">{{ r.menge }}</span>
+                        <span style="font-size:11.5px;border-radius:99px;padding:3px 10px;background:{{ r.bg }};color:{{ r.fg }}">{{ r.status }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ lagerBewegungen }}">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:grid;grid-template-columns:150px 130px 1.6fr 110px 140px 150px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                <div style="padding:14px 6px">Zeitpunkt</div><div style="padding:14px 6px">Art</div><div style="padding:14px 6px">Artikel</div><div style="padding:14px 6px;text-align:right">Menge</div><div style="padding:14px 6px">Auftrag</div><div style="padding:14px 6px">Mitarbeiter</div>
+              </div>
+              <sc-for list="{{ bewegungen }}" as="b" hint-placeholder-count="7">
+                <div style="display:grid;grid-template-columns:150px 130px 1.6fr 110px 140px 150px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:52px">
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ b.ts }}</div>
+                  <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;background:{{ b.bg }};color:{{ b.fg }}">{{ b.art }}</span></div>
+                  <div style="padding:8px 6px;font-size:13.5px">{{ b.artikel }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600;color:{{ b.fg }}">{{ b.menge }}</div>
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px"><a href="#">{{ b.auftrag }}</a></div>
+                  <div style="padding:8px 6px;font-size:13px;color:var(--t2)">{{ b.wer }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ lagerBestellungen }}">
+            <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+                <div style="display:grid;grid-template-columns:140px 1.3fr 1fr 110px 130px 130px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                  <div style="padding:14px 6px">Bestellnr.</div><div style="padding:14px 6px">Lieferant</div><div style="padding:14px 6px">Position</div><div style="padding:14px 6px;text-align:right">Menge</div><div style="padding:14px 6px">Liefertermin</div><div style="padding:14px 6px">Status</div>
+                </div>
+                <sc-for list="{{ bestellungen }}" as="b" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:140px 1.3fr 1fr 110px 130px 130px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:58px">
+                    <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ b.nr }}</div>
+                    <div style="padding:8px 6px;font-size:14px;font-weight:500">{{ b.lief }}</div>
+                    <div style="padding:8px 6px;font-size:13px;color:var(--t2)">{{ b.pos }}</div>
+                    <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ b.menge }}</div>
+                    <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ b.termin }}</div>
+                    <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;background:{{ b.bg }};color:{{ b.fg }}">{{ b.status }}</span></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                <div style="font-size:15px;font-weight:600">Bestellvorschlag aus Bedarf</div>
+                <div style="font-size:13px;color:var(--t2);margin-top:4px">Ermittelt aus terminierten Aufträgen KW 32–35 und Mindestbeständen.</div>
+                <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                  <sc-for list="{{ vorschlag }}" as="v" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:12px;background:var(--panel);border-radius:14px;padding:12px 14px">
+                      <div style="flex:1">
+                        <div style="font-size:13.5px;font-weight:500">{{ v.name }}</div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2)">{{ v.grund }}</div>
+                      </div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600">{{ v.menge }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <button style="width:100%;margin-top:16px;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:14px;font-weight:600;padding:13px;cursor:pointer">Bestellung an Krannich senden</button>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- AUFTRAGSDETAIL -->
+      <sc-if value="{{ isDetail }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:4px 10px">A-2026-0412</span>
+                <span style="font-size:11.5px;font-weight:500;border-radius:99px;padding:4px 11px;background:rgba(62,123,198,0.13);color:#3E7BC6">In Montage</span>
+                <span style="font-size:11.5px;font-weight:500;border-radius:99px;padding:4px 11px;background:rgba(232,149,43,0.14);color:#B4690E">Termin heute</span>
+              </div>
+              <div style="display:flex;gap:22px;margin-top:16px;flex-wrap:wrap">
+                <sc-for list="{{ detailFacts }}" as="f" hint-placeholder-count="4">
+                  <div><div style="font-size:11.5px;color:var(--t3)">{{ f.label }}</div><div style="font-size:14px;font-weight:500;margin-top:2px">{{ f.value }}</div></div>
+                </sc-for>
+              </div>
+              <div style="margin-top:18px;height:120px;border-radius:16px;background:repeating-linear-gradient(135deg,var(--panel) 0 8px,var(--surface) 8px 16px);display:flex;align-items:flex-end;padding:12px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">Karte · Pfarrgasse 14, 7350 Oberpullendorf</span>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+              <sc-for list="{{ detailKpis }}" as="k" hint-placeholder-count="3">
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:18px;display:flex;flex-direction:column;align-items:center">
+                  <div style="font-size:12.5px;color:var(--t2);text-align:center">{{ k.label }}</div>
+                  <div style="position:relative;width:104px;height:104px;margin-top:14px;border-radius:99px;background:{{ k.ring }}">
+                    <div style="position:absolute;inset:13px;border-radius:99px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:600;color:{{ k.color }}">{{ k.value }}</div>
+                  </div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);margin-top:12px;text-align:center">{{ k.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <sc-for list="{{ detailTabs }}" as="t" hint-placeholder-count="7">
+              <button onClick="{{ t.go }}" style="border:0;border-radius:99px;padding:10px 18px;font-size:13.5px;cursor:pointer;background:{{ t.bg }};color:{{ t.fg }};font-weight:{{ t.fw }};box-shadow:{{ t.shadow }}">{{ t.label }}</button>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ tabUebersicht }}">
+            <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                <div style="font-size:16px;font-weight:600">Aktivität</div>
+                <div style="display:flex;flex-direction:column;margin-top:14px">
+                  <sc-for list="{{ timeline }}" as="e" hint-placeholder-count="6">
+                    <div style="display:grid;grid-template-columns:82px 16px 1fr;gap:12px;padding-bottom:16px">
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3);text-align:right;padding-top:3px">{{ e.time }}</div>
+                      <div style="display:flex;flex-direction:column;align-items:center">
+                        <span style="width:10px;height:10px;border-radius:99px;margin-top:5px;background:{{ e.color }}"></span>
+                        <span style="flex:1;width:2px;background:var(--line);margin-top:4px;border-radius:99px"></span>
+                      </div>
+                      <div>
+                        <div style="font-size:14px;font-weight:500">{{ e.title }}</div>
+                        <div style="font-size:12.5px;color:var(--t2)">{{ e.body }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                  <div style="font-size:16px;font-weight:600">Checkliste</div>
+                  <div style="display:flex;flex-direction:column;gap:9px;margin-top:12px">
+                    <sc-for list="{{ checklist }}" as="c" hint-placeholder-count="5">
+                      <div onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:11px;background:var(--panel);border-radius:14px;padding:11px 13px;cursor:pointer">
+                        <span style="width:19px;height:19px;border-radius:99px;border:1.5px solid {{ c.color }};background:{{ c.fill }};color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center">{{ c.mark }}</span>
+                        <span contenteditable="{{ editable }}" style="flex:1;font-size:13.5px;outline:0">{{ c.label }}</span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ c.meta }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                  <div style="font-size:16px;font-weight:600">Kundenportal</div>
+                  <div style="font-size:13px;color:var(--t2);margin-top:4px">Der Kunde sieht Fortschritt, Dokumente und kann Bilder hochladen.</div>
+                  <div style="display:flex;flex-direction:column;gap:9px;margin-top:12px">
+                    <sc-for list="{{ portalEvents }}" as="p" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:10px">
+                        <span style="width:8px;height:8px;border-radius:99px;background:{{ p.color }}"></span>
+                        <span style="flex:1;font-size:13px">{{ p.text }}</span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ p.when }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ tabMaterial }}">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--line)">
+                <div style="font-size:16px;font-weight:600;flex:1">Material · geplant, entnommen, zurückgebracht</div>
+                <span style="font-size:11.5px;font-weight:500;border-radius:99px;padding:4px 11px;background:rgba(210,84,63,0.13);color:#D2543F">1 Abweichung</span>
+                <button style="border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);padding:9px 16px;font-size:13px;cursor:pointer">Lieferschein erzeugen</button>
+              </div>
+              <div style="display:grid;grid-template-columns:150px 1.6fr 100px 110px 100px 100px 1fr;padding:0 22px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                <div style="padding:12px 6px">Artikelnr.</div><div style="padding:12px 6px">Bezeichnung</div><div style="padding:12px 6px;text-align:right">Geplant</div><div style="padding:12px 6px;text-align:right">Entnommen</div><div style="padding:12px 6px;text-align:right">Zurück</div><div style="padding:12px 6px;text-align:right">Delta</div><div style="padding:12px 6px">Wer / wann</div>
+              </div>
+              <sc-for list="{{ matRows }}" as="m" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:150px 1.6fr 100px 110px 100px 100px 1fr;padding:0 22px;border-bottom:1px solid var(--line);align-items:center;min-height:52px;background:{{ m.rowBg }}">
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ m.nr }}</div>
+                  <div style="padding:8px 6px;font-size:13.5px">{{ m.name }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ m.plan }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ m.out }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ m.back }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600;color:{{ m.deltaColor }}">{{ m.delta }}</div>
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)">{{ m.who }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ tabZeiten }}">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{ zeitTage }}" as="d" hint-placeholder-count="3">
+                <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:12px;padding:15px 22px;border-bottom:1px solid var(--line)">
+                    <span style="font-size:14.5px;font-weight:600">{{ d.label }}</span>
+                    <div style="flex:1"></div>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ d.sum }}</span>
+                  </div>
+                  <sc-for list="{{ d.entries }}" as="e" hint-placeholder-count="3">
+                    <div style="display:grid;grid-template-columns:170px 140px 90px 140px 1fr 100px;padding:0 22px;border-bottom:1px solid var(--line);align-items:center;min-height:50px">
+                      <div style="padding:8px 6px;font-size:13.5px;font-weight:500">{{ e.name }}</div>
+                      <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ e.von }}</div>
+                      <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600">{{ e.dauer }}</div>
+                      <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;background:{{ e.artBg }};color:{{ e.artFg }}">{{ e.art }}</span></div>
+                      <div style="padding:8px 6px;font-size:12.5px;color:var(--t2)">{{ e.note }}</div>
+                      <div style="padding:8px 6px;text-align:right;font-size:12px;color:var(--t3)">{{ e.status }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ tabDoks }}">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                <div style="font-size:16px;font-weight:600">Dokumente</div>
+                <div style="display:flex;flex-direction:column;gap:9px;margin-top:12px">
+                  <sc-for list="{{ docs }}" as="d" hint-placeholder-count="5">
+                    <div style="display:flex;align-items:center;gap:12px;background:var(--panel);border-radius:14px;padding:11px 13px">
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2);background:var(--surface);border-radius:7px;padding:3px 7px">{{ d.typ }}</span>
+                      <span style="flex:1;font-size:13.5px">{{ d.name }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3)">{{ d.datum }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+                <div style="font-size:16px;font-weight:600">Baustellenfotos · 6</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px">
+                  <sc-for list="{{ fotos }}" as="f" hint-placeholder-count="6">
+                    <div style="aspect-ratio:4/3;border-radius:14px;background:repeating-linear-gradient(135deg,var(--panel) 0 6px,var(--surface) 6px 12px);display:flex;align-items:flex-end;padding:8px">
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t3)">{{ f }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- EINSATZPLANUNG -->
+      <sc-if value="{{ isDispo }}">
+        <div style="display:grid;grid-template-columns:1fr 290px;gap:16px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:99px;padding:9px 14px;box-shadow:var(--shadow)">
+                <button style="border:0;background:transparent;color:var(--t2);cursor:pointer;font-size:14px">‹</button>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500">KW 32 · 03.–09.08.2026</span>
+                <button style="border:0;background:transparent;color:var(--t2);cursor:pointer;font-size:14px">›</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:99px;padding:9px 16px;box-shadow:var(--shadow)">
+                <span style="width:9px;height:9px;border-radius:99px;background:#D2543F"></span>
+                <span style="font-size:13px;font-weight:500">Wallner: Ruhezeit Do→Fr nur 9:15 h — Grenzwert 11:00 h</span>
+                <button style="border:0;background:var(--panel);border-radius:99px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--t1)">Beheben</button>
+              </div>
+            </div>
+
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:grid;grid-template-columns:170px repeat(7,1fr);border-bottom:1px solid var(--line)">
+                <div style="padding:14px 16px;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--t3)">Team</div>
+                <sc-for list="{{ days }}" as="d" hint-placeholder-count="7">
+                  <div style="padding:11px 12px;background:{{ d.bg }}">
+                    <div style="font-size:13px;font-weight:600">{{ d.name }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ d.date }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:{{ d.loadColor }}">{{ d.load }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-for list="{{ dispoRows }}" as="r" hint-placeholder-count="6">
+                <div style="display:grid;grid-template-columns:170px repeat(7,1fr);border-bottom:1px solid var(--line);min-height:78px">
+                  <div style="padding:12px 16px">
+                    <div style="font-size:13.5px;font-weight:600">{{ r.name }}</div>
+                    <div style="font-size:11.5px;color:var(--t2)">{{ r.role }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{{ r.hColor }};margin-top:3px">{{ r.hours }}</div>
+                  </div>
+                  <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7">
+                    <div style="padding:7px;display:flex;flex-direction:column;gap:5px;background:{{ c.bg }}">
+                      <sc-for list="{{ c.blocks }}" as="b" hint-placeholder-count="1">
+                        <div style="border-radius:12px;padding:8px 10px;color:{{ b.fg }};background:{{ b.bg }};cursor:grab">
+                          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;opacity:0.8">{{ b.time }}</div>
+                          <div style="font-size:11.5px;font-weight:600;line-height:1.2">{{ b.title }}</div>
+                          <div style="font-size:10.5px;opacity:0.85">{{ b.sub }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px">
+              <div style="font-size:15px;font-weight:600">Nicht terminiert · 4</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+                <sc-for list="{{ pool }}" as="p" hint-placeholder-count="4">
+                  <div style="border:1px dashed var(--line);border-radius:14px;padding:11px 13px;cursor:grab">
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)">{{ p.nr }}</div>
+                    <div style="font-size:13.5px;font-weight:500">{{ p.kunde }}</div>
+                    <div style="font-size:11.5px;color:var(--t2)">{{ p.meta }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px">
+              <div style="font-size:15px;font-weight:600">Wochenstunden gegen Soll</div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:12px">
+                <sc-for list="{{ wochenstunden }}" as="w" hint-placeholder-count="6">
+                  <div>
+                    <div style="display:flex;justify-content:space-between;font-size:12.5px"><span>{{ w.name }}</span><span style="font-family:'JetBrains Mono',monospace;color:{{ w.color }}">{{ w.txt }}</span></div>
+                    <div style="height:7px;border-radius:99px;background:var(--panel);margin-top:5px;overflow:hidden"><div style="height:100%;border-radius:99px;background:{{ w.color }};width:{{ w.w }}"></div></div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ZEITERFASSUNG -->
+      <sc-if value="{{ isZeit }}">
+        <div style="display:grid;grid-template-columns:1fr 330px;gap:16px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:16px 20px;display:flex;align-items:center;gap:16px">
+              <div style="display:flex">
+                <sc-for list="{{ anwesend }}" as="a" hint-placeholder-count="6">
+                  <div style="width:32px;height:32px;margin-right:-9px;border-radius:99px;border:2px solid var(--surface);background:{{ a.color }};color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ a.ini }}</div>
+                </sc-for>
+              </div>
+              <div style="font-size:14px;font-weight:600;margin-left:12px">6 eingestempelt · 2 Pause · 1 Dienstgang</div>
+              <div style="flex:1"></div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">Mi 29.07.2026 · 14:38</span>
+            </div>
+
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:grid;grid-template-columns:1.3fr 84px 84px 84px 84px 92px 1.3fr 130px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                <div style="padding:13px 6px">Mitarbeiter</div><div style="padding:13px 6px">Kommt</div><div style="padding:13px 6px">Pause</div><div style="padding:13px 6px;text-align:right">Ist</div><div style="padding:13px 6px;text-align:right">Soll</div><div style="padding:13px 6px;text-align:right">Diff</div><div style="padding:13px 6px">Auftrag</div><div style="padding:13px 6px">Status</div>
+              </div>
+              <sc-for list="{{ zeitRows }}" as="z" hint-placeholder-count="8">
+                <div style="display:grid;grid-template-columns:1.3fr 84px 84px 84px 84px 92px 1.3fr 130px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:56px;background:{{ z.rowBg }}">
+                  <div style="padding:8px 6px;display:flex;align-items:center;gap:10px">
+                    <div style="width:30px;height:30px;border-radius:99px;background:{{ z.color }};color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ z.ini }}</div>
+                    <span style="font-size:13.5px;font-weight:500">{{ z.name }}</span>
+                  </div>
+                  <div contenteditable="{{ editable }}" style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;outline:0;border-radius:8px;background:{{ editCell }}">{{ z.kommt }}</div>
+                  <div contenteditable="{{ editable }}" style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2);outline:0;border-radius:8px;background:{{ editCell }}">{{ z.pause }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600">{{ z.ist }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ z.soll }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600;color:{{ z.diffColor }}">{{ z.diff }}</div>
+                  <div style="padding:8px 6px;font-size:12.5px"><a href="#">{{ z.auftrag }}</a> <span style="color:var(--t3)">{{ z.auftragSub }}</span></div>
+                  <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;background:{{ z.pillBg }};color:{{ z.pillFg }}">{{ z.status }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px">
+              <div style="font-size:15px;font-weight:600">Offene Korrekturanträge · 3</div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:12px">
+                <sc-for list="{{ korrekturen }}" as="k" hint-placeholder-count="3">
+                  <div style="background:var(--panel);border-radius:16px;padding:13px 14px">
+                    <div style="font-size:13.5px;font-weight:600">{{ k.name }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2)">{{ k.change }}</div>
+                    <div style="font-size:12.5px;color:var(--t2);margin-top:4px">{{ k.grund }}</div>
+                    <div style="display:flex;gap:9px;margin-top:11px">
+                      <button style="flex:1;border:0;border-radius:99px;background:#3E9E6B;color:#fff;padding:8px;font-size:12.5px;font-weight:600;cursor:pointer">Genehmigen</button>
+                      <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:var(--t1);padding:8px;font-size:12.5px;cursor:pointer">Ablehnen</button>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- STUNDENKONTO -->
+      <sc-if value="{{ isKonto }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+            <sc-for list="{{ kontoKpis }}" as="k" hint-placeholder-count="4">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:18px 20px">
+                <div style="font-size:13.5px;color:var(--t2);font-weight:500">{{ k.label }}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:600;letter-spacing:-0.03em;margin-top:8px;color:{{ k.color }}">{{ k.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:16px;font-weight:600">Saldoverlauf 12 Monate</div>
+              <span style="font-size:12.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:5px 12px">Nulllinie betont</span>
+            </div>
+            <div style="position:relative;height:200px;margin-top:20px;display:flex;align-items:center;gap:10px">
+              <div style="position:absolute;left:0;right:0;top:50%;height:1.5px;background:var(--line)"></div>
+              <sc-for list="{{ saldo }}" as="s" hint-placeholder-count="12">
+                <div style="flex:1;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative">
+                  <div style="width:100%;display:flex;justify-content:center;align-items:flex-end;height:50%"><div style="width:56%;border-radius:99px 99px 0 0;background:{{ s.posColor }};height:{{ s.posH }}"></div></div>
+                  <div style="width:100%;display:flex;justify-content:center;align-items:flex-start;height:50%"><div style="width:56%;border-radius:0 0 99px 99px;background:{{ s.negColor }};height:{{ s.negH }}"></div></div>
+                  <div style="position:absolute;bottom:-4px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3)">{{ s.m }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="padding:17px 22px;font-size:16px;font-weight:600;border-bottom:1px solid var(--line)">Buchungshistorie</div>
+            <div style="display:grid;grid-template-columns:130px 140px 1.4fr 100px 110px 1fr;padding:0 22px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+              <div style="padding:12px 6px">Datum</div><div style="padding:12px 6px">Zeitart</div><div style="padding:12px 6px">Auftrag</div><div style="padding:12px 6px;text-align:right">Dauer</div><div style="padding:12px 6px;text-align:right">Saldo</div><div style="padding:12px 6px">Notiz</div>
+            </div>
+            <sc-for list="{{ buchungen }}" as="b" hint-placeholder-count="7">
+              <div style="display:grid;grid-template-columns:130px 140px 1.4fr 100px 110px 1fr;padding:0 22px;border-bottom:1px solid var(--line);align-items:center;min-height:50px">
+                <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ b.datum }}</div>
+                <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;background:{{ b.bg }};color:{{ b.fg }}">{{ b.art }}</span></div>
+                <div style="padding:8px 6px;font-size:12.5px"><a href="#">{{ b.auftrag }}</a> <span style="color:var(--t3)">{{ b.kunde }}</span></div>
+                <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600">{{ b.dauer }}</div>
+                <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:{{ b.saldoColor }}">{{ b.saldo }}</div>
+                <div style="padding:8px 6px;font-size:12.5px;color:var(--t2)">{{ b.notiz }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- RECHNUNGEN -->
+      <sc-if value="{{ isRechnungen }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+            <sc-for list="{{ reKpis }}" as="k" hint-placeholder-count="4">
+              <div style="border-radius:20px;padding:18px 20px;background:{{ k.bg }};color:{{ k.fg }};box-shadow:var(--shadow)">
+                <div style="font-size:14px;font-weight:600">{{ k.label }}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:600;letter-spacing:-0.03em;margin-top:10px">{{ k.value }}</div>
+                <div style="font-size:12.5px;opacity:0.8;margin-top:4px">{{ k.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:grid;grid-template-columns:130px 1.3fr 120px 130px 1fr 130px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                <div style="padding:14px 6px">Nummer</div><div style="padding:14px 6px">Kunde</div><div style="padding:14px 6px;text-align:right">Betrag</div><div style="padding:14px 6px">Fällig</div><div style="padding:14px 6px">Fortschritt</div><div style="padding:14px 6px">Status</div>
+              </div>
+              <sc-for list="{{ rechnungen }}" as="r" hint-placeholder-count="6">
+                <div onClick="{{ r.open }}" style="display:grid;grid-template-columns:130px 1.3fr 120px 130px 1fr 130px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:58px;cursor:pointer;background:{{ r.rowBg }}" style-hover="background:var(--panel)">
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ r.nr }}</div>
+                  <div contenteditable="{{ editable }}" style="padding:8px 6px;font-size:14px;font-weight:500;outline:0">{{ r.kunde }}</div>
+                  <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500">{{ r.betrag }}</div>
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:{{ r.dueColor }}">{{ r.due }}</div>
+                  <div style="padding:8px 6px">
+                    <div style="height:6px;border-radius:99px;background:var(--panel);overflow:hidden"><div style="height:100%;border-radius:99px;width:{{ r.w }};background:{{ r.color }}"></div></div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3);margin-top:4px">{{ r.teil }}</div>
+                  </div>
+                  <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;white-space:nowrap;background:{{ r.bg }};color:{{ r.fg }}">{{ r.status }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                <div style="font-size:17px;font-weight:600">Mahnlauf-Vorschlag</div>
+                <div style="font-size:13px;color:var(--t2);margin-top:4px">2 Rechnungen über Zahlungsziel, ein Fall in Mahnstufe 2.</div>
+                <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                  <sc-for list="{{ mahnungen }}" as="m" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:12px;background:var(--panel);border-radius:14px;padding:12px 14px">
+                      <div style="flex:1">
+                        <div style="font-size:13.5px;font-weight:500">{{ m.kunde }}</div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2)">{{ m.meta }}</div>
+                      </div>
+                      <span style="font-size:11.5px;border-radius:99px;padding:4px 11px;background:{{ m.bg }};color:{{ m.fg }}">{{ m.stufe }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <button style="width:100%;margin-top:16px;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:14px;font-weight:600;padding:13px;cursor:pointer">Mahnungen versenden</button>
+              </div>
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                <div style="font-size:17px;font-weight:600">Teilrechnungen {{ reSel.nr }}</div>
+                <div style="font-size:13px;color:var(--t2);margin-top:2px">{{ reSel.kunde }} · {{ reSel.betrag }}</div>
+                <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                  <sc-for list="{{ reSel.teile }}" as="t" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:12px">
+                      <span style="width:9px;height:9px;border-radius:99px;background:{{ t.color }}"></span>
+                      <span style="flex:1;font-size:13.5px">{{ t.label }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ t.betrag }}</span>
+                      <span style="font-size:11.5px;border-radius:99px;padding:3px 10px;background:{{ t.bg }};color:{{ t.fg }}">{{ t.status }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ABWESENHEITEN -->
+      <sc-if value="{{ isAbwesenheit }}">
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px;overflow:auto">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="font-size:17px;font-weight:600;flex:1">Jahresplaner 2026 · KW 27–40</div>
+              <sc-for list="{{ absLegende }}" as="l" hint-placeholder-count="4">
+                <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2)"><span style="width:12px;height:12px;border-radius:4px;background:{{ l.color }}"></span>{{ l.label }}</span>
+              </sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:150px 1fr;gap:12px;margin-top:18px;align-items:center">
+              <div></div>
+              <div style="display:grid;grid-template-columns:repeat(14,1fr);gap:3px">
+                <sc-for list="{{ absKws }}" as="k" hint-placeholder-count="14">
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);text-align:center">{{ k }}</div>
+                </sc-for>
+              </div>
+            </div>
+            <sc-for list="{{ absRows }}" as="r" hint-placeholder-count="9">
+              <div style="display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;margin-top:8px">
+                <div>
+                  <div style="font-size:13.5px;font-weight:500">{{ r.name }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ r.rest }}</div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(14,1fr);gap:3px">
+                  <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="14">
+                    <div title="{{ c.tip }}" style="height:30px;border-radius:7px;background:{{ c.bg }}"></div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="font-size:17px;font-weight:600">Offene Anträge · 2</div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+                <sc-for list="{{ absAntraege }}" as="a" hint-placeholder-count="2">
+                  <div style="background:var(--panel);border-radius:16px;padding:14px">
+                    <div style="font-size:13.5px;font-weight:600">{{ a.name }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2)">{{ a.zeit }}</div>
+                    <div style="font-size:12.5px;color:var(--t2);margin-top:4px">{{ a.hinweis }}</div>
+                    <div style="display:flex;gap:9px;margin-top:11px">
+                      <button style="flex:1;border:0;border-radius:99px;background:#3E9E6B;color:#fff;padding:8px;font-size:12.5px;font-weight:600;cursor:pointer">Genehmigen</button>
+                      <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:var(--t1);padding:8px;font-size:12.5px;cursor:pointer">Ablehnen</button>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="font-size:17px;font-weight:600">Besetzung je Woche</div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+                <sc-for list="{{ besetzung }}" as="b" hint-placeholder-count="5">
+                  <div>
+                    <div style="display:flex;justify-content:space-between;font-size:12.5px"><span>{{ b.kw }}</span><span style="font-family:'JetBrains Mono',monospace;color:{{ b.color }}">{{ b.txt }}</span></div>
+                    <div style="height:7px;border-radius:99px;background:var(--panel);margin-top:5px;overflow:hidden"><div style="height:100%;border-radius:99px;background:{{ b.color }};width:{{ b.w }}"></div></div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- MITARBEITER -->
+      <sc-if value="{{ isMitarbeiter }}">
+        <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="display:grid;grid-template-columns:1.5fr 1fr 110px 110px 120px 120px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+              <div style="padding:14px 6px">Name</div><div style="padding:14px 6px">Position</div><div style="padding:14px 6px;text-align:right">Wochen-h</div><div style="padding:14px 6px;text-align:right">Urlaub</div><div style="padding:14px 6px">Standort</div><div style="padding:14px 6px">Status</div>
+            </div>
+            <sc-for list="{{ mitarbeiter }}" as="m" hint-placeholder-count="9">
+              <div onClick="{{ m.open }}" style="display:grid;grid-template-columns:1.5fr 1fr 110px 110px 120px 120px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:58px;cursor:pointer;background:{{ m.rowBg }}" style-hover="background:var(--panel)">
+                <div style="padding:8px 6px;display:flex;align-items:center;gap:11px">
+                  <div style="width:32px;height:32px;border-radius:99px;background:{{ m.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600">{{ m.ini }}</div>
+                  <span contenteditable="{{ editable }}" style="font-size:14px;font-weight:500;outline:0">{{ m.name }}</span>
+                </div>
+                <div style="padding:8px 6px;font-size:13px;color:var(--t2)">{{ m.position }}</div>
+                <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ m.stunden }}</div>
+                <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ m.urlaub }}</div>
+                <div style="padding:8px 6px;font-size:12.5px;color:var(--t2)">{{ m.standort }}</div>
+                <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;white-space:nowrap;background:{{ m.bg }};color:{{ m.fg }}">{{ m.status }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="width:46px;height:46px;border-radius:99px;background:{{ maSel.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600">{{ maSel.ini }}</div>
+                <div style="flex:1">
+                  <div contenteditable="{{ editable }}" style="font-size:19px;font-weight:700;letter-spacing:-0.02em;outline:0">{{ maSel.name }}</div>
+                  <div style="font-size:13px;color:var(--t2)">{{ maSel.meta }}</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px">
+                <sc-for list="{{ maSel.kpis }}" as="k" hint-placeholder-count="4">
+                  <div style="background:var(--panel);border-radius:14px;padding:12px 14px">
+                    <div style="font-size:11.5px;color:var(--t2)">{{ k.label }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:600;color:{{ k.color }}">{{ k.value }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="font-size:17px;font-weight:600">Qualifikationen</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                <sc-for list="{{ maSel.quali }}" as="q" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <span style="width:9px;height:9px;border-radius:99px;background:{{ q.color }}"></span>
+                    <span style="flex:1;font-size:13.5px">{{ q.label }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{{ q.color }}">{{ q.bis }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- DOKUMENTE -->
+      <sc-if value="{{ isDokumente }}">
+        <div style="display:grid;grid-template-columns:250px 1fr;gap:16px;align-items:start">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:18px">
+            <div style="font-size:15px;font-weight:600">Ordner</div>
+            <div style="display:flex;flex-direction:column;gap:3px;margin-top:12px">
+              <sc-for list="{{ ordner }}" as="o" hint-placeholder-count="6">
+                <button onClick="{{ o.go }}" style="display:flex;align-items:center;gap:10px;border:0;border-radius:12px;padding:10px 11px;cursor:pointer;text-align:left;font-size:13.5px;background:{{ o.bg }};color:{{ o.fg }};font-weight:{{ o.fw }}">
+                  <span style="flex:1">{{ o.label }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ o.n }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px 22px;display:flex;align-items:center;gap:16px">
+              <div style="flex:1">
+                <div style="font-size:16px;font-weight:600">Sammelupload mit automatischer Zuordnung</div>
+                <div style="font-size:13px;color:var(--t2)">Lohnzettel Juli 2026 · 9 PDF erkannt, 9 Personen zugeordnet</div>
+              </div>
+              <button style="border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);padding:11px 18px;font-size:13px;cursor:pointer">Zuordnung prüfen</button>
+              <button style="border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;padding:11px 18px;font-size:13px;font-weight:600;cursor:pointer">Freigeben und versenden</button>
+            </div>
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="display:grid;grid-template-columns:80px 1.6fr 1fr 130px 150px;padding:0 20px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+                <div style="padding:14px 6px">Typ</div><div style="padding:14px 6px">Dokument</div><div style="padding:14px 6px">Person</div><div style="padding:14px 6px">Datum</div><div style="padding:14px 6px">E-Signatur</div>
+              </div>
+              <sc-for list="{{ dokListe }}" as="d" hint-placeholder-count="7">
+                <div style="display:grid;grid-template-columns:80px 1.6fr 1fr 130px 150px;padding:0 20px;border-bottom:1px solid var(--line);align-items:center;min-height:54px" style-hover="background:var(--panel)">
+                  <div style="padding:8px 6px"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2);background:var(--panel);border-radius:8px;padding:4px 7px">{{ d.typ }}</span></div>
+                  <div contenteditable="{{ editable }}" style="padding:8px 6px;font-size:13.5px;font-weight:500;outline:0">{{ d.name }}</div>
+                  <div style="padding:8px 6px;font-size:13px;color:var(--t2)">{{ d.person }}</div>
+                  <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ d.datum }}</div>
+                  <div style="padding:8px 6px"><span style="font-size:11.5px;border-radius:99px;padding:4px 11px;white-space:nowrap;background:{{ d.bg }};color:{{ d.fg }}">{{ d.sig }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CHAT -->
+      <sc-if value="{{ isChat }}">
+        <div style="display:grid;grid-template-columns:280px 1fr 300px;gap:16px;align-items:stretch;height:660px">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:16px;overflow-y:auto">
+            <div style="font-size:15px;font-weight:600;padding:0 4px 10px">Konversationen</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <sc-for list="{{ chats }}" as="c" hint-placeholder-count="5">
+                <button onClick="{{ c.go }}" style="display:flex;gap:11px;align-items:flex-start;border:0;border-radius:14px;padding:11px;cursor:pointer;text-align:left;background:{{ c.bg }}">
+                  <div style="width:34px;height:34px;border-radius:12px;background:{{ c.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex:0 0 34px">{{ c.ini }}</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13.5px;font-weight:600;color:var(--t1)">{{ c.name }}</div>
+                    <div style="font-size:12px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.last }}</div>
+                  </div>
+                  <div style="text-align:right">
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3)">{{ c.time }}</div>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;border-radius:99px;padding:1px 6px;background:{{ c.badgeBg }};color:{{ c.badgeFg }}">{{ c.badge }}</span>
+                  </div>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden">
+            <div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px">
+              <div style="font-size:15.5px;font-weight:600;flex:1">{{ chatSel }}</div>
+              <span style="font-size:12px;color:var(--t2);background:var(--panel);border-radius:99px;padding:5px 12px">5 Mitglieder</span>
+            </div>
+            <div style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{ messages }}" as="m" hint-placeholder-count="6">
+                <div style="display:flex;gap:11px;align-self:{{ m.align }};max-width:74%">
+                  <div style="width:30px;height:30px;border-radius:99px;background:{{ m.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;flex:0 0 30px">{{ m.ini }}</div>
+                  <div>
+                    <div style="display:flex;align-items:baseline;gap:8px">
+                      <span style="font-size:12.5px;font-weight:600">{{ m.name }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3)">{{ m.time }}</span>
+                    </div>
+                    <div style="margin-top:5px;border-radius:16px;padding:12px 14px;font-size:13.5px;background:{{ m.bg }};color:{{ m.fg }};border:{{ m.border }}">{{ m.text }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="padding:14px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:12px">
+              <div contenteditable="true" style="flex:1;background:var(--panel);border-radius:99px;padding:12px 18px;font-size:13.5px;color:var(--t2);outline:0">Nachricht an das Team …</div>
+              <button style="border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;padding:12px 20px;font-size:13.5px;font-weight:600;cursor:pointer">Senden</button>
+            </div>
+          </div>
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px;overflow-y:auto">
+            <div style="font-size:15px;font-weight:600">Kontext</div>
+            <div style="background:var(--panel);border-radius:16px;padding:14px;margin-top:12px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)">A-2026-0412</div>
+              <div style="font-size:14px;font-weight:600;margin-top:3px">Fam. Halbauer</div>
+              <div style="font-size:12.5px;color:var(--t2)">In Montage · 42 von 56 h</div>
+            </div>
+            <div style="font-size:13.5px;font-weight:600;margin-top:18px">Mitglieder</div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:10px">
+              <sc-for list="{{ chatMembers }}" as="m" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:28px;height:28px;border-radius:99px;background:{{ m.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">{{ m.ini }}</div>
+                  <span style="flex:1;font-size:13px">{{ m.name }}</span>
+                  <span style="width:8px;height:8px;border-radius:99px;background:{{ m.dot }}"></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- BEWERBER -->
+      <sc-if value="{{ isBewerber }}">
+        <div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;align-items:flex-start">
+          <sc-for list="{{ bewerberSpalten }}" as="col" hint-placeholder-count="7">
+            <div style="flex:0 0 250px;width:250px;display:flex;flex-direction:column;gap:12px">
+              <div style="background:var(--surface);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow)">
+                <div style="height:4px;border-radius:99px;background:{{ col.color }};width:40px"></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:11px">
+                  <span style="font-size:14px;font-weight:600;flex:1">{{ col.title }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);background:var(--panel);border-radius:99px;padding:2px 8px">{{ col.count }}</span>
+                </div>
+              </div>
+              <sc-for list="{{ col.cards }}" as="b" hint-placeholder-count="2">
+                <div style="background:var(--surface);border-radius:18px;padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px;cursor:pointer">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <div style="width:34px;height:34px;border-radius:99px;background:{{ b.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600">{{ b.ini }}</div>
+                    <div style="flex:1;min-width:0">
+                      <div contenteditable="{{ editable }}" style="font-size:14px;font-weight:600;outline:0">{{ b.name }}</div>
+                      <div style="font-size:11.5px;color:var(--t2)">{{ b.position }}</div>
+                    </div>
+                  </div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--amber)">{{ b.sterne }}</div>
+                  <div style="font-size:12px;color:var(--t2)">{{ b.meta }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ b.termin }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- BERICHTE -->
+      <sc-if value="{{ isBerichte }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+            <sc-for list="{{ berichte }}" as="b" hint-placeholder-count="8">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:20px;cursor:pointer;display:flex;flex-direction:column;gap:8px" style-hover="transform:translateY(-2px)">
+                <div style="width:38px;height:38px;border-radius:13px;background:{{ b.iconBg }};color:{{ b.iconFg }};display:flex;align-items:center;justify-content:center">{{ b.iconEl }}</div>
+                <div style="font-size:15px;font-weight:600;margin-top:6px">{{ b.title }}</div>
+                <div style="font-size:12.5px;color:var(--t2)">{{ b.sub }}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);margin-top:4px">{{ b.meta }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div style="font-size:17px;font-weight:600;flex:1">Nachkalkulation abgeschlossene Aufträge · KW 24–31</div>
+              <button style="border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);padding:10px 16px;font-size:13px;cursor:pointer">Excel</button>
+              <button style="border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);padding:10px 16px;font-size:13px;cursor:pointer">PDF</button>
+            </div>
+            <div style="display:grid;grid-template-columns:140px 1.4fr 120px 120px 120px 1fr;padding:0;margin-top:16px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3);border-bottom:1px solid var(--line)">
+              <div style="padding:10px 6px">Auftrag</div><div style="padding:10px 6px">Kunde</div><div style="padding:10px 6px;text-align:right">Stunden</div><div style="padding:10px 6px;text-align:right">Material</div><div style="padding:10px 6px;text-align:right">DB</div><div style="padding:10px 6px">Abweichung</div>
+            </div>
+            <sc-for list="{{ nachkalk }}" as="n" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:140px 1.4fr 120px 120px 120px 1fr;border-bottom:1px solid var(--line);align-items:center;min-height:50px">
+                <div style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--t2)">{{ n.nr }}</div>
+                <div style="padding:8px 6px;font-size:13.5px;font-weight:500">{{ n.kunde }}</div>
+                <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:{{ n.hColor }}">{{ n.stunden }}</div>
+                <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px">{{ n.material }}</div>
+                <div style="padding:8px 6px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600;color:{{ n.dbColor }}">{{ n.db }}</div>
+                <div style="padding:8px 6px;font-size:12.5px;color:var(--t2)">{{ n.hinweis }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- EINSTELLUNGEN -->
+      <sc-if value="{{ isEinstellungen }}">
+        <div style="display:grid;grid-template-columns:250px 1fr;gap:16px;align-items:start">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:18px">
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <sc-for list="{{ setNav }}" as="n" hint-placeholder-count="6">
+                <button onClick="{{ n.go }}" style="border:0;border-radius:12px;padding:11px;cursor:pointer;text-align:left;font-size:13.5px;background:{{ n.bg }};color:{{ n.fg }};font-weight:{{ n.fw }}">{{ n.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px;overflow-x:auto">
+              <div style="font-size:17px;font-weight:600">Rollen und Rechte</div>
+              <div style="font-size:13px;color:var(--t2);margin-top:2px">Dreizustand pro Bereich: kein Zugriff, lesen, bearbeiten. Klick wechselt den Zustand.</div>
+              <div style="display:grid;grid-template-columns:200px repeat(5,1fr);margin-top:18px;min-width:760px">
+                <div style="padding:10px 8px;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--t3)">Bereich</div>
+                <sc-for list="{{ rollen }}" as="r" hint-placeholder-count="5">
+                  <div style="padding:10px 8px;font-size:12.5px;font-weight:600;text-align:center">{{ r }}</div>
+                </sc-for>
+                <sc-for list="{{ rechteRows }}" as="row" hint-placeholder-count="7">
+                  <div style="padding:11px 8px;font-size:13.5px;border-top:1px solid var(--line)">{{ row.label }}</div>
+                  <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="5">
+                    <div style="border-top:1px solid var(--line);padding:8px;display:flex;align-items:center;justify-content:center">
+                      <button onClick="{{ c.cycle }}" style="border:0;border-radius:99px;padding:6px 14px;font-size:11.5px;font-weight:500;cursor:pointer;min-width:96px;background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</button>
+                    </div>
+                  </sc-for>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                <div style="font-size:17px;font-weight:600">Standorte</div>
+                <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                  <sc-for list="{{ standorteListe }}" as="st" hint-placeholder-count="3">
+                    <div style="background:var(--panel);border-radius:14px;padding:13px 14px">
+                      <div contenteditable="{{ editable }}" style="font-size:14px;font-weight:600;outline:0">{{ st.name }}</div>
+                      <div style="font-size:12.5px;color:var(--t2)">{{ st.meta }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                <div style="font-size:17px;font-weight:600">Integrationen</div>
+                <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+                  <sc-for list="{{ integrationen }}" as="i" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:12px">
+                      <div style="flex:1">
+                        <div style="font-size:13.5px;font-weight:500">{{ i.name }}</div>
+                        <div style="font-size:12px;color:var(--t2)">{{ i.meta }}</div>
+                      </div>
+                      <button onClick="{{ i.toggle }}" style="border:0;width:46px;height:26px;border-radius:99px;cursor:pointer;padding:3px;display:flex;justify-content:{{ i.justify }};background:{{ i.track }}">
+                        <span style="width:20px;height:20px;border-radius:99px;background:#fff"></span>
+                      </button>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- PHASE 2 -->
+      <sc-if value="{{ isSoon }}">
+        <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:38px;display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.08em;color:var(--t2);background:var(--panel);border-radius:99px;padding:5px 12px">PHASE 2</span>
+          <div style="font-size:22px;font-weight:700;letter-spacing:-0.02em">{{ screenTitle }}</div>
+          <div style="font-size:14px;color:var(--t2);max-width:620px">Kommt nach Phase 1. Fertig sind Cockpit, Pipelines mit Vertrieb, Projekten und Service, Angebote mit Mailversand und digitaler Annahme, CRM, Lager mit Artikeln, Bewegungen und Bestellungen, Einsatzplanung, Zeiterfassung und Stundenkonto.</div>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+
+  <sc-if value="{{ toast }}">
+    <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#151210;color:#F5F0EA;border-radius:99px;padding:13px 20px;display:flex;align-items:center;gap:16px;z-index:60;box-shadow:0 12px 30px rgba(0,0,0,0.22)">
+      <span style="font-size:13.5px">{{ toast }}</span>
+      <button onClick="{{ closeToast }}" style="border:0;background:transparent;color:var(--amber);font-size:13.5px;font-weight:600;cursor:pointer">OK</button>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;,&quot;section&quot;:&quot;Darstellung&quot;}}">
+const C = {slate:'#8B92A0',blue:'#3E7BC6',violet:'#8465C4',green:'#3E9E6B',amber:'#E8952B',red:'#D2543F'};
+const h = React.createElement;
+const ico = (parts, size) => h('svg', { width: size || 16, height: size || 16, viewBox:'0 0 24 24', fill:'none',
+  stroke:'currentColor', strokeWidth:1.8, strokeLinecap:'round', strokeLinejoin:'round', style:{display:'block'} },
+  parts.map((p, i) => h(p[0], Object.assign({ key: i }, p[1]))));
+const R = (x,y,w,hh,r) => ['rect',{x,y,width:w,height:hh,rx:r||2}];
+const L = (x1,y1,x2,y2) => ['line',{x1,y1,x2,y2}];
+const Ci = (cx,cy,r) => ['circle',{cx,cy,r}];
+const P = d => ['path',{d}];
+const ICONS = {
+  cockpit: [R(3,3,8,8,2.5),R(13,3,8,8,2.5),R(3,13,8,8,2.5),R(13,13,8,8,2.5)],
+  pipelines: [R(3,4,5,16,2),R(10,4,5,11,2),R(17,4,4,7,2)],
+  angebote: [R(5,3,14,18,2.5),L(9,9,15,9),L(9,13,15,13),L(9,17,12,17)],
+  crm: [Ci(9,8,3.2),P('M3.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5'),P('M16.5 5.5a3 3 0 0 1 0 5.6'),P('M18 20c0-2.4-.8-4.2-2-5.2')],
+  dispo: [R(3,5,18,16,2.5),L(3,10,21,10),L(8,3,8,6),L(16,3,16,6),L(9,15,15,15)],
+  lager: [P('M4 8.5 12 4l8 4.5v7L12 20l-8-4.5z'),L(4,8.5,12,13),L(12,13,20,8.5),L(12,13,12,20)],
+  rechnungen: [R(5,3,14,18,2.5),L(9,8,15,8),L(9,12,15,12),L(9,16,13,16)],
+  zeit: [Ci(12,12,8.5),L(12,7.5,12,12),L(12,12,15.5,14)],
+  konto: [L(4,20,20,20),R(6,12,3.5,6,1.2),R(11.5,8,3.5,10,1.2),R(17,14,3.5,4,1.2)],
+  abwesenheit: [R(3,5,18,16,2.5),L(3,10,21,10),L(8,3,8,6),L(16,3,16,6),L(9.5,14.5,14.5,18.5),L(14.5,14.5,9.5,18.5)],
+  mitarbeiter: [Ci(8.5,8,3),Ci(16.5,9,2.4),P('M3 19c0-2.9 2.5-4.8 5.5-4.8S14 16.1 14 19'),P('M15 19c0-2 .6-3.4 1.6-4.2 2 0 4.4 1.3 4.4 4.2')],
+  dokumente: [P('M8 3h6l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'),P('M14 3v4h4'),L(9.5,13,15,13),L(9.5,16.5,13.5,16.5)],
+  chat: [P('M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 13.5z')],
+  bewerber: [Ci(10,8,3.2),P('M4 20c0-3.3 2.6-5.5 6-5.5 1.2 0 2.3.3 3.2.8'),L(18,13,18,20),L(14.5,16.5,21.5,16.5)],
+  berichte: [R(3,4,18,16,2.5),L(7.5,15.5,10,12),L(10,12,13,14.5),L(13,14.5,17,9.5)],
+  einstellungen: [L(4,7,20,7),L(4,12,20,12),L(4,17,20,17),Ci(9,7,2.2),Ci(15,12,2.2),Ci(11,17,2.2)],
+  suche: [Ci(11,11,7),L(16,16,20.5,20.5)],
+  mail: [R(3,5,18,14,2.5),P('M3.5 7 12 13l8.5-6')],
+  plus: [L(12,5,12,19),L(5,12,19,12)],
+  sonne: [Ci(12,12,4.2),L(12,3,12,5),L(12,19,12,21),L(3,12,5,12),L(19,12,21,12),L(6,6,7.4,7.4),L(16.6,16.6,18,18),L(18,6,16.6,7.4),L(7.4,16.6,6,18)],
+  mond: [P('M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z')],
+  stift: [P('M4 20h4l11-11a2.1 2.1 0 0 0-3-3L5 17z'),L(14.5,6.5,17.5,9.5)],
+  standort: [P('M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z'),Ci(12,10,2.5)],
+  glocke: [P('M6 16V11a6 6 0 1 1 12 0v5l1.5 2.5H4.5z'),P('M10 19a2 2 0 0 0 4 0')]
+};
+const tint = (hex, a) => { const n = parseInt(hex.slice(1),16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; };
+
+const SCREENS = {
+  cockpit: ['Cockpit', 'Hofstätter Energietechnik · Mi 29.07.2026', 'Auftrag anlegen', 'Bericht exportieren'],
+  pipelines: ['Pipelines', 'Vertrieb, Projekte und Service in einem Board', 'Neuer Eintrag', 'Ansicht speichern'],
+  detail: ['Fam. Halbauer', 'A-2026-0412 · In Montage · 9,84 kWp + 10 kWh', 'Zeit buchen', 'Dokument anhängen'],
+  angebote: ['Angebote', 'Versand, Öffnungen und digitale Annahme', 'Angebot erstellen', 'Vorlagen'],
+  crm: ['CRM', 'Leads, Kunden und Aktivitäten', 'Kontakt anlegen', 'Import'],
+  lager: ['Lager', 'Bestand, Artikel, Bewegungen, Bestellungen', 'Artikel anlegen', 'Inventur'],
+  dispo: ['Einsatzplanung', 'KW 32 · 03.–09.08.2026', 'Plan veröffentlichen', 'Woche kopieren'],
+  zeit: ['Zeiterfassung', 'Tagesansicht · Mi 29.07.2026', 'Buchung anlegen', 'Tag abschließen'],
+  konto: ['Stundenkonto', 'Markus Grabner · Jahr 2026', 'Korrektur buchen', 'Export'],
+  rechnungen: ['Rechnungen', 'Zahlungsstatus, Mahnstufen, Zahlungslauf', 'Rechnung erstellen', 'Zahlungslauf'],
+  abwesenheit: ['Abwesenheiten', 'Jahresplaner 2026 · Mindestbesetzung 4 Monteure', 'Abwesenheit eintragen', 'Export'],
+  mitarbeiter: ['Mitarbeiter', '9 Personen · 3 Standorte · 2 Zertifikate laufen ab', 'Mitarbeiter anlegen', 'Import'],
+  dokumente: ['Dokumente', 'Lohnzettel, Verträge, Zertifikate mit E-Signatur', 'Sammelupload', 'Ordner anlegen'],
+  chat: ['Chat', 'Teams, Baustellen und Systemmeldungen', 'Neue Nachricht', 'Kanal anlegen'],
+  bewerber: ['Bewerber', '7 Phasen · 12 offene Bewerbungen', 'Bewerber anlegen', 'Stelle ausschreiben'],
+  berichte: ['Berichte', 'Nachkalkulation, Auslastung, Zeitkonten', 'Bericht erstellen', 'Zeitplan'],
+  einstellungen: ['Einstellungen', 'Rollen, Standorte, Arbeitszeitmodelle, Integrationen', 'Änderung speichern', 'Verwerfen'],
+  soon: ['Phase 2', 'Dieser Bereich folgt nach Phase 1', 'Anlegen', 'Zurück']
+};
+
+class Component extends DCLogic {
+  state = { screen:'cockpit', theme:null, standortIdx:0, pipeline:'projekte', view:'board', tab:'uebersicht',
+    lagerTab:'bestand', crmTab:'kunden', crmView:'liste', crmPipeline:'neu', crmSelId:'AN-2026-0177', crmName:'',
+    angebotId:'AN-2026-0177', artikelId:'SYMO-GEN24-10', soonLabel:'', edit:false, toast:'',
+    chips:{}, checked:{}, rechnungId:'RE-2026-0231', mitarbeiterId:'Markus Grabner', chatId:'Team Montage', bewerberId:'B-2026-0042' };
+
+  go(screen, extra) { this.setState(Object.assign({ screen }, extra || {})); }
+
+  nav() {
+    const groups = [
+      { title:'Betrieb', items:[
+        ['Cockpit','cockpit','CP',''], ['Pipelines','pipelines','PL','32'], ['Angebote','angebote','AN','7'],
+        ['CRM','crm','CR','214'], ['Einsatzplanung','dispo','EP',''], ['Lager','lager','LG','3'], ['Rechnungen','rechnungen','RE','5'] ] },
+      { title:'Team', items:[
+        ['Zeiterfassung','zeit','ZE','3'], ['Stundenkonto','konto','SK',''], ['Abwesenheiten','abwesenheit','AB','2'],
+        ['Mitarbeiter','mitarbeiter','MA','9'], ['Dokumente','dokumente','DK',''], ['Chat','chat','CH','2'], ['Bewerber','bewerber','BW','12'] ] },
+      { title:'System', items:[['Berichte','berichte','BE',''], ['Einstellungen','einstellungen','ES','']] }
+    ];
+    const cur = this.state.screen === 'detail' ? 'pipelines' : this.state.screen;
+    return groups.map(g => ({ title:g.title, items:g.items.map(([label,screen,icon,badge]) => {
+      const on = cur === screen && (screen !== 'soon' || this.state.soonLabel === label);
+      return { label, icon, badge,
+        iconEl: ico(ICONS[screen === 'soon' ? 'dokumente' : screen] || ICONS.cockpit),
+        bg: on ? 'var(--sunk)' : 'transparent', fg: on ? 'var(--t1)' : 'var(--t2)', fw: on ? '600' : '400',
+        mark: on ? C.amber : 'transparent',
+        iconBg: on ? C.amber : 'var(--panel)', iconFg: on ? '#fff' : 'var(--t3)',
+        badgeBg: badge ? 'var(--panel)' : 'transparent', badgeFg: 'var(--t3)',
+        go: () => this.go(screen, screen === 'soon' ? { soonLabel: label } : {}) };
+    })}));
+  }
+
+  pipelines() {
+    const T = { MG:{ini:'MG',color:C.green}, LB:{ini:'LB',color:C.violet}, SW:{ini:'SW',color:C.blue}, TP:{ini:'TP',color:C.amber}, FY:{ini:'FY',color:C.red}, MB:{ini:'MB',color:'#6A625A'}, SN:{ini:'SN',color:C.amber}, DR:{ini:'DR',color:C.green} };
+    const card = (nr,kunde,sub,metaL,metaR,pct,barColor,tag,tagColor,team,db,dbColor) => ({
+      nr, kunde, sub, metaL, metaR, barW: pct + '%', barColor, tag,
+      tagBg: tint(tagColor,0.13), tagFg: tagColor, team, db, dbColor,
+      open: () => this.setState({ screen:'detail', tab:'uebersicht' })
+    });
+    return {
+      vertrieb: { label:'Vertrieb', dot:C.violet, count:14, summary:'14 Leads · 486.200 € Pipeline-Wert', columns: [
+        { title:'Lead neu', color:C.slate, count:4, sum:'112.400 €', cards:[
+          card('L-2026-0188','Fam. Kovacs','Neutal · 8,5 kWp geschätzt','Web-Formular','vor 2 h',15,C.slate,'Step-Planer',C.violet,[T.SN],'—','var(--t3)'),
+          card('L-2026-0187','Metallbau Zink','Oberloisdorf · 40 kWp Gewerbe','Telefon','gestern',15,C.slate,'heiß',C.red,[T.MB],'—','var(--t3)') ] },
+        { title:'Qualifiziert', color:C.blue, count:3, sum:'96.800 €', cards:[
+          card('L-2026-0182','Fam. Zsifkovits','Frankenau · 8,1 kWp','Dach geprüft','Termin 31.07.',35,C.blue,'Ortstermin',C.blue,[T.MB],'27,0 %',C.green) ] },
+        { title:'Angebot gesendet', color:C.violet, count:4, sum:'184.500 €', cards:[
+          card('AN-2026-0177','Weingut Prickler','Horitschon · 18,2 kWp + 20 kWh','34.900 €','3× geöffnet',60,C.violet,'Mail geöffnet',C.violet,[T.MB],'32,3 %',C.green),
+          card('AN-2026-0174','Fam. Halper','Lockenhaus · 11,0 kWp','19.400 €','Erinnerung fällig',60,C.amber,'8 Tage still',C.amber,[T.SN],'25,4 %',C.green) ] },
+        { title:'Angenommen', color:C.green, count:2, sum:'71.900 €', cards:[
+          card('AN-2026-0169','Landtechnik Sifkovits','Neckenmarkt · 24,6 kWp','48.200 €','digital signiert',100,C.green,'wird Auftrag',C.green,[T.MB],'21,4 %',C.amber) ] },
+        { title:'Verloren', color:C.red, count:1, sum:'21.300 €', cards:[
+          card('AN-2026-0158','Fam. Ostermann','Pilgersdorf · 9,2 kWp','21.300 €','Preis','100',C.red,'Mitbewerber',C.red,[T.SN],'—','var(--t3)') ] }
+      ]},
+      projekte: { label:'Projekte', dot:C.blue, count:32, summary:'32 Aufträge · 1,84 Mio € Auftragsbestand', columns: [
+        { title:'Beauftragt', color:C.slate, count:4, sum:'186.200 €', cards:[
+          card('A-2026-0426','Landtechnik Sifkovits','Neckenmarkt · 24,6 kWp','0/88 h','KW 35',5,C.slate,'Material offen',C.amber,[T.SW,T.FY],'21,4 %',C.amber),
+          card('A-2026-0427','Fam. Hofer','Kobersdorf · 7,2 kWp','0/38 h','KW 36',5,C.slate,'zu bestellen',C.amber,[T.TP],'25,8 %',C.green) ] },
+        { title:'Material bestellt', color:C.violet, count:5, sum:'142.900 €', cards:[
+          card('A-2026-0419','Fam. Wagner','Lackenbach · 6,4 kWp','0/36 h','KW 33',20,C.violet,'3 Stück fehlen',C.red,[T.MG,T.LB],'24,1 %',C.green),
+          card('A-2026-0422','Bäckerei Sommer','Stoob · 14,0 kWp','0/58 h','KW 34',20,C.violet,'teilgeliefert',C.violet,[T.SW],'19,6 %',C.amber) ] },
+        { title:'Terminiert', color:C.blue, count:6, sum:'214.500 €', cards:[
+          card('A-2026-0417','Fam. Pinter','Weppersdorf · 11,5 kWp + 10 kWh','0/52 h','Mo 03.08.',35,C.blue,'komplett',C.green,[T.MG,T.LB],'28,4 %',C.green),
+          card('A-2026-0420','Autohaus Klein','Oberpullendorf · 32,4 kWp','0/104 h','Di 04.08.',35,C.blue,'komplett',C.green,[T.SW,T.FY,T.TP],'22,9 %',C.amber) ] },
+        { title:'In Montage', color:C.amber, count:3, sum:'96.300 €', cards:[
+          card('A-2026-0412','Fam. Halbauer','Oberpullendorf · 9,84 kWp + 10 kWh','42/56 h','heute',75,C.amber,'Termin heute',C.amber,[T.MG,T.LB],'26,2 %',C.green),
+          card('A-2026-0415','Fam. Gruber','Draßmarkt · 10,2 kWp','18/46 h','bis Fr',39,C.blue,'entnommen',C.green,[T.FY],'17,8 %',C.amber) ] },
+        { title:'Netzanmeldung', color:C.violet, count:4, sum:'178.400 €', cards:[
+          card('A-2026-0408','Tischlerei Kern GmbH','Deutschkreutz · 29,7 kWp','118/110 h','überzogen',100,C.red,'Netz Bgld',C.violet,[T.SW,T.FY],'8,4 %',C.red),
+          card('A-2026-0405','Fam. Trinkl','Piringsdorf · 9,1 kWp','44/48 h','Zählertermin',92,C.blue,'wartet Kunde',C.violet,[T.MG],'29,7 %',C.green) ] },
+        { title:'Abgenommen', color:C.green, count:4, sum:'121.700 €', cards:[
+          card('A-2026-0397','Fam. Marth','Steinberg · 8,6 kWp','39/40 h','25.06.',100,C.green,'Rechnung offen',C.red,[T.MG,T.TP],'31,2 %',C.green) ] },
+        { title:'Fakturiert', color:C.green, count:3, sum:'88.100 €', cards:[
+          card('A-2026-0388','Fam. Radakovits','Nikitsch · 12,3 kWp','56/58 h','bezahlt',100,C.green,'bezahlt',C.green,[T.SW],'30,6 %',C.green) ] }
+      ]},
+      service: { label:'Service', dot:C.red, count:9, summary:'9 Tickets · 2 innerhalb Garantie kritisch', columns: [
+        { title:'Meldung offen', color:C.red, count:3, sum:'2 kritisch', cards:[
+          card('S-2026-0074','Fam. Halper','Lockenhaus · Ertrag −18 %','Kundenportal','vor 4 h',10,C.red,'kritisch',C.red,[T.SN],'Garantie','var(--t2)'),
+          card('S-2026-0073','Tischlerei Kern','Deutschkreutz · Wechselrichter Fehler 301','Telefon','heute 08:20',10,C.red,'Anlage aus',C.red,[T.MB],'Garantie','var(--t2)') ] },
+        { title:'Diagnose', color:C.amber, count:2, sum:'Fernauslese läuft', cards:[
+          card('S-2026-0071','Fam. Marth','Steinberg · Speicher lädt nicht voll','Fernauslese','seit 2 Tagen',40,C.amber,'BYD Support',C.violet,[T.FY],'Kulanz','var(--t2)') ] },
+        { title:'Termin geplant', color:C.blue, count:2, sum:'KW 32', cards:[
+          card('S-2026-0068','Fam. Radakovits','Nikitsch · Modulreinigung','Do 06.08.','2,0 h',65,C.blue,'kostenpflichtig',C.blue,[T.TP],'320 €',C.green) ] },
+        { title:'Behoben', color:C.green, count:2, sum:'Ø 2,4 Tage', cards:[
+          card('S-2026-0062','Fam. Pinter','Weppersdorf · WLAN-Verbindung','erledigt','24.07.',100,C.green,'ohne Kosten',C.green,[T.FY],'0 €','var(--t2)') ] }
+      ]}
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const theme = s.theme ?? (this.props.theme || 'light');
+    const standorte = [['Oberpullendorf · Hauptsitz','OP'],['Wiener Neustadt','WN'],['Graz','GR']];
+    const [title, sub, primaryAction, secondaryAction] = SCREENS[s.screen] || SCREENS.cockpit;
+
+    return {
+      theme,
+      standort: standorte[s.standortIdx][0], standortKurz: standorte[s.standortIdx][1],
+      cycleStandort: () => this.setState(st => ({ standortIdx: (st.standortIdx + 1) % 3 })),
+      toggleTheme: () => this.setState({ theme: theme === 'dark' ? 'light' : 'dark' }),
+      themeIcon: theme === 'dark' ? '☾' : '☀',
+      iconTheme: ico(theme === 'dark' ? ICONS.mond : ICONS.sonne, 18),
+      iconSuche: ico(ICONS.suche, 17), iconGlocke: ico(ICONS.glocke, 18), iconStift: ico(ICONS.stift, 15),
+      iconPlus: ico(ICONS.plus, 16), iconStandort: ico(ICONS.standort, 15), iconMail: ico(ICONS.mail, 16),
+      navGroups: this.nav(),
+      editable: s.edit ? 'true' : 'false',
+      editCell: s.edit ? tint(C.amber,0.08) : 'transparent',
+      editLabel: s.edit ? 'Bearbeiten aktiv' : 'Bearbeiten',
+      editBg: s.edit ? C.amber : 'var(--panel)',
+      editFg: s.edit ? '#fff' : 'var(--t2)',
+      toggleEdit: () => this.setState({ edit: !s.edit, toast: s.edit ? '' : 'Bearbeitungsmodus aktiv — Texte in Tabellen und Karten sind editierbar' }),
+      toast: s.toast, closeToast: () => this.setState({ toast: '' }),
+      screenTitle: s.screen === 'soon' ? (s.soonLabel || 'Phase 2') : title,
+      screenSub: sub, primaryAction, secondaryAction,
+      isCockpit: s.screen === 'cockpit',
+      isPipelines: s.screen === 'pipelines',
+      isAngebote: s.screen === 'angebote',
+      angebotKpis: [
+        { label:'Offen versendet', value:'7', color:'var(--t1)', note:'184.500 € Volumen' },
+        { label:'Öffnungsrate', value:'86 %', color:'#3E9E6B', note:'6 von 7 geöffnet' },
+        { label:'Annahmequote 90 Tage', value:'38 %', color:'var(--t1)', note:'11 von 29 Angeboten' },
+        { label:'Ø Zeit bis Annahme', value:'6,4 Tage', color:'var(--t1)', note:'Erinnerung nach 7 Tagen' }
+      ],
+      angebote: (() => {
+        const A = [
+          ['AN-2026-0177','Weingut Prickler','18,2 kWp + 20 kWh Speicher','34.900 €','geöffnet',C.violet,'3× geöffnet','28.08.2026','32,3 %',C.green,'prickler@weingut-prickler.at'],
+          ['AN-2026-0174','Fam. Halper','11,0 kWp','19.400 €','still',C.amber,'seit 8 Tagen','14.08.2026','25,4 %',C.green,'m.halper@gmx.at'],
+          ['AN-2026-0169','Landtechnik Sifkovits','24,6 kWp Gewerbe','48.200 €','angenommen',C.green,'digital signiert','—','21,4 %',C.amber,'office@sifkovits-landtechnik.at'],
+          ['AN-2026-0181','Metallbau Zink','40,0 kWp Gewerbe','76.800 €','Entwurf',C.slate,'nicht gesendet','—','23,8 %',C.green,'zink@metallbau-zink.at'],
+          ['AN-2026-0179','Fam. Kovacs','8,5 kWp','16.200 €','gesendet',C.blue,'ungeöffnet','22.08.2026','27,9 %',C.green,'kovacs.neutal@a1.net'],
+          ['AN-2026-0158','Fam. Ostermann','9,2 kWp','21.300 €','verloren',C.red,'Mitbewerber','abgelaufen','—','var(--t3)','ostermann@aon.at']
+        ];
+        return A.map(([nr,kunde,anlage,summe,status,color,opens,due,marge,mColor,mail]) => ({
+          nr, kunde, anlage, summe, status, opens, due, marge,
+          pillBg: tint(color,0.13), pillFg: color,
+          dueColor: due === 'abgelaufen' ? C.red : 'var(--t2)',
+          mColor: mColor === 'var(--t3)' ? 'var(--t3)' : mColor,
+          rowBg: s.angebotId === nr ? 'var(--panel)' : 'transparent',
+          mail, open: () => this.setState({ angebotId: nr })
+        }));
+      })(),
+      sel: (() => {
+        const eventsByNr = {
+          'AN-2026-0177': [
+            { title:'Angebot digital angenommen?', meta:'noch offen · Annahme-Link 1× geklickt', color:'var(--sunk)' },
+            { title:'PDF heruntergeladen', meta:'29.07. 11:48 · Anhang Angebot_AN-2026-0177.pdf', color:C.violet },
+            { title:'Mail 3× geöffnet', meta:'29.07. 10:31, 11:44, 14:02 · Wien/Horitschon', color:C.violet },
+            { title:'Mail zugestellt', meta:'29.07. 10:12 · office@solstep.de → Weingut Prickler', color:C.blue },
+            { title:'Aus Step-Planer erzeugt', meta:'29.07. 09:58 · Planung Prickler_Horitschon_v3', color:C.amber }
+          ],
+          'AN-2026-0169': [
+            { title:'Auftrag A-2026-0426 angelegt', meta:'27.07. 08:10 · automatisch aus Annahme', color:C.green },
+            { title:'Digital angenommen', meta:'26.07. 19:22 · Kundenportal, IP 213.47.…, Name Josef Sifkovits', color:C.green },
+            { title:'Mail 4× geöffnet', meta:'24.–26.07. · Mobil und Desktop', color:C.violet },
+            { title:'Mail zugestellt', meta:'24.07. 16:40', color:C.blue }
+          ]
+        };
+        const def = [
+          { title:'Erinnerung fällig', meta:'seit 8 Tagen keine Reaktion', color:C.amber },
+          { title:'Mail 1× geöffnet', meta:'21.07. 20:14 · Mobil', color:C.violet },
+          { title:'Mail zugestellt', meta:'21.07. 17:05', color:C.blue }
+        ];
+        const list = [
+          ['AN-2026-0177','Weingut Prickler','18,2 kWp + 20 kWh','34.900 €','geöffnet',C.violet,'28.08.2026','32,3 %','prickler@weingut-prickler.at','Annahme nachfassen'],
+          ['AN-2026-0174','Fam. Halper','11,0 kWp','19.400 €','still seit 8 Tagen',C.amber,'14.08.2026','25,4 %','m.halper@gmx.at','Erinnerung jetzt senden'],
+          ['AN-2026-0169','Landtechnik Sifkovits','24,6 kWp','48.200 €','angenommen',C.green,'—','21,4 %','office@sifkovits-landtechnik.at','Zum Auftrag A-2026-0426'],
+          ['AN-2026-0181','Metallbau Zink','40,0 kWp','76.800 €','Entwurf',C.slate,'—','23,8 %','zink@metallbau-zink.at','Angebot senden'],
+          ['AN-2026-0179','Fam. Kovacs','8,5 kWp','16.200 €','gesendet',C.blue,'22.08.2026','27,9 %','kovacs.neutal@a1.net','Öffnung abwarten'],
+          ['AN-2026-0158','Fam. Ostermann','9,2 kWp','21.300 €','verloren',C.red,'abgelaufen','—','ostermann@aon.at','Als Lead reaktivieren']
+        ];
+        const row = list.find(r => r[0] === s.angebotId) || list[0];
+        return { nr:row[0], kunde:row[1], anlage:row[2], summe:row[3], status:row[4],
+          pillBg: tint(row[5],0.13), pillFg: row[5], due:row[6], marge:row[7], mail:row[8], primary:row[9],
+          events: eventsByNr[row[0]] || def };
+      })(),
+
+      isRechnungen: s.screen === 'rechnungen', isAbwesenheit: s.screen === 'abwesenheit', isMitarbeiter: s.screen === 'mitarbeiter',
+      isDokumente: s.screen === 'dokumente', isChat: s.screen === 'chat', isBewerber: s.screen === 'bewerber',
+      isBerichte: s.screen === 'berichte', isEinstellungen: s.screen === 'einstellungen',
+      ordner: [['Lohnzettel','lohn',108],['Dienstverträge','vertrag',9],['Zertifikate','zert',14],['Sicherheitsunterweisung','sicher',9],['Aufträge und Protokolle','auftrag',212],['Vorlagen','vorlage',11]].map(([label,key,n]) => ({
+        label, n, bg: s.ordnerId === key || (!s.ordnerId && key === 'lohn') ? 'var(--sunk)' : 'transparent',
+        fg: s.ordnerId === key || (!s.ordnerId && key === 'lohn') ? 'var(--t1)' : 'var(--t2)',
+        fw: s.ordnerId === key || (!s.ordnerId && key === 'lohn') ? '600' : '400',
+        go: () => this.setState({ ordnerId: key })
+      })),
+      dokListe: [
+        ['PDF','Lohnzettel Juli 2026','Markus Grabner','29.07.2026','signiert',C.green],
+        ['PDF','Lohnzettel Juli 2026','Stefan Wallner','29.07.2026','offen',C.amber],
+        ['PDF','Lohnzettel Juli 2026','Thomas Pichler','29.07.2026','offen',C.amber],
+        ['PDF','Dienstvertrag Zusatz Speichertechnik','Fatih Yıldız','14.07.2026','signiert',C.green],
+        ['PDF','Höhenarbeit-Zertifikat','Stefan Wallner','14.11.2023','läuft ab',C.red],
+        ['PDF','Sicherheitsunterweisung 2026','Lukas Berger','06.03.2026','signiert',C.green],
+        ['DOCX','Vorlage Abnahmeprotokoll','—','12.01.2026','nicht nötig',C.slate]
+      ].map(([typ,name,person,datum,sig,color]) => ({ typ, name, person, datum, sig, bg:tint(color,0.13), fg:color })),
+
+      chats: [
+        ['TM','Team Montage','Grabner: Speicher kommt morgen, Kabel liegen','14:22','2',C.blue],
+        ['HB','Baustelle Halbauer','System: Materialentnahme gebucht','12:04','',C.amber],
+        ['BL','Bauleitung','Bruckner: Zählertermin bestätigt 06.08.','11:12','',C.violet],
+        ['LG','Lager','Reiter: Wareneingang 84 Module verbucht','09:20','',C.green],
+        ['AL','Alle Mitarbeiter','Steiner: Betriebsausflug 12.09.','gestern','',C.slate]
+      ].map(([ini,name,last,time,badge,color]) => ({
+        ini, name, last, time, badge, color,
+        bg: s.chatId === name ? 'var(--sunk)' : 'transparent',
+        badgeBg: badge ? C.red : 'transparent', badgeFg: badge ? '#fff' : 'transparent',
+        go: () => this.setState({ chatId: name })
+      })),
+      chatSel: s.chatId,
+      messages: [
+        { ini:'MB', name:'Michael Bruckner', time:'08:12', text:'Grabner, Halbauer will heute noch wissen, wann der Speicher läuft.', color:'#6A625A', align:'flex-start', bg:'var(--panel)', fg:'var(--t1)', border:'0' },
+        { ini:'MG', name:'Markus Grabner', time:'08:15', text:'Wechselrichter hängt, Speicher kommt morgen früh. Kabel sind schon gezogen.', color:C.green, align:'flex-start', bg:'var(--panel)', fg:'var(--t1)', border:'0' },
+        { ini:'SY', name:'System', time:'09:04', text:'Materialentnahme gebucht: 24× JAM54D40-445, 1× SYMO-GEN24-10 auf A-2026-0412.', color:C.amber, align:'flex-start', bg:tint(C.amber,0.09), fg:'var(--t1)', border:'1px solid ' + tint(C.amber,0.3) },
+        { ini:'AS', name:'Andrea Steiner', time:'11:40', text:'Perfekt. Bitte Fotos vom Zählerkasten ins Portal, der Kunde fragt nach.', color:C.blue, align:'flex-end', bg:'#151210', fg:'#F5F0EA', border:'0' },
+        { ini:'MG', name:'Markus Grabner', time:'14:12', text:'Erledigt, 3 Bilder hochgeladen. Dachhaken Ostseite brauchen 4 Stück Nachschub.', color:C.green, align:'flex-start', bg:'var(--panel)', fg:'var(--t1)', border:'0' },
+        { ini:'SY', name:'System', time:'14:22', text:'Dienstplan KW 33 wurde geändert: Pichler Urlaub, Vertretung Wallner.', color:C.violet, align:'flex-start', bg:tint(C.violet,0.09), fg:'var(--t1)', border:'1px solid ' + tint(C.violet,0.3) }
+      ],
+      chatMembers: [
+        { ini:'MG', name:'Markus Grabner', color:C.green, dot:C.green },
+        { ini:'LB', name:'Lukas Berger', color:C.violet, dot:C.slate },
+        { ini:'SW', name:'Stefan Wallner', color:C.blue, dot:C.green },
+        { ini:'MB', name:'Michael Bruckner', color:'#6A625A', dot:C.amber },
+        { ini:'AS', name:'Andrea Steiner', color:C.blue, dot:C.green }
+      ],
+
+      bewerberSpalten: [
+        ['Neu',C.slate,[['DK','Daniel Kern','Monteur PV','★★★☆☆','Bewerbung über Website','eingegangen 28.07.',C.slate],
+          ['SP','Selina Prasch','Bürokraft Teilzeit','★★★★☆','Empfehlung Novak','eingegangen 27.07.',C.amber]]],
+        ['Sichtung',C.blue,[['TH','Tobias Huber','Monteur PV','★★★★☆','3 Jahre Elektro, Führerschein B','Sichtung Bruckner',C.blue]]],
+        ['Telefonat',C.blue,[['ML','Mario Lang','Lehrling','★★★☆☆','Polytechnikum Oberpullendorf','Anruf 31.07. 10:00',C.violet]]],
+        ['Gespräch',C.violet,[['AN','Ahmet Nuri','Monteur Speicher','★★★★★','BYD-Zertifikat vorhanden','Termin 04.08. 14:00',C.red]]],
+        ['Probearbeit',C.amber,[['JS','Julia Schmid','Bauleitung Süd','★★★★☆','2 Tage Probearbeit Graz','05.–06.08.',C.green]]],
+        ['Zusage',C.green,[['PR','Patrick Reiner','Monteur PV','★★★★★','Start 01.09., 38,5 h','Vertrag versendet',C.green]]],
+        ['Abgelehnt',C.red,[['XX','Bewerbung 0031','Monteur PV','★★☆☆☆','keine Elektroerfahrung','abgelehnt 22.07.',C.slate]]]
+      ].map(([title,color,cards]) => ({
+        title, color, count: cards.length,
+        cards: cards.map(([ini,name,position,sterne,meta,termin,c]) => ({ ini, name, position, sterne, meta, termin, color:c }))
+      })),
+
+      berichte: [
+        ['NK','Nachkalkulation','DB je Auftrag, Stunden ist/soll','letzte Ausführung heute 06:00',tint(C.green,0.14),C.green],
+        ['AU','Auslastung','Kapazität gegen geplante Stunden','wöchentlich Montag 07:00',tint(C.blue,0.14),C.blue],
+        ['ZK','Zeitkonten','Überstunden und Zeitausgleich je Person','monatlich zum 1.',tint(C.amber,0.16),'#B4690E'],
+        ['LG','Lagerbewertung','Bestandswert, Reichweite, Ladenhüter','monatlich zum 1.',tint(C.violet,0.14),C.violet],
+        ['UM','Umsatz und Marge','nach Standort, Kundentyp, Anlagengröße','monatlich zum 3.',tint(C.green,0.14),C.green],
+        ['SE','Service','Tickets, Reaktionszeit, Garantiefälle','wöchentlich Freitag',tint(C.red,0.13),C.red],
+        ['VT','Vertrieb','Angebote, Öffnungen, Annahmequote','täglich 18:00',tint(C.blue,0.14),C.blue],
+        ['FE','Fehlzeiten','Krankenstand, Urlaub, Quoten','monatlich zum 1.',tint(C.slate,0.14),C.slate]
+      ].map(([icon,title,sub,meta,iconBg,iconFg]) => ({
+        icon, title, sub, meta, iconBg, iconFg,
+        iconEl: ico(({ NK:ICONS.berichte, AU:ICONS.konto, ZK:ICONS.zeit, LG:ICONS.lager,
+          UM:ICONS.rechnungen, SE:ICONS.chat, VT:ICONS.angebote, FE:ICONS.abwesenheit })[icon] || ICONS.berichte, 17)
+      })),
+      nachkalk: [
+        ['A-2026-0397','Fam. Marth','39 / 40 h','8.940 €','31,2 %',C.green,'var(--t1)','im Plan'],
+        ['A-2026-0388','Fam. Radakovits','56 / 58 h','13.400 €','30,6 %',C.green,'var(--t1)','im Plan'],
+        ['A-2026-0408','Tischlerei Kern GmbH','118 / 110 h','41.200 €','8,4 %',C.red,C.red,'Gerüst und Nacharbeit nicht kalkuliert'],
+        ['A-2026-0372','Fam. Pinter','48 / 52 h','11.100 €','27,9 %',C.green,'var(--t1)','Material günstiger eingekauft'],
+        ['A-2026-0361','Bäckerei Sommer','62 / 56 h','18.700 €','16,2 %',C.amber,C.amber,'Anfahrt und Kranstunden über Plan']
+      ].map(([nr,kunde,stunden,material,db,dbColor,hColor,hinweis]) => ({ nr, kunde, stunden, material, db, dbColor, hColor, hinweis })),
+
+      setNav: [['Rollen und Rechte','rollen'],['Standorte','standorte'],['Arbeitszeitmodelle','azm'],['Nummernkreise','nummern'],['Integrationen','integrationen'],['Firmenlayout','layout']].map(([label,key]) => ({
+        label, bg: (s.setId || 'rollen') === key ? 'var(--sunk)' : 'transparent',
+        fg: (s.setId || 'rollen') === key ? 'var(--t1)' : 'var(--t2)',
+        fw: (s.setId || 'rollen') === key ? '600' : '400',
+        go: () => this.setState({ setId: key })
+      })),
+      rollen: ['Geschäftsführung','Büro','Bauleitung','Monteur','Lager'],
+      rechteRows: (() => {
+        const states = [['kein Zugriff','var(--panel)','var(--t3)'],['lesen',tint(C.blue,0.13),C.blue],['bearbeiten',tint(C.green,0.13),C.green]];
+        const defaults = {
+          'Pipelines': [2,2,2,1,0], 'Angebote': [2,2,1,0,0], 'CRM': [2,2,1,0,0],
+          'Lager': [2,1,1,1,2], 'Rechnungen': [2,2,0,0,0], 'Zeiterfassung': [2,2,2,1,1], 'Mitarbeiter': [2,1,1,0,0]
+        };
+        return Object.keys(defaults).map(label => ({
+          label,
+          cells: defaults[label].map((def,i) => {
+            const key = label + i;
+            const v = s.rechte && s.rechte[key] !== undefined ? s.rechte[key] : def;
+            const [text,bg,fg] = states[v];
+            return { label:text, bg, fg,
+              cycle: () => this.setState({ rechte: Object.assign({}, s.rechte, { [key]: (v + 1) % 3 }) }) };
+          })
+        }));
+      })(),
+      standorteListe: [
+        { name:'Oberpullendorf · Hauptsitz', meta:'6 Mitarbeiter · Feiertage Burgenland · Gleitzeit' },
+        { name:'Wiener Neustadt', meta:'2 Mitarbeiter · Feiertage Niederösterreich · Fixzeit' },
+        { name:'Graz', meta:'1 Mitarbeiter · Feiertage Steiermark · Gleitzeit' }
+      ],
+      integrationen: [['Step-Planer','Planungsimport für Angebote',true],['Outlook-Kalender','Termine je Auftrag synchronisieren',true],['Resend Mailversand','Angebote und Rechnungen versenden',true],['BMD Buchhaltung','Rechnungsexport nächtlich',false]].map(([name,meta,def]) => {
+        const on = s.integr && s.integr[name] !== undefined ? s.integr[name] : def;
+        return { name, meta, track: on ? C.green : 'var(--line)', justify: on ? 'flex-end' : 'flex-start',
+          toggle: () => this.setState({ integr: Object.assign({}, s.integr, { [name]: !on }) }) };
+      }),
+
+      reKpis: [
+        { label:'Offene Rechnungen', value:'147.320 €', note:'12 Belege', bg:'var(--surface)', fg:'var(--t1)' },
+        { label:'Überfällig', value:'18.640 €', note:'A-2026-0397 · 21 Tage', bg:'linear-gradient(150deg,#DE6A54,#C13F2A)', fg:'#fff' },
+        { label:'Diesen Monat bezahlt', value:'286.400 €', note:'9 Belege · Ø 14 Tage', bg:'var(--surface)', fg:'var(--t1)' },
+        { label:'Nächster Zahlungslauf', value:'02.08.', note:'4 Eingangsrechnungen', bg:'var(--surface)', fg:'var(--t1)' }
+      ],
+      rechnungen: [
+        ['RE-2026-0231','Fam. Marth','18.640,00 €','08.07.2026',C.red,'100%',C.red,'Schlussrechnung','überfällig 21 Tage',C.red],
+        ['RE-2026-0244','Tischlerei Kern GmbH','48.200,00 €','12.08.2026','var(--t2)','60%',C.blue,'2 von 3 Teilrechnungen','teilbezahlt',C.blue],
+        ['RE-2026-0248','Fam. Halbauer','10.740,00 €','15.08.2026','var(--t2)','50%',C.amber,'Anzahlung bezahlt','offen',C.amber],
+        ['RE-2026-0239','Fam. Radakovits','29.900,00 €','20.07.2026','var(--t2)','100%',C.green,'vollständig','bezahlt',C.green],
+        ['RE-2026-0251','Autohaus Klein','62.400,00 €','30.08.2026','var(--t2)','25%',C.amber,'Anzahlung offen','gestellt',C.slate],
+        ['RE-2026-0219','Fam. Pinter','21.300,00 €','30.06.2026','var(--t2)','100%',C.green,'vollständig','bezahlt',C.green]
+      ].map(([nr,kunde,betrag,due,dueColor,w,color,teil,status,sc]) => ({
+        nr, kunde, betrag, due, dueColor, w, color, teil, status, bg:tint(sc,0.13), fg:sc,
+        rowBg: s.rechnungId === nr ? 'var(--panel)' : 'transparent',
+        open: () => this.setState({ rechnungId: nr })
+      })),
+      reSel: (() => {
+        const m = {
+          'RE-2026-0231': { nr:'RE-2026-0231', kunde:'Fam. Marth', betrag:'18.640,00 €', teile:[
+            { label:'Anzahlung 30 %', betrag:'5.592,00 €', status:'bezahlt', color:C.green, bg:tint(C.green,0.13), fg:C.green },
+            { label:'Schlussrechnung 70 %', betrag:'13.048,00 €', status:'überfällig', color:C.red, bg:tint(C.red,0.13), fg:C.red } ] },
+          'RE-2026-0244': { nr:'RE-2026-0244', kunde:'Tischlerei Kern GmbH', betrag:'48.200,00 €', teile:[
+            { label:'Anzahlung 30 %', betrag:'14.460,00 €', status:'bezahlt', color:C.green, bg:tint(C.green,0.13), fg:C.green },
+            { label:'Teilrechnung Montage', betrag:'19.280,00 €', status:'bezahlt', color:C.green, bg:tint(C.green,0.13), fg:C.green },
+            { label:'Schlussrechnung', betrag:'14.460,00 €', status:'nach Abnahme', color:C.slate, bg:'var(--panel)', fg:'var(--t2)' } ] }
+        };
+        return m[s.rechnungId] || m['RE-2026-0231'];
+      })(),
+      mahnungen: [
+        { kunde:'Fam. Marth', meta:'RE-2026-0231 · 18.640 € · 21 Tage', stufe:'Mahnstufe 2', bg:tint(C.red,0.13), fg:C.red },
+        { kunde:'Bäckerei Sommer', meta:'RE-2026-0208 · 4.900 € · 9 Tage', stufe:'Mahnstufe 1', bg:tint(C.amber,0.14), fg:'#B4690E' },
+        { kunde:'Fam. Gruber', meta:'RE-2026-0226 · 8.200 € · 3 Tage', stufe:'Erinnerung', bg:'var(--panel)', fg:'var(--t2)' }
+      ],
+      absLegende: [
+        { label:'Urlaub', color:tint(C.violet,0.55) }, { label:'Krank', color:tint(C.red,0.55) },
+        { label:'Schule', color:tint(C.slate,0.5) }, { label:'frei', color:'var(--panel)' }
+      ],
+      absKws: Array.from({length:14}, (_,i) => 27 + i),
+      absRows: (() => {
+        const plan = {
+          'Andrea Steiner': { 31:'u', 32:'u' }, 'Michael Bruckner': { 34:'u' },
+          'Markus Grabner': { 35:'u', 36:'u' }, 'Stefan Wallner': { 38:'u' },
+          'Thomas Pichler': { 33:'u' }, 'Lukas Berger': { 29:'s', 30:'s', 33:'s', 34:'s' },
+          'Fatih Yıldız': { 36:'u', 37:'u' }, 'Sandra Novak': { 30:'u', 31:'u' }, 'Daniela Reiter': { 32:'k' }
+        };
+        const rest = { 'Andrea Steiner':'8 Tage Rest', 'Michael Bruckner':'14 Tage Rest', 'Markus Grabner':'11 Tage Rest',
+          'Stefan Wallner':'16 Tage Rest', 'Thomas Pichler':'9 Tage Rest', 'Lukas Berger':'18 Tage Rest',
+          'Fatih Yıldız':'12 Tage Rest', 'Sandra Novak':'6 Tage Rest', 'Daniela Reiter':'15 Tage Rest' };
+        const col = { u: tint(C.violet,0.5), k: tint(C.red,0.5), s: tint(C.slate,0.45) };
+        const tips = { u:'Urlaub', k:'Krankenstand', s:'Berufsschule' };
+        return Object.keys(plan).map(name => ({
+          name, rest: rest[name],
+          cells: Array.from({length:14}, (_,i) => {
+            const kw = 27 + i, t = plan[name][kw];
+            return { bg: t ? col[t] : 'var(--panel)', tip: t ? tips[t] + ' KW ' + kw : 'KW ' + kw };
+          })
+        }));
+      })(),
+      absAntraege: [
+        { name:'Markus Grabner · Urlaub', zeit:'17.08. – 21.08.2026 · 5 Arbeitstage', hinweis:'KW 34 knapp besetzt, Pichler ebenfalls abwesend. Vertretung Wallner.' },
+        { name:'Fatih Yıldız · Zeitausgleich', zeit:'04.09.2026 · 1 Tag', hinweis:'Saldo +18,5 h, keine Terminkollision.' }
+      ],
+      besetzung: [
+        { kw:'KW 32', txt:'6 von 7', color:C.green, w:'86%' },
+        { kw:'KW 33', txt:'4 von 7 · knapp', color:C.amber, w:'57%' },
+        { kw:'KW 34', txt:'3 von 7 · kritisch', color:C.red, w:'43%' },
+        { kw:'KW 35', txt:'6 von 7', color:C.green, w:'86%' },
+        { kw:'KW 36', txt:'5 von 7', color:C.blue, w:'71%' }
+      ],
+      mitarbeiter: [
+        ['AS','Andrea Steiner','Geschäftsführung','38,5','8','Oberpullendorf','anwesend',C.green,C.blue],
+        ['MB','Michael Bruckner','Bauleitung Ost','38,5','14','Oberpullendorf','Dienstgang',C.violet,'#6A625A'],
+        ['MG','Markus Grabner','Monteur · Elektrotechnik','38,5','11','Oberpullendorf','eingestempelt',C.blue,C.green],
+        ['SW','Stefan Wallner','Monteur · Höhenarbeit','38,5','16','Wiener Neustadt','eingestempelt',C.blue,C.blue],
+        ['TP','Thomas Pichler','Monteur · Teilzeit','30,0','9','Oberpullendorf','prüfen',C.amber,C.amber],
+        ['LB','Lukas Berger','Lehrling 3. Lehrjahr','38,5','18','Oberpullendorf','Berufsschule',C.slate,C.violet],
+        ['FY','Fatih Yıldız','Monteur · Speichertechnik','38,5','12','Graz','eingestempelt',C.blue,C.red],
+        ['SN','Sandra Novak','Büro und Fakturierung','38,5','6','Oberpullendorf','Pause',C.slate,C.amber],
+        ['DR','Daniela Reiter','Lager','38,5','15','Oberpullendorf','krank',C.red,C.green]
+      ].map(([ini,name,position,stunden,urlaub,standort,status,sc,color]) => ({
+        ini, name, position, stunden, urlaub, standort, status, bg:tint(sc,0.13), fg:sc, color,
+        rowBg: s.mitarbeiterId === name ? 'var(--panel)' : 'transparent',
+        open: () => this.setState({ mitarbeiterId: name })
+      })),
+      maSel: (() => {
+        const m = {
+          'Markus Grabner': { ini:'MG', color:C.green, name:'Markus Grabner', meta:'Monteur · seit 03.2019 · Oberpullendorf',
+            kpis:[{label:'Wochenstunden',value:'38,5 h',color:'var(--t1)'},{label:'Überstunden',value:'+37,5 h',color:C.amber},
+              {label:'Urlaub Rest',value:'11 Tage',color:'var(--t1)'},{label:'Krankentage 2026',value:'3',color:'var(--t2)'}],
+            quali:[{label:'Elektrotechnik-Befähigung',bis:'unbefristet',color:C.green},
+              {label:'Erste Hilfe',bis:'bis 04.2027',color:C.green},{label:'Staplerschein',bis:'bis 11.2026',color:C.amber}] },
+          'Stefan Wallner': { ini:'SW', color:C.blue, name:'Stefan Wallner', meta:'Monteur · seit 09.2021 · Wiener Neustadt',
+            kpis:[{label:'Wochenstunden',value:'38,5 h',color:'var(--t1)'},{label:'Überstunden',value:'+62,0 h',color:C.red},
+              {label:'Urlaub Rest',value:'16 Tage',color:'var(--t1)'},{label:'Krankentage 2026',value:'1',color:'var(--t2)'}],
+            quali:[{label:'Höhenarbeit-Zertifikat',bis:'bis 14.11.2026',color:C.amber},
+              {label:'Elektrofachkraft',bis:'unbefristet',color:C.green},{label:'Erste Hilfe',bis:'abgelaufen',color:C.red}] }
+        };
+        return m[s.mitarbeiterId] || m['Markus Grabner'];
+      })(),
+      isDetail: s.screen === 'detail', isDispo: s.screen === 'dispo', isZeit: s.screen === 'zeit',
+      isKonto: s.screen === 'konto', isSoon: s.screen === 'soon',
+      detailFacts: [
+        { label:'Kunde', value:'Fam. Halbauer' }, { label:'Adresse', value:'Pfarrgasse 14, Oberpullendorf' },
+        { label:'Anlage', value:'9,84 kWp · 10 kWh' }, { label:'Bauleiter', value:'Michael Bruckner' },
+        { label:'Team', value:'Grabner · Berger' }, { label:'Auftragswert', value:'21.480,00 €' }
+      ],
+      detailKpis: [
+        { label:'Stunden ist/soll', value:'75 %', color:C.blue, note:'42 von 56 h', ring:'conic-gradient(#3E7BC6 0turn 0.75turn,var(--panel) 0.75turn 1turn)' },
+        { label:'Material kalkuliert', value:'96 %', color:C.green, note:'11.240 / 11.680 €', ring:'conic-gradient(#3E9E6B 0turn 0.96turn,var(--panel) 0.96turn 1turn)' },
+        { label:'Deckungsbeitrag', value:'26 %', color:C.green, note:'Ziel 24 % · +2,2 pp', ring:'conic-gradient(#3E9E6B 0turn 0.82turn,var(--panel) 0.82turn 1turn)' }
+      ],
+      detailTabs: [['Übersicht','uebersicht'],['Kalkulation','kalk'],['Material','material'],['Zeiten','zeiten'],['Termine','termine'],['Dokumente','doks'],['Rechnung','rechnung'],['Verlauf','verlauf']].map(([label,t]) => ({
+        label, bg: s.tab === t ? 'var(--surface)' : 'transparent', fg: s.tab === t ? 'var(--t1)' : 'var(--t2)',
+        fw: s.tab === t ? '600' : '400', shadow: s.tab === t ? 'var(--shadow)' : 'none',
+        go: () => this.setState({ tab: t })
+      })),
+      tabUebersicht: s.tab === 'uebersicht', tabMaterial: s.tab === 'material',
+      tabZeiten: s.tab === 'zeiten', tabDoks: s.tab === 'doks',
+      timeline: [
+        { time:'heute 14:12', color:C.blue, title:'Foto hochgeladen · Grabner', body:'DC-Verkabelung Strang 2, 3 Bilder aus der Kamera' },
+        { time:'heute 12:30', color:'var(--t3)', title:'Pause beendet · Berger', body:'12:00–12:30, automatisch abgezogen' },
+        { time:'heute 07:40', color:C.blue, title:'Eingestempelt · Grabner, Berger', body:'Fahrtzeit 07:00–07:40 auf Auftrag gebucht, 18 km' },
+        { time:'heute 06:52', color:C.amber, title:'Material entnommen · Grabner', body:'24× JAM54D40-445, 1× SYMO-GEN24-10, 60 lfm K2-DOME6' },
+        { time:'28.07. 16:20', color:C.violet, title:'Netzanmeldung eingereicht', body:'Netz Burgenland, Zählpunkt AT0030…4711' },
+        { time:'21.07. 09:05', color:C.green, title:'Auftrag aus Angebot AN-2026-0161', body:'21.480,00 € netto digital angenommen' }
+      ],
+      checklist: [['Netzanmeldung eingereicht','28.07.',true],['Zählerwechsel terminiert','06.08.',true],
+        ['Förderantrag OeMAG','offen',false],['Abnahmeprotokoll','—',false],['Schlussrechnung','—',false]
+      ].map(([label,meta,def]) => {
+        const on = s.checked[label] === undefined ? def : s.checked[label];
+        return { label, meta, mark: on ? '✓' : '', color: on ? C.green : (meta === 'offen' ? C.amber : 'var(--line)'),
+          fill: on ? C.green : 'transparent',
+          toggle: () => this.setState({ checked: Object.assign({}, s.checked, { [label]: !on }) }) };
+      }),
+      portalEvents: [
+        { text:'Kunde hat 2 Bilder hochgeladen', when:'14:12', color:C.blue },
+        { text:'Fortschritt angesehen · Phase In Montage', when:'09:05', color:C.violet },
+        { text:'Keine offene Beschwerde', when:'—', color:C.green }
+      ],
+      matRows: [
+        ['JAM54D40-445','JA Solar 445 W Bifazial Glas-Glas','24','24','—','0','var(--t2)','Grabner · 29.07. 06:52','transparent'],
+        ['SYMO-GEN24-10','Fronius Symo GEN24 10.0 Plus','1','1','—','0','var(--t2)','Grabner · 29.07. 06:52','transparent'],
+        ['HVS-10.2','BYD Battery-Box Premium HVS 10.2','1','1','—','0','var(--t2)','Reiter · 28.07. 15:10','transparent'],
+        ['K2-DOME6','K2 Dome 6 Aufständerung Süd','54 lfm','60 lfm','—','+6 lfm',C.red,'Grabner · 29.07. 06:52',tint(C.red,0.05)],
+        ['SOL-6MM-BK','Solarkabel 6 mm² schwarz','120 m','150 m','30 m','0','var(--t2)','Berger · 29.07. 16:40','transparent']
+      ].map(([nr,name,plan,out,back,delta,deltaColor,who,rowBg]) => ({ nr, name, plan, out, back, delta, deltaColor, who, rowBg })),
+      zeitTage: [
+        { label:'Mi 29.07.2026', sum:'15:20 h auf Auftrag', entries:[
+          { name:'Markus Grabner', von:'06:45–14:38', dauer:'7:23', art:'Montage', artBg:tint(C.blue,0.13), artFg:C.blue, note:'DC-Verkabelung, Wechselrichter gesetzt', status:'läuft' },
+          { name:'Markus Grabner', von:'07:00–07:40', dauer:'0:40', art:'Fahrtzeit', artBg:tint(C.slate,0.13), artFg:C.slate, note:'Werkstatt → Pfarrgasse 14, 18 km', status:'gebucht' },
+          { name:'Lukas Berger', von:'06:45–14:38', dauer:'7:17', art:'Montage', artBg:tint(C.blue,0.13), artFg:C.blue, note:'Unterkonstruktion Ostseite', status:'läuft' } ] },
+        { label:'Di 28.07.2026', sum:'16:10 h auf Auftrag', entries:[
+          { name:'Markus Grabner', von:'06:50–16:30', dauer:'9:10', art:'Montage', artBg:tint(C.blue,0.13), artFg:C.blue, note:'Module Süddach gesetzt, 24 Stück', status:'freigegeben' },
+          { name:'Lukas Berger', von:'06:50–14:00', dauer:'7:00', art:'Montage', artBg:tint(C.blue,0.13), artFg:C.blue, note:'Kabelwege Keller', status:'freigegeben' } ] },
+        { label:'Mo 27.07.2026', sum:'10:30 h auf Auftrag', entries:[
+          { name:'Michael Bruckner', von:'08:00–10:30', dauer:'2:30', art:'Bauleitung', artBg:tint(C.violet,0.13), artFg:C.violet, note:'Einweisung, Dachaufmaß geprüft', status:'freigegeben' },
+          { name:'Markus Grabner', von:'06:45–14:45', dauer:'8:00', art:'Montage', artBg:tint(C.blue,0.13), artFg:C.blue, note:'Gerüst, Dachhaken gesetzt', status:'freigegeben' } ] }
+      ],
+      docs: [
+        { typ:'PDF', name:'Angebot AN-2026-0161 (angenommen)', datum:'21.07.2026' },
+        { typ:'PDF', name:'Lieferschein LS-2026-0344', datum:'29.07.2026' },
+        { typ:'PDF', name:'Netzanmeldung Netz Burgenland', datum:'28.07.2026' },
+        { typ:'XLS', name:'Kalkulation Halbauer v2', datum:'18.07.2026' },
+        { typ:'PDF', name:'Abnahmeprotokoll (Vorlage)', datum:'—' }
+      ],
+      fotos: ['Dach Süd','Unterkonstruktion','Modulreihe 1','Wechselrichter','Speicher Keller','Zählerkasten'],
+
+      days: ['Mo 03.08.','Di 04.08.','Mi 05.08.','Do 06.08.','Fr 07.08.','Sa 08.08.','So 09.08.'].map((d,i) => {
+        const [name, date] = d.split(' ');
+        const loads = ['92 %','108 %','96 %','88 %','74 %','—','—'];
+        return { name, date, load: loads[i], bg: i > 4 ? 'var(--panel)' : 'transparent', loadColor: i === 1 ? C.red : (i > 4 ? 'var(--t3)' : 'var(--t2)') };
+      }),
+      dispoRows: (() => {
+        const B = (time,title,sub,color) => ({ time, title, sub, bg: tint(color,0.14), fg: color });
+        const hatch = (title,color,pattern) => ({ time:'', title, sub:'', bg: pattern, fg: color });
+        const hv = 'repeating-linear-gradient(45deg,rgba(132,101,196,0.18) 0 5px,transparent 5px 10px)';
+        const hr = 'repeating-linear-gradient(45deg,rgba(210,84,63,0.18) 0 5px,transparent 5px 10px)';
+        const hs = 'repeating-linear-gradient(45deg,rgba(139,146,160,0.16) 0 5px,transparent 5px 10px)';
+        const e = () => ({ blocks: [], bg:'transparent' });
+        const c = b => ({ blocks: [b], bg:'transparent' });
+        return [
+          { name:'Team Grabner', role:'Grabner · Berger', hours:'38,5 / 38,5 h', hColor:C.green, cells:[
+            c(B('07:00–16:30','Halbauer','A-2026-0412',C.amber)), c(B('07:00–16:30','Pinter','A-2026-0417',C.blue)),
+            c(B('07:00–16:30','Pinter','A-2026-0417',C.blue)), c(B('07:00–12:00','Wagner','A-2026-0419',C.violet)),
+            c(B('07:00–15:00','Werkstatt','Lager',C.slate)), e(), e() ] },
+          { name:'Stefan Wallner', role:'Höhenarbeit', hours:'42,0 / 38,5 h', hColor:C.amber, cells:[
+            c(B('07:00–17:30','Autohaus Klein','A-2026-0420',C.blue)), c(B('07:00–17:30','Autohaus Klein','A-2026-0420',C.blue)),
+            c(B('06:30–18:15','Kern','A-2026-0408',C.blue)), c(B('06:00–20:45','Kern','Störung',C.red)),
+            c(B('06:00–14:00','Sommer','A-2026-0422',C.amber)), e(), e() ] },
+          { name:'Fatih Yıldız', role:'Speichertechnik', hours:'36,0 / 38,5 h', hColor:C.blue, cells:[
+            c(B('07:00–16:30','Gruber','A-2026-0415',C.blue)), c(B('07:00–16:30','Autohaus Klein','AC-Seite',C.blue)),
+            c(B('07:00–16:30','Autohaus Klein','A-2026-0420',C.blue)), e(),
+            c(B('08:00–12:00','Schulung','BYD Zertifikat',C.violet)), e(), e() ] },
+          { name:'Thomas Pichler', role:'Teilzeit 30 h', hours:'30,0 / 30,0 h', hColor:C.green, cells:[
+            c(B('07:00–15:00','Hofer','A-2026-0427',C.blue)), c(B('07:00–15:00','Halbauer','Zuarbeit',C.amber)),
+            c(hatch('Urlaub',C.violet,hv)), c(hatch('Urlaub',C.violet,hv)), c(hatch('Urlaub',C.violet,hv)), e(), e() ] },
+          { name:'Lukas Berger', role:'Lehrling 3. LJ', hours:'34,0 / 38,5 h', hColor:C.amber, cells:[
+            c(B('07:00–16:30','Halbauer','A-2026-0412',C.amber)), c(B('07:00–16:30','Pinter','A-2026-0417',C.blue)),
+            c(hatch('Berufsschule',C.slate,hs)), c(hatch('Berufsschule',C.slate,hs)), c(B('07:00–15:00','Werkstatt','Lager',C.slate)), e(), e() ] },
+          { name:'Daniela Reiter', role:'Lager', hours:'38,5 / 38,5 h', hColor:C.green, cells:[
+            c(B('06:30–15:00','Kommissionierung','0417, 0420',C.slate)), c(B('06:30–15:00','Wareneingang','Krannich 84 Module',C.green)),
+            c(B('06:30–15:00','Inventur','Teilbereich C',C.slate)), c(hatch('Krankenstand',C.red,hr)), c(hatch('Krankenstand',C.red,hr)), e(), e() ] }
+        ];
+      })(),
+      pool: [
+        { nr:'A-2026-0426', kunde:'Landtechnik Sifkovits', meta:'24,6 kWp · 88 h · ab KW 35' },
+        { nr:'A-2026-0427', kunde:'Fam. Hofer', meta:'7,2 kWp · 38 h · ab KW 36' },
+        { nr:'S-2026-0074', kunde:'Fam. Halper · Service', meta:'Ertrag −18 % · 3 h · dringend' },
+        { nr:'A-2026-0429', kunde:'Gemeinde Lackendorf', meta:'11,0 kWp · 46 h · Termin offen' }
+      ],
+      wochenstunden: [
+        { name:'Grabner', txt:'38,5 / 38,5', color:C.green, w:'100%' },
+        { name:'Wallner', txt:'42,0 / 38,5', color:C.red, w:'100%' },
+        { name:'Yıldız', txt:'36,0 / 38,5', color:C.blue, w:'93%' },
+        { name:'Pichler', txt:'30,0 / 30,0', color:C.green, w:'100%' },
+        { name:'Berger', txt:'34,0 / 38,5', color:C.amber, w:'88%' },
+        { name:'Reiter', txt:'38,5 / 38,5', color:C.green, w:'100%' }
+      ],
+
+      anwesend: [
+        { ini:'MG', color:C.green }, { ini:'LB', color:C.violet }, { ini:'SW', color:C.blue },
+        { ini:'FY', color:C.red }, { ini:'MB', color:'#6A625A' }, { ini:'SN', color:C.amber }
+      ],
+      zeitRows: [
+        ['MG',C.green,'Markus Grabner','06:45','0:30','7:23','7:42','−0:19','var(--t2)','A-2026-0412','Halbauer','eingestempelt',C.blue,'transparent'],
+        ['LB',C.violet,'Lukas Berger','06:45','0:30','7:17','7:42','−0:25','var(--t2)','—','keine Zuordnung','prüfen',C.amber,tint(C.amber,0.05)],
+        ['SW',C.blue,'Stefan Wallner','06:00','0:30','8:38','7:42','+0:56',C.amber,'A-2026-0408','Kern','eingestempelt',C.blue,'transparent'],
+        ['FY',C.red,'Fatih Yıldız','06:50','0:00','7:48','7:42','+0:06','var(--t2)','A-2026-0415','Fahrtzeit 2:40','prüfen',C.amber,tint(C.amber,0.05)],
+        ['TP',C.amber,'Thomas Pichler','07:00','0:00','11:20','6:00','+5:20',C.red,'A-2026-0427','Hofer','unplausibel',C.red,tint(C.red,0.06)],
+        ['MB','#6A625A','Michael Bruckner','07:30','0:30','6:38','7:42','−1:04','var(--t2)','mehrere','Bauleitung','Dienstgang',C.violet,'transparent'],
+        ['SN',C.amber,'Sandra Novak','07:45','0:45','6:08','7:42','−1:34','var(--t2)','Büro','Fakturierung','Pause',C.slate,'transparent'],
+        ['DR',C.green,'Daniela Reiter','—','—','0:00','7:42','−7:42',C.red,'—','Krankenstand','krank',C.red,'transparent']
+      ].map(([ini,color,name,kommt,pause,ist,soll,diff,diffColor,auftrag,auftragSub,status,pc,rowBg]) => ({
+        ini, color, name, kommt, pause, ist, soll, diff, diffColor, auftrag, auftragSub, status,
+        pillBg: tint(pc,0.13), pillFg: pc, rowBg
+      })),
+      korrekturen: [
+        { name:'Thomas Pichler · Di 28.07.', change:'Geht 18:20 → 16:20', grund:'„Vergessen auszustempeln, Baustelle 16:20 verlassen."' },
+        { name:'Lukas Berger · Mo 27.07.', change:'Auftrag — → A-2026-0417', grund:'„Zuordnung nachtragen, war bei Pinter."' },
+        { name:'Fatih Yıldız · Fr 24.07.', change:'Pause 0:00 → 0:30', grund:'„Pause nicht gestempelt, 12:00–12:30."' }
+      ],
+
+      kontoKpis: [
+        { label:'Iststunden 2026', value:'1.250,0', color:'var(--t1)' },
+        { label:'Sollstunden 2026', value:'1.212,5', color:'var(--t1)' },
+        { label:'Überstundensaldo', value:'+37,5 h', color:C.amber },
+        { label:'Zeitausgleich konsumiert', value:'16,0 h', color:C.green }
+      ],
+      saldo: [['Jän',12],['Feb',18],['Mär',9],['Apr',-6],['Mai',22],['Jun',31],['Jul',37.5],['Aug',0],['Sep',0],['Okt',0],['Nov',0],['Dez',0]].map(([m,v]) => ({
+        m, posH: v > 0 ? Math.round(v/40*90) + 'px' : '0px', negH: v < 0 ? Math.round(-v/40*90) + 'px' : '0px',
+        posColor: v > 30 ? 'linear-gradient(180deg,#F2A73F,#C97918)' : tint(C.green,0.85), negColor: C.red
+      })),
+      buchungen: [
+        ['29.07.2026','Montage',C.blue,'A-2026-0412','Halbauer','7:23','+37,5','läuft · DC-Verkabelung'],
+        ['29.07.2026','Fahrtzeit',C.slate,'A-2026-0412','Halbauer','0:40','+37,5','18 km, Werkstatt → Baustelle'],
+        ['28.07.2026','Montage',C.blue,'A-2026-0412','Halbauer','9:10','+36,3','24 Module Süddach'],
+        ['27.07.2026','Montage',C.blue,'A-2026-0412','Halbauer','8:00','+34,8','Gerüst, Dachhaken'],
+        ['24.07.2026','Zeitausgleich',C.green,'—','','−7:42','+34,8','genehmigt Steiner'],
+        ['23.07.2026','Montage',C.blue,'A-2026-0405','Trinkl','8:45','+42,5','Inbetriebnahme'],
+        ['22.07.2026','Korrektur',C.amber,'A-2026-0405','Trinkl','+0:30','+41,3','Pause falsch gestempelt · Novak']
+      ].map(([datum,art,color,auftrag,kunde,dauer,saldo,notiz]) => ({
+        datum, art, bg:tint(color,0.13), fg:color, auftrag, kunde, dauer, saldo, saldoColor:C.amber, notiz
+      })),
+
+      isLager: s.screen === 'lager',
+      lagerTabs: [['Bestand','bestand'],['Artikel','artikel'],['Bewegungen','bewegungen'],['Bestellungen','bestellungen']].map(([label,t]) => ({
+        label, bg: s.lagerTab === t ? 'var(--sunk)' : 'transparent', fg: s.lagerTab === t ? 'var(--t1)' : 'var(--t2)',
+        fw: s.lagerTab === t ? '600' : '400', go: () => this.setState({ lagerTab: t })
+      })),
+      lagerBestand: s.lagerTab === 'bestand', lagerArtikel: s.lagerTab === 'artikel',
+      lagerBewegungen: s.lagerTab === 'bewegungen', lagerBestellungen: s.lagerTab === 'bestellungen',
+      artikel: [
+        ['JA Solar 445 W Bifazial Glas-Glas','JAM54D40-445','284','112','172','H1 · R3 · A','118,00 €',C.green,'100%'],
+        ['Fronius Symo GEN24 10.0 Plus','SYMO-GEN24-10','7','5','2','H1 · R1 · C','2.140,00 €',C.red,'70%'],
+        ['BYD Battery-Box Premium HVS 10.2','HVS-10.2','4','2','2','H1 · R1 · D','5.480,00 €',C.amber,'100%'],
+        ['K2 Dome 6 Aufständerung Süd','K2-DOME6','96 lfm','54 lfm','42 lfm','H2 · Regal C','21,40 €',C.amber,'100%'],
+        ['Solarkabel 6 mm² schwarz','SOL-6MM-BK','1.240 m','380 m','860 m','H2 · Trommel 4','1,18 €',C.green,'100%']
+      ].map(([name,nr,bestand,res,verf,ort,ek,color,w]) => ({
+        name, nr, bestand, res, verf, ort, ek, color, w,
+        open: () => this.setState({ lagerTab:'artikel', artikelId: nr })
+      })),
+      art: {
+        nr:'SYMO-GEN24-10', name:'Fronius Symo GEN24 10.0 Plus', hersteller:'Fronius International', kategorie:'Hybrid-Wechselrichter 10 kW',
+        kpis: [
+          { label:'Bestand', value:'7 Stk', color:C.red }, { label:'Mindestbestand', value:'10 Stk', color:'var(--t2)' },
+          { label:'Reserviert', value:'5 Stk', color:'var(--t2)' }, { label:'Verfügbar', value:'2 Stk', color:C.red },
+          { label:'Ø Verbrauch / Monat', value:'6,4 Stk', color:'var(--t1)' }, { label:'Lagerwert', value:'14.980 €', color:'var(--t1)' }
+        ],
+        lieferanten: [
+          { name:'Krannich Solar', meta:'Lieferzeit 4 Tage · Rahmenvertrag', preis:'2.140,00 €', color:C.green },
+          { name:'Baywa r.e.', meta:'Lieferzeit 6 Tage', preis:'2.208,00 €', color:'var(--t1)' },
+          { name:'Sonepar', meta:'Lieferzeit 2 Tage · Sofortverfügbarkeit', preis:'2.315,00 €', color:'var(--t2)' }
+        ],
+        reserviert: [
+          { nr:'A-2026-0419', kunde:'Fam. Wagner', menge:'1 Stk', status:'fehlt', bg:tint(C.red,0.13), fg:C.red },
+          { nr:'A-2026-0426', kunde:'Landtechnik Sifkovits', menge:'2 Stk', status:'fehlt', bg:tint(C.red,0.13), fg:C.red },
+          { nr:'A-2026-0417', kunde:'Fam. Pinter', menge:'1 Stk', status:'kommissioniert', bg:tint(C.green,0.13), fg:C.green },
+          { nr:'A-2026-0422', kunde:'Bäckerei Sommer', menge:'1 Stk', status:'reserviert', bg:tint(C.blue,0.13), fg:C.blue }
+        ]
+      },
+      bewegungen: [
+        ['29.07. 16:40','Rückgabe',C.green,'Solarkabel 6 mm² schwarz','+30 m','A-2026-0412','Lukas Berger'],
+        ['29.07. 06:52','Entnahme',C.blue,'JA Solar 445 W Bifazial','−24 Stk','A-2026-0412','Markus Grabner'],
+        ['29.07. 06:52','Entnahme',C.blue,'K2 Dome 6 Aufständerung Süd','−60 lfm','A-2026-0412','Markus Grabner'],
+        ['29.07. 06:48','Entnahme',C.blue,'Fronius Symo GEN24 10.0 Plus','−1 Stk','A-2026-0412','Markus Grabner'],
+        ['28.07. 15:10','Entnahme',C.blue,'BYD HVS 10.2','−1 Stk','A-2026-0412','Daniela Reiter'],
+        ['28.07. 09:20','Wareneingang',C.green,'JA Solar 445 W Bifazial','+84 Stk','BE-2026-0091','Daniela Reiter'],
+        ['27.07. 06:40','Entnahme',C.blue,'Solarkabel 6 mm² schwarz','−150 m','A-2026-0415','Fatih Yıldız']
+      ].map(([ts,art,color,artikel,menge,auftrag,wer]) => ({ ts, art, bg:tint(color,0.13), fg:color, artikel, menge, auftrag, wer })),
+      bestellungen: [
+        ['BE-2026-0097','Krannich Solar','Fronius Symo GEN24 10.0 Plus','6 Stk','04.08.2026','bestätigt',C.violet],
+        ['BE-2026-0096','Baywa r.e.','BYD HVS 20.5','2 Stk','11.08.2026','offen',C.slate],
+        ['BE-2026-0094','K2 Systems','K2 Dome 6 Aufständerung','240 lfm','31.07.2026','unterwegs',C.blue],
+        ['BE-2026-0091','Krannich Solar','JA Solar 445 W Bifazial','84 Stk','28.07.2026','geliefert',C.green]
+      ].map(([nr,lief,pos,menge,termin,status,color]) => ({ nr, lief, pos, menge, termin, status, bg:tint(color,0.13), fg:color })),
+      vorschlag: [
+        { name:'Fronius Symo GEN24 10.0 Plus', grund:'3 fehlen für A-2026-0419, A-2026-0426', menge:'6 Stk' },
+        { name:'BYD Battery-Box HVS 10.2', grund:'Mindestbestand erreicht', menge:'4 Stk' },
+        { name:'K2 Dome 6 Aufständerung Süd', grund:'Bedarf KW 34 · 112 lfm reserviert', menge:'240 lfm' }
+      ],
+
+      isCrm: s.screen === 'crm',
+      crmTabs: [['Kunden','kunden',214],['Leads','leads',14],['Aufgaben','aufgaben',9]].map(([label,t,count]) => ({
+        label, count, bg: s.crmTab === t ? 'var(--sunk)' : 'transparent', fg: s.crmTab === t ? 'var(--t1)' : 'var(--t2)',
+        fw: s.crmTab === t ? '600' : '400', go: () => this.setState({ crmTab: t })
+      })),
+      crmViewTabs: [['Liste','liste'],['Pipeline','board']].map(([label,v]) => ({
+        label, bg: s.crmView === v ? 'var(--sunk)' : 'transparent', fg: s.crmView === v ? 'var(--t1)' : 'var(--t2)',
+        fw: s.crmView === v ? '600' : '400', go: () => this.setState({ crmView: v })
+      })),
+      crmBoardView: s.crmView === 'board', crmListView: s.crmView !== 'board',
+      crmPipelineChips: [['Neukunden','neu',C.violet,14],['Bestandskunden','bestand',C.green,9],['Service-Verträge','service',C.blue,6]].map(([label,key,dot,count]) => ({
+        label, count, dot,
+        bg: s.crmPipeline === key ? 'var(--sunk)' : 'var(--surface)',
+        fg: s.crmPipeline === key ? 'var(--t1)' : 'var(--t2)',
+        fw: s.crmPipeline === key ? '600' : '400',
+        go: () => this.setState({ crmPipeline: key })
+      })),
+      crmSummary: ({ neu:'14 Leads · 486.200 € Pipeline · Ø Abschlussquote 38 %',
+        bestand:'9 Ausbau-Chancen · Speicher und Wallbox · 212.400 €',
+        service:'6 Verträge in Verlängerung · 14.880 € wiederkehrend' })[s.crmPipeline],
+      crmColumns: (() => {
+        const P = {
+          neu: [
+            ['Erstkontakt',C.slate,'112.400 €',[
+              ['L-2026-0188','Fam. Kovacs','Neutal · 8,5 kWp geschätzt','16.200 €','Rückruf morgen','Sandra Novak','SN',C.amber,'Score 62','var(--t2)'],
+              ['L-2026-0187','Metallbau Zink','Oberloisdorf · 40 kWp Gewerbe','76.800 €','Angebot in Arbeit','Michael Bruckner','MB',C.blue,'Score 88',C.green]]],
+            ['Qualifiziert',C.blue,'96.800 €',[
+              ['L-2026-0182','Fam. Zsifkovits','Frankenau · 8,1 kWp','15.400 €','Ortstermin 31.07.','Michael Bruckner','MB',C.blue,'Score 74',C.green]]],
+            ['Angebot gesendet',C.violet,'184.500 €',[
+              ['AN-2026-0177','Weingut Prickler','Horitschon · 18,2 kWp + Speicher','34.900 €','3× geöffnet','Michael Bruckner','MB',C.blue,'Score 91',C.green],
+              ['AN-2026-0174','Fam. Halper','Lockenhaus · 11,0 kWp','19.400 €','Erinnerung fällig','Sandra Novak','SN',C.amber,'Score 48',C.amber]]],
+            ['Angenommen',C.green,'71.900 €',[
+              ['AN-2026-0169','Landtechnik Sifkovits','Neckenmarkt · 24,6 kWp','48.200 €','wird Auftrag','Michael Bruckner','MB',C.blue,'gewonnen',C.green]]],
+            ['Verloren',C.red,'21.300 €',[
+              ['AN-2026-0158','Fam. Ostermann','Pilgersdorf · 9,2 kWp','21.300 €','Preis Mitbewerber','Sandra Novak','SN',C.amber,'verloren',C.red]]]
+          ],
+          bestand: [
+            ['Potenzial erkannt',C.slate,'84.600 €',[
+              ['K-0142','Fam. Radakovits','Nikitsch · Speicher nachrüsten','12.400 €','Anruf offen','Sandra Novak','SN',C.amber,'Score 58','var(--t2)'],
+              ['K-0118','Fam. Trinkl','Piringsdorf · Wallbox','3.900 €','Interesse geäußert','Sandra Novak','SN',C.amber,'Score 66','var(--t2)']]],
+            ['Beratung',C.blue,'68.200 €',[
+              ['K-0096','Tischlerei Kern GmbH','Deutschkreutz · Erweiterung 12 kWp','24.800 €','Termin 05.08.','Michael Bruckner','MB',C.blue,'Score 81',C.green]]],
+            ['Angebot offen',C.violet,'42.600 €',[
+              ['AN-2026-0176','Fam. Marth','Steinberg · Speicher 10 kWh','8.900 €','1× geöffnet','Sandra Novak','SN',C.amber,'Score 70',C.green]]],
+            ['Ausbau beauftragt',C.green,'17.000 €',[
+              ['A-2026-0424','Fam. Pinter','Weppersdorf · Wallbox + Notstrom','4.200 €','KW 34 geplant','Michael Bruckner','MB',C.blue,'gewonnen',C.green]]]
+          ],
+          service: [
+            ['Vertrag läuft aus',C.amber,'6.240 € p. a.',[
+              ['SV-0031','Tischlerei Kern GmbH','Deutschkreutz · Wartung Gewerbe','2.880 €','Ablauf 30.09.','Sandra Novak','SN',C.amber,'Bestand',C.amber],
+              ['SV-0028','Autohaus Klein','Oberpullendorf · Wartung + Monitoring','3.360 €','Ablauf 31.10.','Sandra Novak','SN',C.amber,'Bestand',C.amber]]],
+            ['Angebot Verlängerung',C.violet,'4.320 € p. a.',[
+              ['SV-0022','Weingut Prickler','Horitschon · Wartung 5 Jahre','4.320 €','gesendet 26.07.','Michael Bruckner','MB',C.blue,'offen','var(--t2)']]],
+            ['Verlängert',C.green,'4.320 € p. a.',[
+              ['SV-0019','Fam. Radakovits','Nikitsch · Wartung 3 Jahre','1.440 €','bis 2029','Sandra Novak','SN',C.amber,'gewonnen',C.green]]]
+          ]
+        };
+        const pillLabels = { 'Erstkontakt':'Lead', 'Qualifiziert':'qualifiziert', 'Angebot gesendet':'Angebot offen',
+          'Angenommen':'gewonnen', 'Verloren':'verloren', 'Potenzial erkannt':'Potenzial', 'Beratung':'Beratung',
+          'Angebot offen':'Angebot offen', 'Ausbau beauftragt':'beauftragt', 'Vertrag läuft aus':'läuft aus',
+          'Angebot Verlängerung':'Verlängerung', 'Verlängert':'verlängert' };
+        return P[s.crmPipeline].map(([title,color,sum,cards]) => ({
+          title, color, sum, count: cards.length,
+          cards: cards.map(([nr,kunde,sub,wert,naechster,owner,ini,color2,score,scoreColor]) => ({
+            nr, kunde, sub, wert, naechster, owner, ini, color: color2, score, scoreColor,
+            tag: pillLabels[title] || title, tagBg: tint(color,0.13), tagFg: color,
+            outline: s.crmSelId === nr ? '2px solid ' + C.amber : 'none',
+            open: () => this.setState({ crmSelId: nr })
+          }))
+        }));
+      })(),
+      addCard: () => this.setState({ toast: 'Neuer Eintrag angelegt' }),
+      crmSel: (() => {
+        const map = {
+          'Fam. Halbauer': { ini:'HA', color:C.green, name:'Fam. Halbauer', meta:'Bestandskunde seit 2026 · Pfarrgasse 14, Oberpullendorf' },
+          'Tischlerei Kern GmbH': { ini:'TK', color:C.blue, name:'Tischlerei Kern GmbH', meta:'Gewerbe · Servicevertrag bis 30.09.2026 · Deutschkreutz' },
+          'Weingut Prickler': { ini:'WP', color:C.violet, name:'Weingut Prickler', meta:'Lead · Angebot 34.900 € offen · Horitschon' }
+        };
+        return map[s.crmName] || map['Fam. Halbauer'];
+      })(),
+      crmRows: [
+        ['HA','Fam. Halbauer','Bestandskunde','Oberpullendorf','1 Anlage','Foto hochgeladen · heute 14:12','21.480 €',C.green,true],
+        ['TK','Tischlerei Kern GmbH','Gewerbe · Servicevertrag','Deutschkreutz','2 Anlagen','Servicemeldung 301 · heute 08:20','96.400 €',C.blue,false],
+        ['WP','Weingut Prickler','Lead · Angebot offen','Horitschon','Angebot 34.900 €','Angebot 3× geöffnet · heute 14:02','—',C.violet,false],
+        ['LS','Landtechnik Sifkovits','Gewerbe · Neukunde','Neckenmarkt','1 Anlage geplant','Angebot angenommen · 26.07.','48.200 €',C.amber,false],
+        ['FM','Fam. Marth','Bestandskunde','Steinberg','1 Anlage','Schlussrechnung offen · 21 Tage','18.640 €',C.red,false],
+        ['MZ','Metallbau Zink','Lead · qualifiziert','Oberloisdorf','40 kWp Anfrage','Ortstermin vereinbart · 31.07.','—',C.slate,false],
+        ['FR','Fam. Radakovits','Bestandskunde','Nikitsch','1 Anlage','Modulreinigung beauftragt · 24.07.','29.900 €',C.green,false]
+      ].map(([ini,name,typ,ort,anlagen,letzte,umsatz,color,active]) => ({
+        ini, name, typ, ort, anlagen, letzte, umsatz, color,
+        rowBg: s.crmName === name || (!s.crmName && active) ? 'var(--panel)' : 'transparent',
+        open: () => this.setState({ crmName: name })
+      })),
+      crmDetailKpis: [
+        { label:'Umsatz gesamt', value:'21.480 €', color:'var(--t1)' },
+        { label:'Offene Posten', value:'0 €', color:'#3E9E6B' },
+        { label:'Aufträge', value:'1 aktiv', color:'var(--t1)' },
+        { label:'Servicevertrag', value:'nein', color:'var(--t2)' }
+      ],
+      crmActivities: [
+        { title:'Foto aus dem Kundenportal', body:'Kunde hat 2 Bilder zum Zählerkasten hochgeladen', when:'heute 14:12', color:C.blue },
+        { title:'Fortschritt angesehen', body:'Kundenportal · Phase „In Montage"', when:'heute 09:05', color:C.violet },
+        { title:'Anruf Bruckner', body:'Zählerwechsel am 06.08. bestätigt, Kunde ist anwesend', when:'28.07. 16:40', color:C.green },
+        { title:'Angebot angenommen', body:'AN-2026-0161 · 21.480 € digital signiert', when:'21.07. 18:22', color:C.green },
+        { title:'Lead aus Step-Planer', body:'Planung Halbauer_v2 · 9,84 kWp + 10 kWh', when:'02.07. 20:11', color:C.amber }
+      ],
+      pipelineTabs: (() => {
+        const P = this.pipelines();
+        return ['vertrieb','projekte','service'].map(key => ({
+          label: P[key].label, count: P[key].count, dot: P[key].dot,
+          bg: s.pipeline === key ? 'var(--sunk)' : 'transparent',
+          fg: s.pipeline === key ? 'var(--t1)' : 'var(--t2)',
+          fw: s.pipeline === key ? '600' : '400',
+          go: () => this.setState({ pipeline: key })
+        }));
+      })(),
+      pipelineSummary: this.pipelines()[s.pipeline].summary,
+      columns: this.pipelines()[s.pipeline].columns,
+      rows: this.pipelines()[s.pipeline].columns.flatMap(c => c.cards.map(x => Object.assign({}, x, {
+        phase: c.title, teamText: x.team.map(t => t.ini).join(' · '),
+        hColor: x.metaL.indexOf('118') === 0 ? C.red : 'var(--t1)'
+      }))),
+      viewTabs: [['Board','board'],['Tabelle','table'],['Timeline','timeline']].map(([label,v]) => ({
+        label, bg: s.view === v ? 'var(--sunk)' : 'transparent', fg: s.view === v ? 'var(--t1)' : 'var(--t2)',
+        fw: s.view === v ? '600' : '400', go: () => this.setState({ view: v })
+      })),
+      isBoardView: s.view === 'board', isTableView: s.view === 'table', isTimelineView: s.view === 'timeline',
+      filterChips: [['Standort','Alle 3','Oberpullendorf'],['Verantwortlich','Bruckner','alle'],['Zeitraum','KW 30–36','KW 32']].map(([k,a,b]) => {
+        const on = !!s.chips[k];
+        return { k, v: on ? b : a, bg: on ? C.amber : 'var(--surface)', fg: on ? '#fff' : 'var(--t1)',
+          go: () => this.setState({ chips: Object.assign({}, s.chips, { [k]: !on }) }) };
+      }),
+      kws: ['KW 30','KW 31','KW 32','KW 33','KW 34','KW 35','KW 36','KW 37'],
+      gantt: [
+        { nr:'A-2026-0412', kunde:'Fam. Halbauer', left:'12.5%', width:'25%', color:C.amber, label:'Montage · Grabner, Berger' },
+        { nr:'A-2026-0408', kunde:'Tischlerei Kern', left:'0%', width:'37.5%', color:C.violet, label:'Netzanmeldung Netz Burgenland' },
+        { nr:'A-2026-0417', kunde:'Fam. Pinter', left:'25%', width:'12.5%', color:C.blue, label:'Terminiert KW 32' },
+        { nr:'A-2026-0419', kunde:'Fam. Wagner', left:'37.5%', width:'12.5%', color:C.violet, label:'KW 33 · Material offen' },
+        { nr:'A-2026-0420', kunde:'Autohaus Klein', left:'25%', width:'25%', color:C.blue, label:'Montage 3 Monteure' },
+        { nr:'A-2026-0426', kunde:'Landtechnik Sifkovits', left:'62.5%', width:'25%', color:C.slate, label:'Beauftragt · zu terminieren' }
+      ],
+
+      kpis: [
+        { label:'Auslastung 4 Wochen', value:'92 %', color:'var(--t1)', delta:'KW 33: 104 %', deltaBg:tint(C.red,0.12), deltaFg:C.red, note:'über Kapazität' },
+        { label:'Stunden diese Woche', value:'248', color:'var(--t1)', delta:'−38 h', deltaBg:tint(C.amber,0.14), deltaFg:'#B4690E', note:'von 286 Soll' },
+        { label:'Offene Rechnungen', value:'147 T€', color:'var(--t1)', delta:'1 überfällig', deltaBg:tint(C.red,0.12), deltaFg:C.red, note:'A-2026-0397 · 21 Tage' }
+      ],
+      auslastung: [92,88,104,96,78,84,70,66].map((p,i) => {
+        const hot = p > 100, warm = p > 90;
+        return { kw:'KW ' + (32+i), pct:p + '%', h: Math.round(p*1.35) + 'px',
+          fill: hot ? C.red : (warm ? 'linear-gradient(180deg,#F2A73F,#C97918)' : (i < 5 ? tint(C.amber,0.22) : 'repeating-linear-gradient(45deg,var(--sunk) 0 6px,transparent 6px 12px)')),
+          labelBg: hot ? tint(C.red,0.12) : 'var(--panel)', labelFg: hot ? C.red : 'var(--t2)' };
+      }),
+      warnings: [
+        { text:'KW 33 unterbesetzt — Dienstag fehlt 1 Monteur', meta:'A-2026-0419 · 36 h offen', color:C.red },
+        { text:'Schlussrechnung A-2026-0397 seit 21 Tagen überfällig', meta:'18.640,00 € · Fam. Marth', color:C.red },
+        { text:'Höhenarbeit-Zertifikat Wallner läuft ab', meta:'14.11.2026 · in 107 Tagen', color:C.amber },
+        { text:'Fronius Symo GEN24 unter Mindestbestand', meta:'7 von 10 · 3 fehlen für A-2026-0419', color:C.amber }
+      ],
+      teamHeute: [
+        { ini:'MG', color:C.green, name:'Markus Grabner', auftrag:'A-2026-0412 · Halbauer, Montage', status:'eingestempelt', pillBg:tint(C.blue,0.12), pillFg:C.blue },
+        { ini:'SW', color:C.blue, name:'Stefan Wallner', auftrag:'A-2026-0408 · Kern, Nacharbeit', status:'eingestempelt', pillBg:tint(C.blue,0.12), pillFg:C.blue },
+        { ini:'TP', color:C.amber, name:'Thomas Pichler', auftrag:'A-2026-0427 · Hofer, Voraufmaß', status:'prüfen', pillBg:tint(C.amber,0.14), pillFg:'#B4690E' },
+        { ini:'MB', color:'#6A625A', name:'Michael Bruckner', auftrag:'Baustellenrunde · 4 Standorte', status:'Dienstgang', pillBg:tint(C.violet,0.12), pillFg:C.violet },
+        { ini:'DR', color:C.red, name:'Daniela Reiter', auftrag:'Lager Oberpullendorf', status:'krank', pillBg:tint(C.red,0.12), pillFg:C.red }
+      ],
+      legende: [
+        { label:'Abgeschlossen', color:C.green }, { label:'In Montage', color:C.amber },
+        { label:'Terminiert', color:C.blue }, { label:'Offen', color:'var(--sunk)' }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

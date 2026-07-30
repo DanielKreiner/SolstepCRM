@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--app:#EAE6E0;--panel:#F8F6F3;--surface:#FFFFFF;--sunk:#F2EEE9;--line:#EAE4DC;--t1:#151210;--t2:#6A625A;--t3:#9C9289;--amber:#E8952B;--shadow:0 1px 2px rgba(21,18,16,0.04),0 8px 24px rgba(21,18,16,0.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--app);color:var(--t1);font-family:'Inter Tight',system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-wrap:pretty;}
+  a{color:#C97918;text-decoration:none;}
+  a:hover{color:var(--amber);}
+  input,button,textarea{font-family:inherit;}
+  ::-webkit-scrollbar{width:9px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;}
+</style>
+</helmet>
+
+<div style="display:flex;gap:14px;padding:14px;min-height:100vh;background:var(--app);font-size:14px;line-height:1.45">
+
+  <aside style="width:236px;flex:0 0 236px;background:var(--surface);border-radius:26px;box-shadow:var(--shadow);padding:22px 16px;display:flex;flex-direction:column;align-self:flex-start;position:sticky;top:14px">
+    <div style="display:flex;align-items:center;gap:11px">
+      <div style="width:32px;height:32px;border-radius:11px;background:linear-gradient(150deg,#F2A73F,#C97918);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px">S</div>
+      <div>
+        <div style="font-weight:700;font-size:17px;letter-spacing:-0.025em">Solstep</div>
+        <div style="font-size:11px;color:var(--t2)">Kundenportal</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px;margin-top:26px">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="6">
+        <button onClick="{{ n.go }}" style="display:flex;align-items:center;gap:11px;border:0;border-radius:14px;padding:11px;cursor:pointer;text-align:left;font-size:14.5px;width:100%;background:{{ n.bg }};color:{{ n.fg }};font-weight:{{ n.fw }}">
+          <span style="width:26px;height:26px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:{{ n.iconBg }};color:{{ n.iconFg }}">{{ n.iconEl }}</span>
+          <span style="flex:1">{{ n.label }}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3)">{{ n.badge }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="margin-top:26px;border-radius:20px;padding:16px;background:linear-gradient(160deg,#2A211A,#151210);color:#F5F0EA;position:relative;overflow:hidden">
+      <div style="position:absolute;right:-40px;top:-30px;width:130px;height:130px;border-radius:99px;background:radial-gradient(circle,rgba(232,149,43,0.45),transparent 70%)"></div>
+      <div style="font-size:14.5px;font-weight:600">Ihr Ansprechpartner</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+        <div style="width:34px;height:34px;border-radius:99px;background:#3E7BC6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">MB</div>
+        <div>
+          <div style="font-size:13.5px;font-weight:600">Michael Bruckner</div>
+          <div style="font-size:11.5px;color:#B8AFA5">Bauleitung Ost</div>
+        </div>
+      </div>
+      <button style="margin-top:14px;width:100%;border:0;border-radius:99px;background:var(--amber);color:#151210;font-size:13px;font-weight:600;padding:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">{{ iconTelefon }}Anrufen</button>
+    </div>
+  </aside>
+
+  <div style="flex:1;display:flex;flex-direction:column;gap:14px;min-width:0">
+    <header style="background:var(--surface);border-radius:22px;box-shadow:var(--shadow);padding:14px 20px;display:flex;align-items:center;gap:14px">
+      <div>
+        <div style="font-size:15px;font-weight:600">Fam. Halbauer</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2)">Projekt A-2026-0412 · Pfarrgasse 14, Oberpullendorf</div>
+      </div>
+      <div style="flex:1"></div>
+      <span style="font-size:12px;font-weight:500;border-radius:99px;padding:6px 13px;background:rgba(62,123,198,0.13);color:#3E7BC6">Phase 4 von 6 · In Montage</span>
+      <div style="width:38px;height:38px;border-radius:99px;background:#3E9E6B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600">JH</div>
+    </header>
+
+    <main style="flex:1;background:var(--panel);border-radius:26px;box-shadow:var(--shadow);padding:26px 26px 32px">
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:22px">
+        <div style="flex:1;min-width:260px">
+          <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;line-height:1.1">{{ title }}</div>
+          <div style="font-size:14.5px;color:var(--t2);margin-top:6px">{{ sub }}</div>
+        </div>
+        <button style="display:flex;align-items:center;gap:9px;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:14px;font-weight:600;padding:13px 22px;cursor:pointer;box-shadow:0 6px 18px rgba(201,121,24,0.28)">{{ iconPlus }}{{ primary }}</button>
+      </div>
+
+      <!-- FORTSCHRITT -->
+      <sc-if value="{{ isFortschritt }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:24px">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+              <div style="font-size:17px;font-weight:600">Ihr Projekt im Zeitverlauf</div>
+              <span style="font-size:12.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:6px 13px">Inbetriebnahme geplant: 12.08.2026</span>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:22px">
+              <sc-for list="{{ phasen }}" as="p" hint-placeholder-count="6">
+                <div style="flex:1">
+                  <div style="height:8px;border-radius:99px;background:{{ p.bar }}"></div>
+                  <div style="font-size:13.5px;font-weight:{{ p.fw }};margin-top:11px;color:{{ p.fg }}">{{ p.label }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3)">{{ p.datum }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="font-size:17px;font-weight:600">Was gerade passiert</div>
+              <div style="display:flex;flex-direction:column;margin-top:16px">
+                <sc-for list="{{ updates }}" as="u" hint-placeholder-count="5">
+                  <div style="display:grid;grid-template-columns:16px 1fr;gap:14px;padding-bottom:18px">
+                    <div style="display:flex;flex-direction:column;align-items:center">
+                      <span style="width:11px;height:11px;border-radius:99px;margin-top:5px;background:{{ u.color }}"></span>
+                      <span style="flex:1;width:2px;background:var(--line);margin-top:5px;border-radius:99px"></span>
+                    </div>
+                    <div>
+                      <div style="font-size:14.5px;font-weight:600">{{ u.title }}</div>
+                      <div style="font-size:13.5px;color:var(--t2)">{{ u.body }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3);margin-top:2px">{{ u.when }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                <div style="font-size:17px;font-weight:600">Nächster Termin</div>
+                <div style="font-size:20px;font-weight:700;letter-spacing:-0.02em;margin-top:12px">Zählerwechsel</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--t2);margin-top:6px">Do 06.08.2026 · 08:00–12:00</div>
+                <div style="font-size:13px;color:var(--t2)">Bitte anwesend sein. Netz Burgenland und Michael Bruckner kommen gemeinsam.</div>
+                <div style="display:flex;gap:10px;margin-top:16px">
+                  <button style="flex:1;border:0;border-radius:99px;background:#151210;color:#F5F0EA;font-size:13.5px;font-weight:600;padding:12px;cursor:pointer">Termin bestätigen</button>
+                  <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);font-size:13.5px;padding:12px;cursor:pointer">Verschieben</button>
+                </div>
+              </div>
+              <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+                <div style="font-size:17px;font-weight:600">Ihre Anlage</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+                  <sc-for list="{{ anlage }}" as="a" hint-placeholder-count="4">
+                    <div style="background:var(--panel);border-radius:14px;padding:12px 14px">
+                      <div style="font-size:11.5px;color:var(--t2)">{{ a.label }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:600;margin-top:2px">{{ a.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ANGEBOT -->
+      <sc-if value="{{ isAngebot }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:24px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:4px 10px">AN-2026-0177</span>
+              <span style="font-size:11.5px;font-weight:500;border-radius:99px;padding:4px 11px;background:rgba(132,101,196,0.13);color:#8465C4">gültig bis 28.08.2026</span>
+            </div>
+            <div style="font-size:24px;font-weight:700;letter-spacing:-0.025em;margin-top:14px">PV-Anlage 18,2 kWp mit 20 kWh Speicher</div>
+            <div style="font-size:13.5px;color:var(--t2);margin-top:4px">Erstellt aus Ihrer Planung im Step-Planer, geprüft von Michael Bruckner.</div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:20px">
+              <sc-for list="{{ angebotPositionen }}" as="p" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:12px;background:var(--panel);border-radius:14px;padding:12px 14px">
+                  <span style="flex:1;font-size:13.5px">{{ p.t }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500">{{ p.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
+              <span style="font-size:15px;font-weight:600">Gesamt netto</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:600;letter-spacing:-0.02em">34.900,00 €</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px">
+              <button style="border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:15px;font-weight:600;padding:15px;cursor:pointer;box-shadow:0 8px 22px rgba(201,121,24,0.3)">Angebot verbindlich annehmen</button>
+              <div style="display:flex;gap:10px">
+                <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);font-size:13.5px;padding:12px;cursor:pointer">Rückfrage stellen</button>
+                <button style="flex:1;border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);font-size:13.5px;padding:12px;cursor:pointer">PDF herunterladen</button>
+              </div>
+              <div style="font-size:12px;color:var(--t3);text-align:center">Mit der Annahme bestätigen Sie Umfang und Preis. Sie erhalten sofort eine Bestätigung per Mail.</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="font-size:17px;font-weight:600">Ihre Planung</div>
+              <div style="margin-top:14px;aspect-ratio:4/3;border-radius:16px;background:repeating-linear-gradient(135deg,var(--panel) 0 8px,var(--surface) 8px 16px);display:flex;align-items:flex-end;padding:14px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">Satellitenbild mit Modulbelegung · 41 Module</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px">
+                <sc-for list="{{ planKpis }}" as="k" hint-placeholder-count="3">
+                  <div style="background:var(--panel);border-radius:14px;padding:12px">
+                    <div style="font-size:11.5px;color:var(--t2)">{{ k.label }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600">{{ k.value }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="font-size:17px;font-weight:600">Was nach der Annahme passiert</div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+                <sc-for list="{{ nachAnnahme }}" as="n" hint-placeholder-count="3">
+                  <div style="display:flex;gap:11px;align-items:flex-start">
+                    <span style="width:22px;height:22px;border-radius:99px;background:var(--panel);color:var(--t2);font-family:'JetBrains Mono',monospace;font-size:11px;display:flex;align-items:center;justify-content:center;flex:0 0 22px">{{ n.n }}</span>
+                    <div>
+                      <div style="font-size:13.5px;font-weight:500">{{ n.t }}</div>
+                      <div style="font-size:12.5px;color:var(--t2)">{{ n.b }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- DOKUMENTE -->
+      <sc-if value="{{ isDokumente }}">
+        <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:start">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="padding:20px 22px;font-size:17px;font-weight:600;border-bottom:1px solid var(--line)">Unterlagen zu Ihrem Projekt</div>
+            <sc-for list="{{ dokumente }}" as="d" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:14px;padding:15px 22px;border-bottom:1px solid var(--line)">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2);background:var(--panel);border-radius:8px;padding:5px 8px">{{ d.typ }}</span>
+                <div style="flex:1">
+                  <div style="font-size:14px;font-weight:500">{{ d.name }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3)">{{ d.meta }}</div>
+                </div>
+                <span style="font-size:11.5px;border-radius:99px;padding:4px 11px;background:{{ d.bg }};color:{{ d.fg }}">{{ d.status }}</span>
+                <button style="border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);padding:8px 15px;font-size:12.5px;cursor:pointer">Öffnen</button>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+            <div style="font-size:17px;font-weight:600">Bilder hochladen</div>
+            <div style="font-size:13px;color:var(--t2);margin-top:4px">Zählerkasten, Dachboden, Kabelweg — je mehr wir vorher sehen, desto schneller sind wir fertig.</div>
+            <div style="margin-top:16px;border:1.5px dashed var(--line);border-radius:18px;padding:26px;text-align:center;background:var(--panel);display:flex;flex-direction:column;align-items:center">
+              <span style="color:var(--t3);margin-bottom:8px">{{ iconUpload }}</span>
+              <div style="font-size:14.5px;font-weight:600">Dateien hierher ziehen</div>
+              <div style="font-size:12.5px;color:var(--t2);margin-top:3px">JPG, PNG oder PDF bis 20 MB</div>
+              <button style="margin-top:14px;border:0;border-radius:99px;background:#151210;color:#F5F0EA;font-size:13.5px;font-weight:600;padding:11px 20px;cursor:pointer">Aus Galerie wählen</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px">
+              <sc-for list="{{ uploads }}" as="u" hint-placeholder-count="6">
+                <div style="aspect-ratio:1;border-radius:14px;background:repeating-linear-gradient(135deg,var(--panel) 0 6px,var(--surface) 6px 12px);display:flex;align-items:flex-end;padding:8px">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t3)">{{ u }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ANLIEGEN -->
+      <sc-if value="{{ isAnliegen }}">
+        <div style="display:grid;grid-template-columns:1fr 1.1fr;gap:16px;align-items:start">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:24px">
+            <div style="font-size:17px;font-weight:600">Anliegen oder Beschwerde einreichen</div>
+            <div style="font-size:13px;color:var(--t2);margin-top:4px">Wir antworten innerhalb eines Werktages. Bei Anlagenstillstand rufen wir zurück.</div>
+            <div style="font-size:12.5px;color:var(--t2);margin-top:20px;font-weight:600">Worum geht es?</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+              <sc-for list="{{ anliegenArten }}" as="a" hint-placeholder-count="4">
+                <div style="border:1.5px solid {{ a.border }};background:{{ a.bg }};border-radius:14px;padding:14px;cursor:pointer">
+                  <div style="font-size:13.5px;font-weight:{{ a.fw }}">{{ a.label }}</div>
+                  <div style="font-size:11.5px;color:var(--t2)">{{ a.meta }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:12.5px;color:var(--t2);margin-top:18px;font-weight:600">Beschreibung</div>
+            <div style="margin-top:8px;background:var(--panel);border-radius:16px;padding:14px;min-height:110px;font-size:13.5px;color:var(--t1)">Die Anlage zeigt seit Montag einen Fehler 301 am Wechselrichter, der Speicher lädt nur bis 60 Prozent. Foto vom Display ist angehängt.</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+              <button style="border:1px solid var(--line);border-radius:99px;background:transparent;color:var(--t1);padding:11px 18px;font-size:13px;cursor:pointer">Foto anhängen</button>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--t3)">1 Datei · display_fehler301.jpg</span>
+            </div>
+            <button style="width:100%;margin-top:18px;border:0;border-radius:99px;background:linear-gradient(150deg,#F2A73F,#C97918);color:#fff;font-size:15px;font-weight:600;padding:15px;cursor:pointer;box-shadow:0 8px 22px rgba(201,121,24,0.3)">Anliegen absenden</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="font-size:17px;font-weight:600">Ihre offenen Anliegen</div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+                <sc-for list="{{ tickets }}" as="t" hint-placeholder-count="3">
+                  <div style="background:var(--panel);border-radius:16px;padding:15px">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);background:var(--surface);border-radius:99px;padding:3px 9px">{{ t.nr }}</span>
+                      <span style="font-size:11.5px;border-radius:99px;padding:3px 10px;background:{{ t.bg }};color:{{ t.fg }}">{{ t.status }}</span>
+                      <div style="flex:1"></div>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">{{ t.when }}</span>
+                    </div>
+                    <div style="font-size:14px;font-weight:600;margin-top:9px">{{ t.title }}</div>
+                    <div style="font-size:12.5px;color:var(--t2)">{{ t.body }}</div>
+                    <div style="font-size:12.5px;margin-top:9px"><span style="color:var(--t3)">Antwort: </span>{{ t.antwort }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="font-size:17px;font-weight:600">Direkter Kontakt</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+                <sc-for list="{{ kontakte }}" as="k" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div style="width:34px;height:34px;border-radius:99px;background:{{ k.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600">{{ k.ini }}</div>
+                    <div style="flex:1">
+                      <div style="font-size:13.5px;font-weight:500">{{ k.name }}</div>
+                      <div style="font-size:11.5px;color:var(--t2)">{{ k.rolle }}</div>
+                    </div>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)">{{ k.tel }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ERTRAG -->
+      <sc-if value="{{ isErtrag }}">
+        <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">
+          <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:17px;font-weight:600">Erwarteter Ertrag pro Monat</div>
+              <span style="font-size:12.5px;color:var(--t2);background:var(--panel);border-radius:99px;padding:6px 13px">9.850 kWh im Jahr</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:9px;height:210px;margin-top:22px">
+              <sc-for list="{{ ertrag }}" as="e" hint-placeholder-count="12">
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;justify-content:flex-end">
+                  <div style="width:100%;max-width:34px;border-radius:99px;height:{{ e.h }};background:{{ e.fill }}"></div>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3)">{{ e.m }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="border-radius:20px;padding:24px;background:linear-gradient(150deg,#E8952B,#B4690E);color:#fff;box-shadow:0 10px 26px rgba(180,105,14,0.24)">
+              <div style="font-size:15px;font-weight:600">Ersparnis im ersten Jahr</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:38px;font-weight:600;letter-spacing:-0.03em;margin-top:12px">2.140 €</div>
+              <div style="font-size:13px;opacity:0.9;margin-top:6px">Bei 0,26 €/kWh und 68 % Eigenverbrauch mit Speicher.</div>
+            </div>
+            <div style="background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:22px">
+              <div style="font-size:17px;font-weight:600">Förderung und Netz</div>
+              <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+                <sc-for list="{{ foerderung }}" as="f" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:11px">
+                    <span style="width:9px;height:9px;border-radius:99px;background:{{ f.color }}"></span>
+                    <span style="flex:1;font-size:13.5px">{{ f.label }}</span>
+                    <span style="font-size:11.5px;border-radius:99px;padding:3px 10px;background:{{ f.bg }};color:{{ f.fg }}">{{ f.status }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1480,&quot;height&quot;:980}}">
+const C = {slate:'#8B92A0',blue:'#3E7BC6',violet:'#8465C4',green:'#3E9E6B',amber:'#E8952B',red:'#D2543F'};
+const tint = (hex,a) => { const n = parseInt(hex.slice(1),16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; };
+const h = React.createElement;
+const ico = (parts, size) => h('svg', { width: size || 16, height: size || 16, viewBox:'0 0 24 24', fill:'none',
+  stroke:'currentColor', strokeWidth:1.8, strokeLinecap:'round', strokeLinejoin:'round', style:{display:'block'} },
+  parts.map((p,i) => h(p[0], Object.assign({ key:i }, p[1]))));
+const R = (x,y,w,hh,r) => ['rect',{x,y,width:w,height:hh,rx:r||2}];
+const L = (x1,y1,x2,y2) => ['line',{x1,y1,x2,y2}];
+const Ci = (cx,cy,r) => ['circle',{cx,cy,r}];
+const P = d => ['path',{d}];
+const ICONS = {
+  fortschritt: [L(4,18,20,18),R(6,10,3.5,8,1.2),R(11.5,6,3.5,12,1.2),R(17,13,3.5,5,1.2)],
+  angebot: [R(5,3,14,18,2.5),L(9,9,15,9),L(9,13,15,13),P('M9.5 17.5 11 19l3.5-3.5')],
+  dokumente: [P('M8 3h6l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'),P('M14 3v4h4'),L(9.5,13,15,13),L(9.5,16.5,13.5,16.5)],
+  anliegen: [P('M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 13.5z'),L(12,7.5,12,11),L(12,13,12,13.2)],
+  ertrag: [P('M4 17 9 11l3.5 3.5L20 6'),L(15,6,20,6),L(20,6,20,11)],
+  plus: [L(12,5,12,19),L(5,12,19,12)],
+  telefon: [P('M6 3.5h3l1.5 4-2 1.5a10.5 10.5 0 0 0 5 5l1.5-2 4 1.5v3A2.5 2.5 0 0 1 16.5 19C10.7 18.4 5.6 13.3 5 7.5A2.5 2.5 0 0 1 6 3.5z')],
+  upload: [P('M12 16V5'),P('M7.5 9.5 12 5l4.5 4.5'),P('M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16')]
+};
+
+const S = {
+  fortschritt: ['Fortschritt', 'Projekt A-2026-0412 · seit 21.07.2026 in Umsetzung', 'Frage an das Team'],
+  angebot: ['Ihr Angebot', 'AN-2026-0177 · gültig bis 28.08.2026', 'Rückfrage stellen'],
+  dokumente: ['Dokumente und Bilder', 'Alles zu Ihrem Projekt an einem Ort', 'Bilder hochladen'],
+  anliegen: ['Anliegen', 'Beschwerde, Frage oder Störung melden', 'Neues Anliegen'],
+  ertrag: ['Ertrag', 'Prognose und Wirtschaftlichkeit Ihrer Anlage', 'Bericht herunterladen']
+};
+
+class Component extends DCLogic {
+  state = { screen: 'fortschritt' };
+
+  renderVals() {
+    const s = this.state;
+    const [title, sub, primary] = S[s.screen];
+    const items = [['Fortschritt','fortschritt','FS',''],['Ihr Angebot','angebot','AN','1'],['Dokumente','dokumente','DK','6'],['Anliegen','anliegen','AL','2'],['Ertrag','ertrag','ER','']];
+
+    return {
+      title, sub, primary,
+      iconPlus: ico(ICONS.plus, 16), iconTelefon: ico(ICONS.telefon, 15), iconUpload: ico(ICONS.upload, 16),
+      nav: items.map(([label,key,icon,badge]) => {
+        const on = s.screen === key;
+        return { label, icon, badge,
+          iconEl: ico(ICONS[key] || ICONS.fortschritt),
+          bg: on ? 'var(--sunk)' : 'transparent', fg: on ? 'var(--t1)' : 'var(--t2)', fw: on ? '600' : '400',
+          iconBg: on ? C.amber : 'var(--panel)', iconFg: on ? '#fff' : 'var(--t3)',
+          go: () => this.setState({ screen: key }) };
+      }),
+      isFortschritt: s.screen === 'fortschritt', isAngebot: s.screen === 'angebot',
+      isDokumente: s.screen === 'dokumente', isAnliegen: s.screen === 'anliegen', isErtrag: s.screen === 'ertrag',
+
+      phasen: [
+        ['Angebot angenommen','21.07.', 'done'], ['Material bestellt','23.07.','done'],
+        ['Termin fixiert','25.07.','done'], ['Montage läuft','29.07.','now'],
+        ['Netzanmeldung','06.08.','open'], ['Abnahme','12.08.','open']
+      ].map(([label,datum,state]) => ({
+        label, datum,
+        bar: state === 'done' ? C.green : (state === 'now' ? 'linear-gradient(90deg,#F2A73F,#C97918)' : 'var(--sunk)'),
+        fg: state === 'open' ? 'var(--t3)' : 'var(--t1)', fw: state === 'now' ? '600' : '500'
+      })),
+      updates: [
+        { title:'Module und Wechselrichter sind montiert', body:'24 Module auf dem Süddach, Fronius GEN24 im Keller gesetzt. Morgen folgt der Speicher.', when:'heute 14:12 · Markus Grabner', color:C.amber },
+        { title:'Team ist auf der Baustelle', body:'Markus Grabner und Lukas Berger arbeiten seit 07:40 bei Ihnen.', when:'heute 07:40', color:C.blue },
+        { title:'Netzanmeldung eingereicht', body:'Netz Burgenland hat Ihre Anmeldung erhalten, Zählpunkt AT0030…4711.', when:'28.07. 16:20', color:C.violet },
+        { title:'Material geliefert', body:'Alle Komponenten sind im Lager und für Ihr Projekt reserviert.', when:'23.07. 09:20', color:C.green },
+        { title:'Angebot angenommen', body:'Vielen Dank. Ihr Auftrag A-2026-0412 wurde automatisch angelegt.', when:'21.07. 18:22', color:C.green }
+      ],
+      anlage: [
+        { label:'Leistung', value:'9,84 kWp' }, { label:'Speicher', value:'10 kWh' },
+        { label:'Module', value:'24 Stück' }, { label:'Prognose', value:'9.850 kWh' }
+      ],
+
+      angebotPositionen: [
+        { t:'41× JA Solar 445 W Bifazial Glas-Glas', v:'6.888,00 €' },
+        { t:'1× Fronius Symo GEN24 10.0 Plus', v:'2.980,00 €' },
+        { t:'1× BYD Battery-Box Premium HVS 20.5', v:'10.900,00 €' },
+        { t:'Unterkonstruktion K2 Dome 6, 112 lfm', v:'3.808,00 €' },
+        { t:'Elektroinstallation und AC-Verteilung', v:'1.864,00 €' },
+        { t:'Montage und Inbetriebnahme, 64 h', v:'4.352,00 €' },
+        { t:'Gerüst Ostseite', v:'1.180,00 €' }
+      ],
+      planKpis: [
+        { label:'Leistung', value:'18,2 kWp' }, { label:'Ertrag', value:'19.400 kWh' }, { label:'CO₂', value:'8,1 t/Jahr' }
+      ],
+      nachAnnahme: [
+        { n:'1', t:'Auftrag wird angelegt', b:'Sie erhalten die Bestätigung mit Auftragsnummer per Mail.' },
+        { n:'2', t:'Material wird bestellt', b:'Lieferzeit aktuell 4 bis 10 Tage je Komponente.' },
+        { n:'3', t:'Termin fixieren', b:'Michael Bruckner ruft innerhalb von 2 Werktagen für den Montagetermin an.' }
+      ],
+
+      dokumente: [
+        { typ:'PDF', name:'Angebot AN-2026-0161', meta:'21.07.2026 · 21.480,00 €', status:'angenommen', bg:tint(C.green,0.13), fg:C.green },
+        { typ:'PDF', name:'Auftragsbestätigung A-2026-0412', meta:'21.07.2026', status:'gelesen', bg:'var(--panel)', fg:'var(--t2)' },
+        { typ:'PDF', name:'Lieferschein LS-2026-0344', meta:'29.07.2026 · 5 Positionen', status:'neu', bg:tint(C.blue,0.13), fg:C.blue },
+        { typ:'PDF', name:'Netzanmeldung Netz Burgenland', meta:'28.07.2026', status:'läuft', bg:tint(C.violet,0.13), fg:C.violet },
+        { typ:'PDF', name:'Abnahmeprotokoll', meta:'wird nach Abnahme erstellt', status:'offen', bg:'var(--panel)', fg:'var(--t3)' },
+        { typ:'PDF', name:'Schlussrechnung', meta:'nach Inbetriebnahme', status:'offen', bg:'var(--panel)', fg:'var(--t3)' }
+      ],
+      uploads: ['Zählerkasten','Dachboden','Kabelweg Keller','Display Fehler','Süddach','Speicherplatz'],
+
+      anliegenArten: [
+        { label:'Störung', meta:'Anlage läuft nicht', border:C.amber, bg:tint(C.amber,0.08), fw:'600' },
+        { label:'Frage zum Projekt', meta:'Termine, Ablauf', border:'var(--line)', bg:'transparent', fw:'500' },
+        { label:'Beschwerde', meta:'Etwas ist schiefgelaufen', border:'var(--line)', bg:'transparent', fw:'500' },
+        { label:'Rechnung', meta:'Zahlung, Förderung', border:'var(--line)', bg:'transparent', fw:'500' }
+      ],
+      tickets: [
+        { nr:'S-2026-0074', status:'in Bearbeitung', bg:tint(C.amber,0.14), fg:'#B4690E', when:'vor 4 h',
+          title:'Wechselrichter Fehler 301', body:'Speicher lädt nur bis 60 Prozent, Display zeigt Fehler 301.',
+          antwort:'Fatih Yıldız liest die Anlage aus der Ferne aus, Rückmeldung heute bis 17:00.' },
+        { nr:'S-2026-0069', status:'geplant', bg:tint(C.blue,0.13), fg:C.blue, when:'24.07.',
+          title:'Zusätzliche Steckdose Garage', body:'Wunsch nach Außensteckdose neben der Wallbox.',
+          antwort:'Wird beim Zählerwechsel am 06.08. mit erledigt, Aufwand 1,5 h.' },
+        { nr:'S-2026-0058', status:'erledigt', bg:tint(C.green,0.13), fg:C.green, when:'12.07.',
+          title:'App-Zugang Fronius', body:'Zugang zur Fronius Solarweb App fehlte.',
+          antwort:'Zugang eingerichtet und per Mail zugesendet, Kunde hat bestätigt.' }
+      ],
+      kontakte: [
+        { ini:'MB', color:C.blue, name:'Michael Bruckner', rolle:'Bauleitung, Ihr Projekt', tel:'0664 12 34 567' },
+        { ini:'SN', color:C.amber, name:'Sandra Novak', rolle:'Büro, Rechnung und Förderung', tel:'02612 4455' },
+        { ini:'FY', color:C.red, name:'Fatih Yıldız', rolle:'Service und Speichertechnik', tel:'0664 98 76 543' }
+      ],
+
+      ertrag: [
+        ['Jän',280],['Feb',420],['Mär',720],['Apr',980],['Mai',1180],['Jun',1240],
+        ['Jul',1290],['Aug',1150],['Sep',880],['Okt',600],['Nov',330],['Dez',230]
+      ].map(([m,v]) => ({ m, h: Math.round(v/1290*180) + 'px',
+        fill: v > 1100 ? 'linear-gradient(180deg,#F2A73F,#C97918)' : tint(C.amber,0.28) })),
+      foerderung: [
+        { label:'OeMAG Investitionsförderung', status:'beantragt', color:C.amber, bg:tint(C.amber,0.14), fg:'#B4690E' },
+        { label:'Netzanmeldung Netz Burgenland', status:'in Prüfung', color:C.violet, bg:tint(C.violet,0.13), fg:C.violet },
+        { label:'Zählpunkt und Smart Meter', status:'Termin 06.08.', color:C.blue, bg:tint(C.blue,0.13), fg:C.blue }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>
