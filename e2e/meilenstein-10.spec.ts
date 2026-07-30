@@ -20,15 +20,39 @@ async function userId(email: string): Promise<string> {
   return data!.id as string;
 }
 
+/*
+ * Vollständig aufräumen, auch was aus einem abgebrochenen Lauf stammt.
+ *
+ * Wichtig: ein Ersatzeintrag erbt die Notiz des Originals. Nach der Notiz
+ * allein zu löschen reicht deshalb nicht — ein Ersatz einer Seed-Buchung
+ * bliebe stehen und würde die Iststunden des Auftrags dauerhaft verschieben.
+ * Genau das ist einmal passiert und hat den Auftragstest aus Meilenstein 1
+ * kippen lassen.
+ */
 async function aufraeumen() {
   const db = admin();
-  await db.from("time_correction").delete().like("reason", "E2E-M10%");
+  await db.from("time_correction").delete().eq("company_id", COMPANY_A);
   await db.from("absence").delete().like("note", "E2E-M10%");
   await db
     .from("absence")
     .delete()
     .eq("company_id", COMPANY_A)
     .eq("kind", "sick");
+
+  const { data: ersatz } = await db
+    .from("time_entry")
+    .select("id, replaces_id")
+    .eq("company_id", COMPANY_A)
+    .not("replaces_id", "is", null);
+
+  for (const e of ersatz ?? []) {
+    await db.from("time_entry").delete().eq("id", e.id);
+    await db
+      .from("time_entry")
+      .update({ status: "booked" })
+      .eq("id", e.replaces_id);
+  }
+
   await db.from("time_entry").delete().like("note", "E2E-M10%");
 }
 
@@ -165,10 +189,13 @@ test("Eine genehmigte Korrektur überschreibt nicht, sondern ersetzt", async ({
 
   const { data: korrektur } = await db
     .from("time_correction")
-    .select("id, status")
+    .select("id, status, time_entry_id")
     .like("reason", "E2E-M10%")
     .single();
   expect(korrektur!.status).toBe("requested");
+  // Der Antrag muss an genau dieser Buchung hängen — sonst korrigiert der
+  // Test unbemerkt eine Seed-Buchung.
+  expect(korrektur!.time_entry_id).toBe(original!.id);
 
   // Genehmigen — die Bauleitung darf zeiterfassung schreiben.
   await page.reload();
