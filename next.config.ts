@@ -1,3 +1,4 @@
+import withSerwistInit from "@serwist/next";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -40,4 +41,15 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/*
+ * ServiceWorker nur im Produktionsbuild. Im Entwicklungsmodus würde er
+ * jede Codeänderung hinter einem Cache verstecken.
+ */
+const withSerwist = withSerwistInit({
+  swSrc: "app/sw/sw.ts",
+  swDest: "public/sw.js",
+  disable: process.env.NODE_ENV !== "production",
+  reloadOnOnline: true,
+});
+
+export default withSerwist(nextConfig);

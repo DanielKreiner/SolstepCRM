@@ -42,7 +42,8 @@
     ".next-e2e/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "design"
+    "app/sw",
+    "design",
+    "node_modules"
   ]
 }

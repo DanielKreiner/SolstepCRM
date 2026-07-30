@@ -1,0 +1,11 @@
+{
+  "name": "Montage",
+  "short_name": "Montage",
+  "start_url": "/m/heute",
+  "scope": "/m/",
+  "display": "standalone",
+  "background_color": "#EAE6E0",
+  "theme_color": "#EAE6E0",
+  "orientation": "portrait",
+  "lang": "de-AT"
+}

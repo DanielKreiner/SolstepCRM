@@ -61,3 +61,5 @@ design/support.js
 /e2e-results/
 /test-results/
 /playwright-report/
+/public/sw*.js
+/public/swe-worker*.js

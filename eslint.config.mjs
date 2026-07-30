@@ -22,6 +22,10 @@ const eslintConfig = [
       ".next-e2e/**",
       "test-results/**",
       "playwright-report/**",
+      // Vom ServiceWorker-Build erzeugt, nicht handgeschrieben.
+      "public/sw.js",
+      "public/swe-worker*.js",
+      "app/sw/**",
       "design/**", // Mockups, read-only Referenz
       "supabase/**",
       "next-env.d.ts",
