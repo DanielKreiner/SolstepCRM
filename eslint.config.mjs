@@ -74,6 +74,14 @@ const eslintConfig = [
        * ein. Wer diese Datei ändert, ändert eine Sicherheitsgrenze.
        */
       "lib/portal/**",
+      /*
+       * Die gemeinsame Klammer der Cron-Handler. Sie prüft CRON_SECRET und
+       * die Idempotenz und reicht den Service-Role-Client an die Arbeit
+       * durch — Crons laufen über alle Mandanten, ohne Session, an der RLS
+       * greifen könnte. Ohne diese Datei müsste jeder Handler den Client
+       * selbst holen, und einer davon würde die Prüfung vergessen.
+       */
+      "lib/cron.ts",
       "lib/supabase/admin.ts",
       "scripts/**",
       "tests/**",
