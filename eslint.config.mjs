@@ -82,6 +82,13 @@ const eslintConfig = [
        * selbst holen, und einer davon würde die Prüfung vergessen.
        */
       "lib/cron.ts",
+      /*
+       * Der Mandantenexport. Er MUSS vollständig sein — er enthält auch
+       * Personalakten und Rechnungen, die der auslösende Nutzer im Alltag
+       * nicht alle sehen darf. Die Sicherung sitzt deshalb nicht hier,
+       * sondern in der Route: auslösen darf ihn nur die Geschäftsführung.
+       */
+      "lib/export/**",
       "lib/supabase/admin.ts",
       "scripts/**",
       "tests/**",

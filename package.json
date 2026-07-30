@@ -35,6 +35,7 @@
     "@types/nodemailer": "^8.0.1",
     "date-fns": "4.4.0",
     "date-fns-tz": "3.2.0",
+    "fflate": "^0.8.3",
     "idb": "^8.0.3",
     "imapflow": "^1.6.5",
     "next": "15.5.22",

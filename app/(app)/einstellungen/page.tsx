@@ -131,6 +131,35 @@ export default async function EinstellungenPage() {
         </p>
       </section>
 
+      <section className="mb-6 rounded-[20px] bg-surface p-5 shadow-soft">
+        <h2 className="text-[15px] font-semibold">Daten mitnehmen</h2>
+        <p className="mt-1 mb-3 text-[12.5px] text-muted">
+          Vollständiger Export als ZIP: eine CSV je Tabelle plus alle
+          hinterlegten Dateien. Kein eigenes Format — Steuerberater und
+          Nachfolgeanbieter können beide damit umgehen.
+        </p>
+
+        {me.role === "gf" ? (
+          <a
+            href="/api/export/tenant"
+            className="inline-flex min-h-[44px] items-center rounded-pill border border-line bg-surface px-5 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+          >
+            Export herunterladen
+          </a>
+        ) : (
+          <p className="text-[13px] text-muted">
+            Den vollständigen Export darf nur die Geschäftsführung auslösen —
+            er enthält auch Personal- und Rechnungsdaten.
+          </p>
+        )}
+
+        <p className="mt-3 text-[12px] text-faint">
+          Nicht enthalten: die Zugangsdaten des Postfachs und die Tokens der
+          Kundenportale. Beides sind Geheimnisse, die nicht in eine Datei
+          gehören, die weitergereicht wird.
+        </p>
+      </section>
+
       <section className="rounded-[20px] bg-surface p-5 shadow-soft">
         <h2 className="text-[15px] font-semibold">Phasen</h2>
         <p className="mt-1 mb-4 text-[12.5px] text-muted">

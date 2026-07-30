@@ -27,6 +27,11 @@ export function password(): string {
 
 export async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");
+  // Schon angemeldet? Dann leitet /login weiter und es gibt kein Formular.
+  if (!page.url().includes("/login")) {
+    await page.context().clearCookies();
+    await page.goto("/login");
+  }
   await page.getByLabel("E-Mail").fill(email);
   await page.getByLabel("Passwort").fill(password());
   await page.getByRole("button", { name: "Anmelden" }).click();
