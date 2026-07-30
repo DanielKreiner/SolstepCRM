@@ -6,11 +6,29 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PhasePill } from "@/components/ui/PhasePill";
 import { Pill } from "@/components/ui/Pill";
 import { Stat } from "@/components/ui/Stat";
-import { date, eur, eurShort } from "@/lib/format";
+import { date, dateTime, eur, eurShort } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Kunde" };
+
+const AKTIVITAET_LABEL: Record<string, string> = {
+  quote: "Angebot",
+  portal: "Kundenportal",
+  mail: "E-Mail",
+  call: "Telefonat",
+  note: "Notiz",
+  system: "System",
+};
+
+const AKTIVITAET_FARBE: Record<string, string> = {
+  quote: "var(--s-warn)",
+  portal: "var(--s-waiting)",
+  mail: "var(--s-doing)",
+  call: "var(--s-doing)",
+  note: "var(--s-new)",
+  system: "var(--s-done)",
+};
 
 type JobRow = {
   id: string;
@@ -40,13 +58,21 @@ export default async function KundePage({
 
   if (!customer) notFound();
 
-  const { data: jobs } = await supabase
-    .from("job")
-    .select(
-      "id, number, scheduled_from, value_net, phase:phase_id ( label, system_key )",
-    )
-    .eq("customer_id", id)
-    .order("number", { ascending: false });
+  const [{ data: jobs }, { data: aktivitaeten }] = await Promise.all([
+    supabase
+      .from("job")
+      .select(
+        "id, number, scheduled_from, value_net, phase:phase_id ( label, system_key )",
+      )
+      .eq("customer_id", id)
+      .order("number", { ascending: false }),
+    supabase
+      .from("contact_activity")
+      .select("id, kind, body, created_at, meta_json")
+      .eq("customer_id", id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
 
   const rows = (jobs ?? []) as unknown as JobRow[];
   const volumen = rows.reduce((s, j) => s + Number(j.value_net), 0);
@@ -158,17 +184,56 @@ export default async function KundePage({
           ) : null}
         </div>
 
-        <section>
-          <h2 className="mb-2 text-[15px] font-semibold">Aufträge</h2>
-          <DataTable
-            columns={columns}
-            rows={rows}
-            getKey={(j) => j.id}
-            hrefFor={(j) => `/auftraege/${j.id}`}
-            empty="Für diesen Kunden gibt es noch keinen Auftrag."
-            compact
-          />
-        </section>
+        <div className="flex flex-col gap-4">
+          <section>
+            <h2 className="mb-2 text-[15px] font-semibold">Aufträge</h2>
+            <DataTable
+              columns={columns}
+              rows={rows}
+              getKey={(j) => j.id}
+              hrefFor={(j) => `/auftraege/${j.id}`}
+              empty="Für diesen Kunden gibt es noch keinen Auftrag."
+              compact
+            />
+          </section>
+
+          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
+            <h2 className="mb-1 text-[15px] font-semibold">
+              Aktivitäten{" "}
+              <span className="num font-normal text-muted">
+                ({(aktivitaeten ?? []).length})
+              </span>
+            </h2>
+            <p className="mb-3 text-[12px] text-faint">
+              Laufen automatisch ein: Angebotsstatus, Kundenportal, Mail und
+              Phasenwechsel.
+            </p>
+
+            {(aktivitaeten ?? []).length === 0 ? (
+              <p className="text-[13px] text-muted">Noch keine Aktivität.</p>
+            ) : (
+              <ol className="flex flex-col gap-[10px]">
+                {(aktivitaeten ?? []).map((a) => (
+                  <li key={a.id as string} className="flex gap-3">
+                    <span
+                      aria-hidden
+                      className="mt-[6px] h-2 w-2 shrink-0 rounded-pill"
+                      style={{ background: AKTIVITAET_FARBE[a.kind as string] ?? "var(--s-new)" }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px]">{a.body as string}</p>
+                      <p className="num text-[11.5px] text-faint">
+                        {AKTIVITAET_LABEL[a.kind as string] ?? (a.kind as string)}
+                        {" · "}
+                        {dateTime(a.created_at as string)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </div>
       </div>
     </>
   );
