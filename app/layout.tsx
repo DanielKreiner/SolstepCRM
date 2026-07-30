@@ -46,7 +46,19 @@ export default function RootLayout({
       lang="de"
       data-theme="light"
       className={`${interTight.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
     >
+      <head>
+        {/*
+          Theme vor dem ersten Paint setzen. Ohne das blitzt bei jedem
+          Seitenaufruf kurz die helle Darstellung auf, bevor React übernimmt.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("theme");if(t==="dark")document.documentElement.dataset.theme="dark"}catch(e){}`,
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

@@ -19,6 +19,9 @@ const eslintConfig = [
       "node_modules/**",
       ".next/**",
       ".next-build/**",
+      ".next-e2e/**",
+      "test-results/**",
+      "playwright-report/**",
       "design/**", // Mockups, read-only Referenz
       "supabase/**",
       "next-env.d.ts",

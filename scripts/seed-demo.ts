@@ -11,7 +11,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const COMPANY_A = "11111111-1111-4111-8111-111111111111";
 const COMPANY_B = "22222222-2222-4222-8222-222222222222";
@@ -179,6 +179,122 @@ async function main() {
       ? "Passwort: aus SEED_PASSWORD."
       : `Passwort für alle: ${password}\n(einmalig erzeugt — notieren oder SEED_PASSWORD setzen)`,
   );
+
+  await seedMovements(admin);
+}
+
+/*
+ * Zeiten und Materialbuchungen.
+ *
+ * Warum hier und nicht in seed.sql: beides hängt an app_user, und app_user
+ * entsteht erst durch die Nutzeranlage oben. In einer eigenen SQL-Datei wäre
+ * die Reihenfolge nicht erzwingbar — der Seed würde nach einem db reset
+ * stillschweigend null Zeilen schreiben.
+ */
+async function seedMovements(admin: SupabaseClient) {
+  const day = (offset: number, hhmm: string) => {
+    const d = new Date();
+    d.setDate(d.getDate() - offset);
+    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return viennaInstant(local, hhmm);
+  };
+
+  const [{ data: users }, { data: jobs }, { data: articles }] = await Promise.all([
+    admin.from("app_user").select("id, email").eq("company_id", COMPANY_A),
+    admin.from("job").select("id, number").eq("company_id", COMPANY_A),
+    admin.from("article").select("id, sku").eq("company_id", COMPANY_A),
+  ]);
+
+  const byMail = new Map((users ?? []).map((u) => [u.email as string, u.id as string]));
+  const byNumber = new Map((jobs ?? []).map((j) => [j.number as string, j.id as string]));
+  const bySku = new Map((articles ?? []).map((a) => [a.sku as string, a.id as string]));
+
+  // Idempotent: eigene Demodaten zuerst weg. audit_log bleibt — append-only.
+  await admin.from("stock_move").delete().eq("company_id", COMPANY_A);
+  await admin.from("time_entry").delete().eq("company_id", COMPANY_A);
+
+  const M = "monteur@hofstaetter.example.com";
+  const B = "bauleitung@hofstaetter.example.com";
+  const L = "lager@hofstaetter.example.com";
+
+  const times: [number, string, string, string, string, string, string | null][] = [
+    [0, "07:00", "12:00", "A-2026-0041", M, "work", "Module gesetzt, Reihe 1 bis 3"],
+    [0, "12:00", "12:30", "A-2026-0041", M, "break", null],
+    [0, "12:30", "16:30", "A-2026-0041", M, "work", "Verkabelung DC"],
+    [0, "06:30", "07:00", "A-2026-0041", M, "travel", "Anfahrt Linz"],
+    [0, "08:00", "15:00", "A-2026-0041", B, "work", "Einweisung, Abnahme Unterkonstruktion"],
+    [1, "07:00", "16:00", "A-2026-0041", M, "work", "Unterkonstruktion montiert"],
+    [1, "07:30", "15:30", "A-2026-0042", B, "work", "Aufmaß und Gerüstplanung"],
+    [2, "07:00", "15:30", "A-2026-0042", M, "work", "Vorbereitung Dachhaken"],
+    [3, "08:00", "14:00", "A-2026-0038", M, "work", "Restarbeiten und Übergabe"],
+    [3, "09:00", "12:00", "A-2026-0038", B, "work", "Abnahme mit Kunde"],
+    [4, "07:00", "16:00", "A-2026-0038", M, "work", "Wechselrichter gesetzt, AC angeschlossen"],
+  ];
+
+  const timeRows = times
+    .filter(([, , , nr, mail]) => byNumber.has(nr) && byMail.has(mail))
+    .map(([off, von, bis, nr, mail, kind, note]) => ({
+      company_id: COMPANY_A,
+      user_id: byMail.get(mail)!,
+      job_id: byNumber.get(nr)!,
+      kind,
+      started_at: day(off, von),
+      ended_at: day(off, bis),
+      note,
+      status: "booked",
+    }));
+
+  if (timeRows.length) {
+    const { error } = await admin.from("time_entry").insert(timeRows);
+    if (error) throw error;
+  }
+
+  // Achtung: der Trigger apply_stock_move schreibt article.stock fort.
+  // Die Bestände in seed.sql sind die Werte VOR diesen Buchungen.
+  const moves: [string, string | null, string, number, string, string | null][] = [
+    ["MOD-JAS-440", "A-2026-0041", M, 24, "out", "Reihe 1 bis 3"],
+    ["UK-K2-SD", "A-2026-0041", M, 36, "out", "Schienen Süddach"],
+    ["KAB-SOL-6", "A-2026-0041", M, 180, "out", "DC-Strang"],
+    ["WR-FRO-10", "A-2026-0041", M, 1, "out", null],
+    ["UK-K2-SD", "A-2026-0041", M, 4, "return", "Rest zurück ins Lager"],
+    ["MOD-JAS-440", "A-2026-0038", M, 18, "out", null],
+    ["WR-FRO-10", "A-2026-0038", M, 1, "out", null],
+    ["SPE-BYD-10", "A-2026-0038", M, 1, "out", "Speicher Keller"],
+    ["KAB-SOL-6", "A-2026-0038", M, 140, "out", null],
+    ["MOD-JAS-440", null, L, 60, "goods_in", "Lieferung JA Solar"],
+  ];
+
+  const moveRows = moves
+    .filter(([sku, nr, mail]) => bySku.has(sku) && byMail.has(mail) && (nr === null || byNumber.has(nr)))
+    .map(([sku, nr, mail, qty, kind, note]) => ({
+      company_id: COMPANY_A,
+      article_id: bySku.get(sku)!,
+      job_id: nr ? byNumber.get(nr)! : null,
+      user_id: byMail.get(mail)!,
+      qty,
+      kind,
+      note,
+    }));
+
+  if (moveRows.length) {
+    // Einzeln, damit der Trigger je Zeile feuert und die Reihenfolge stimmt.
+    for (const row of moveRows) {
+      const { error } = await admin.from("stock_move").insert(row);
+      if (error) throw error;
+    }
+  }
+
+  console.log(`${timeRows.length} Zeitbuchungen, ${moveRows.length} Lagerbewegungen.`);
+}
+
+/** Wiener Wanduhrzeit als UTC-Instant, ohne date-fns-tz im Skript. */
+function viennaInstant(day: string, hhmm: string): string {
+  const guess = new Date(`${day}T${hhmm}:00Z`);
+  const offsetMin =
+    (new Date(guess.toLocaleString("en-US", { timeZone: "Europe/Vienna" })).getTime() -
+      new Date(guess.toLocaleString("en-US", { timeZone: "UTC" })).getTime()) /
+    60000;
+  return new Date(guess.getTime() - offsetMin * 60000).toISOString();
 }
 
 main().catch((e: unknown) => {

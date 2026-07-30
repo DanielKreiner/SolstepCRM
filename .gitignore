@@ -56,3 +56,8 @@ design/support.js
 
 # Build-Verzeichnis, getrennt vom Dev-Server
 /.next-build/
+
+/.next-e2e/
+/e2e-results/
+/test-results/
+/playwright-report/

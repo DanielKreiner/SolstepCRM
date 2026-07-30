@@ -19,7 +19,9 @@
     "db:reset": "supabase db reset",
     "db:diff": "supabase db diff",
     "seed:db": "supabase db push --include-seed",
-    "seed:users": "tsx scripts/seed-users.ts"
+    "seed:users": "tsx scripts/seed-demo.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "seed": "pnpm seed:db && pnpm seed:demo"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
