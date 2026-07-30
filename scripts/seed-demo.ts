@@ -484,6 +484,71 @@ async function seedProcurement(admin: SupabaseClient) {
   console.log(
     `${supRows?.length ?? 0} Lieferanten, ${linkRows.length} Preiszuordnungen, ${resRows.length} Reservierungen.`,
   );
+
+  await seedDispo(admin);
+}
+
+/*
+ * Einsatzplanung der laufenden Woche.
+ *
+ * Bewusst mit einem eingebauten Verstoß: am Dienstag endet der Einsatz um
+ * 20:00, am Mittwoch beginnt der nächste um 05:00 — neun Stunden Ruhezeit
+ * statt elf. Ohne so einen Fall kann man nicht zeigen, dass die
+ * Konfliktprüfung die Veröffentlichung tatsächlich blockiert.
+ */
+async function seedDispo(admin: SupabaseClient) {
+  const [{ data: users }, { data: jobs }] = await Promise.all([
+    admin.from("app_user").select("id, email").eq("company_id", COMPANY_A),
+    admin.from("job").select("id, number").eq("company_id", COMPANY_A),
+  ]);
+
+  const byMail = new Map((users ?? []).map((u) => [u.email as string, u.id as string]));
+  const byNumber = new Map((jobs ?? []).map((j) => [j.number as string, j.id as string]));
+
+  await admin.from("job_appointment").delete().eq("company_id", COMPANY_A);
+  await admin.from("roster_publication").delete().eq("company_id", COMPANY_A);
+
+  // Montag der laufenden Woche in Wiener Zeit.
+  const heute = new Date();
+  const dow = (heute.getDay() + 6) % 7;
+  const montag = new Date(heute);
+  montag.setDate(heute.getDate() - dow);
+  const tag = (offset: number) => {
+    const d = new Date(montag);
+    d.setDate(montag.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  const M = "monteur@hofstaetter.example.com";
+  const B = "bauleitung@hofstaetter.example.com";
+
+  const termine: [number, string, string, string, string][] = [
+    [0, "07:00", "16:00", "A-2026-0041", M],
+    [0, "08:00", "15:00", "A-2026-0041", B],
+    [1, "07:00", "20:00", "A-2026-0041", M],
+    // Ruhezeitverstoß: 20:00 -> 05:00 sind neun Stunden.
+    [2, "05:00", "14:00", "A-2026-0042", M],
+    [3, "07:00", "16:00", "A-2026-0042", M],
+    [4, "07:00", "15:00", "A-2026-0042", B],
+  ];
+
+  const rows = termine
+    .filter(([, , , nr, mail]) => byNumber.has(nr) && byMail.has(mail))
+    .map(([offset, von, bis, nr, mail]) => ({
+      company_id: COMPANY_A,
+      job_id: byNumber.get(nr)!,
+      user_id: byMail.get(mail)!,
+      starts_at: viennaInstant(tag(offset), von),
+      ends_at: viennaInstant(tag(offset), bis),
+      title: null,
+    }));
+
+  if (rows.length) {
+    const { error } = await admin.from("job_appointment").insert(rows);
+    if (error) throw error;
+  }
+
+  console.log(`${rows.length} Einsätze geplant (mit einem Ruhezeitverstoß).`);
 }
 
 /** Wiener Wanduhrzeit als UTC-Instant, ohne date-fns-tz im Skript. */
