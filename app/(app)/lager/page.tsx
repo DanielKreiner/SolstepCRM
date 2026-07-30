@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
@@ -154,7 +155,14 @@ export default async function LagerPage() {
         title="Lager"
         subtitle={`${rows.length} aktive Artikel · Preise exkl. USt.`}
         actions={
-          unterMindest.length > 0 ? (
+          <>
+            <Link
+              href="/lager/bestellungen"
+              className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
+            >
+              Bestellungen
+            </Link>
+            {unterMindest.length > 0 ? (
             <div className="flex items-center gap-3 rounded-pill bg-surface px-4 py-[9px] shadow-soft">
               <span className="h-[9px] w-[9px] rounded-pill bg-s-crit" />
               <span className="text-[13px] font-medium">
@@ -162,8 +170,9 @@ export default async function LagerPage() {
                 {unterMindest.length === 1 ? "Artikel" : "Artikel"} unter
                 Mindestbestand
               </span>
-            </div>
-          ) : null
+              </div>
+            ) : null}
+          </>
         }
       />
 

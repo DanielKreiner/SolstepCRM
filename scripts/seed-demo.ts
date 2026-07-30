@@ -392,6 +392,98 @@ async function seedPipelines(admin: SupabaseClient, byMail: Map<string, string>)
   console.log(
     `${quoteRows.length} Angebote, ${ticketRows.length} Servicetickets, 1 Postfach.`,
   );
+
+  await seedProcurement(admin);
+}
+
+/*
+ * Lieferanten, Artikel-Lieferanten-Zuordnung und Materialreservierungen.
+ * Ohne Reservierungen hat der Bestellvorschlag keinen Auftragsbedarf und
+ * würde nur den Mindestbestand kennen — die Hälfte der Logik bliebe blind.
+ */
+async function seedProcurement(admin: SupabaseClient) {
+  const [{ data: articles }, { data: jobs }] = await Promise.all([
+    admin.from("article").select("id, sku").eq("company_id", COMPANY_A),
+    admin.from("job").select("id, number").eq("company_id", COMPANY_A),
+  ]);
+
+  const bySku = new Map((articles ?? []).map((a) => [a.sku as string, a.id as string]));
+  const byNumber = new Map((jobs ?? []).map((j) => [j.number as string, j.id as string]));
+
+  await admin.from("stock_reservation").delete().eq("company_id", COMPANY_A);
+  await admin.from("purchase_order").delete().eq("company_id", COMPANY_A);
+  await admin.from("article_supplier").delete().eq("company_id", COMPANY_A);
+  await admin.from("supplier").delete().eq("company_id", COMPANY_A);
+
+  const suppliers = [
+    ["Solarwerk Großhandel GmbH", "einkauf@solarwerk.example.com", "K-88213", true],
+    ["Elektro Union Handels KG", "bestellung@elektrounion.example.com", "44012", false],
+  ] as const;
+
+  const { data: supRows, error: supErr } = await admin
+    .from("supplier")
+    .insert(
+      suppliers.map(([name, email, kundennr, rahmen]) => ({
+        company_id: COMPANY_A,
+        name,
+        email,
+        customer_number: kundennr,
+        framework_contract: rahmen,
+      })),
+    )
+    .select("id, name");
+  if (supErr) throw supErr;
+
+  const supByName = new Map((supRows ?? []).map((s) => [s.name as string, s.id as string]));
+  const solarwerk = supByName.get("Solarwerk Großhandel GmbH")!;
+  const elektro = supByName.get("Elektro Union Handels KG")!;
+
+  const links: [string, string, number, number][] = [
+    ["MOD-JAS-440", solarwerk, 78.4, 10],
+    ["WR-FRO-10", solarwerk, 1980, 14],
+    ["SPE-BYD-10", solarwerk, 4120, 21],
+    ["UK-K2-SD", solarwerk, 18.9, 7],
+    ["KAB-SOL-6", elektro, 0.92, 4],
+    // Zweitlieferant, teurer: der Vorschlag muss den günstigeren wählen.
+    ["MOD-JAS-440", elektro, 82.5, 5],
+  ];
+
+  const linkRows = links
+    .filter(([sku]) => bySku.has(sku))
+    .map(([sku, supplierId, price, lead]) => ({
+      company_id: COMPANY_A,
+      article_id: bySku.get(sku)!,
+      supplier_id: supplierId,
+      price,
+      lead_days: lead,
+      framework_contract: supplierId === solarwerk,
+    }));
+
+  const { error: linkErr } = await admin.from("article_supplier").insert(linkRows);
+  if (linkErr) throw linkErr;
+
+  // Materialbedarf des terminierten Auftrags A-2026-0042.
+  const reservierungen: [string, string, number][] = [
+    ["MOD-JAS-440", "A-2026-0042", 420],
+    ["WR-FRO-10", "A-2026-0042", 12],
+    ["UK-K2-SD", "A-2026-0042", 560],
+  ];
+
+  const resRows = reservierungen
+    .filter(([sku, nr]) => bySku.has(sku) && byNumber.has(nr))
+    .map(([sku, nr, qty]) => ({
+      company_id: COMPANY_A,
+      article_id: bySku.get(sku)!,
+      job_id: byNumber.get(nr)!,
+      qty,
+    }));
+
+  const { error: resErr } = await admin.from("stock_reservation").insert(resRows);
+  if (resErr) throw resErr;
+
+  console.log(
+    `${supRows?.length ?? 0} Lieferanten, ${linkRows.length} Preiszuordnungen, ${resRows.length} Reservierungen.`,
+  );
 }
 
 /** Wiener Wanduhrzeit als UTC-Instant, ohne date-fns-tz im Skript. */
