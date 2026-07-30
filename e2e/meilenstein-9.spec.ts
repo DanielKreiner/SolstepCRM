@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { COMPANY_A, DEMO, admin, login } from "./helpers";
 
