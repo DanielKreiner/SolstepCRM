@@ -1,0 +1,251 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { requireMe } from "@/lib/session";
+
+export type SettingsState = { error: string | null; ok: string | null };
+
+const AREAS = [
+  "pipelines",
+  "angebote",
+  "crm",
+  "lager",
+  "rechnungen",
+  "zeiterfassung",
+  "mitarbeiter",
+  "berichte",
+  "einstellungen",
+] as const;
+
+const ROLES = ["gf", "buero", "bauleitung", "monteur", "lager"] as const;
+
+const permSchema = z.object({
+  role: z.enum(ROLES),
+  area: z.enum(AREAS),
+  level: z.enum(["none", "read", "write"]),
+});
+
+/**
+ * Rollenrecht setzen.
+ *
+ * Eine Sperre: die Geschäftsführung darf sich das Recht auf
+ * "einstellungen" nicht selbst entziehen. Sonst schließt sich der Betrieb
+ * mit einem Klick aus seiner eigenen Rechteverwaltung aus, und es bliebe
+ * nur der Weg über den Betreiber.
+ */
+export async function setPermission(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const me = await requireMe();
+  if (me.perms.einstellungen !== "write") {
+    return { error: "Keine Berechtigung für Einstellungen.", ok: null };
+  }
+
+  const parsed = permSchema.safeParse({
+    role: formData.get("role"),
+    area: formData.get("area"),
+    level: formData.get("level"),
+  });
+  if (!parsed.success) return { error: "Ungültige Angabe.", ok: null };
+
+  if (
+    parsed.data.role === "gf" &&
+    parsed.data.area === "einstellungen" &&
+    parsed.data.level !== "write"
+  ) {
+    return {
+      error:
+        "Die Geschäftsführung muss Schreibrecht auf Einstellungen behalten — sonst sperrt sich der Betrieb selbst aus.",
+      ok: null,
+    };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("role_permission").upsert(
+    {
+      company_id: me.companyId,
+      role: parsed.data.role,
+      area: parsed.data.area,
+      level: parsed.data.level,
+    },
+    { onConflict: "company_id,role,area" },
+  );
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  return { error: null, ok: "Gespeichert." };
+}
+
+const phaseSchema = z.object({
+  pipelineId: z.string().uuid(),
+  key: z
+    .string()
+    .trim()
+    .min(2)
+    .max(40)
+    .regex(/^[a-z0-9_]+$/, "Nur Kleinbuchstaben, Ziffern und Unterstrich."),
+  label: z.string().trim().min(2).max(60),
+  sort: z.coerce.number().int().min(1).max(99),
+});
+
+/*
+ * Phase anlegen.
+ *
+ * system_key wird bewusst NICHT gesetzt. Die fünf Semantiken
+ * (won, lost, in_execution, ready_to_invoice, closed) sind das, woran die
+ * Automatik hängt — eine frei angelegte Zwischenstufe darf keine davon
+ * bekommen, sonst löst sie unbeabsichtigt Rechnungen oder Aufträge aus.
+ */
+export async function addPhase(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const me = await requireMe();
+  if (me.perms.einstellungen !== "write") {
+    return { error: "Keine Berechtigung für Einstellungen.", ok: null };
+  }
+
+  const parsed = phaseSchema.safeParse({
+    pipelineId: formData.get("pipelineId"),
+    key: formData.get("key"),
+    label: formData.get("label"),
+    sort: formData.get("sort"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("pipeline_phase").insert({
+    company_id: me.companyId,
+    pipeline_id: parsed.data.pipelineId,
+    key: parsed.data.key,
+    label: parsed.data.label,
+    sort: parsed.data.sort,
+    system_key: null,
+    is_final: false,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "Diesen Schlüssel gibt es in der Pipeline schon.", ok: null };
+    }
+    return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
+  }
+
+  revalidatePath("/einstellungen");
+  revalidatePath("/pipelines/vertrieb");
+  revalidatePath("/pipelines/projekte");
+  revalidatePath("/pipelines/service");
+  return { error: null, ok: `Phase „${parsed.data.label}" angelegt.` };
+}
+
+const renameSchema = z.object({
+  phaseId: z.string().uuid(),
+  label: z.string().trim().min(2).max(60),
+});
+
+/** Umbenennen ändert nur das Label — system_key bleibt unangetastet. */
+export async function renamePhase(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const me = await requireMe();
+  if (me.perms.einstellungen !== "write") {
+    return { error: "Keine Berechtigung für Einstellungen.", ok: null };
+  }
+
+  const parsed = renameSchema.safeParse({
+    phaseId: formData.get("phaseId"),
+    label: formData.get("label"),
+  });
+  if (!parsed.success) return { error: "Bezeichnung fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("pipeline_phase")
+    .update({ label: parsed.data.label })
+    .eq("id", parsed.data.phaseId);
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  revalidatePath("/pipelines/projekte");
+  return { error: null, ok: "Umbenannt." };
+}
+
+const deleteSchema = z.object({ phaseId: z.string().uuid() });
+
+/**
+ * Phase löschen.
+ *
+ * Zwei Sperren: eine Phase mit system_key trägt eine Automatik, und eine
+ * belegte Phase würde Aufträge ins Nichts schieben. Die Fremdschlüssel
+ * stehen auf restrict, aber die Meldung soll erklären statt zu scheitern.
+ */
+export async function deletePhase(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const me = await requireMe();
+  if (me.perms.einstellungen !== "write") {
+    return { error: "Keine Berechtigung für Einstellungen.", ok: null };
+  }
+
+  const parsed = deleteSchema.safeParse({ phaseId: formData.get("phaseId") });
+  if (!parsed.success) return { error: "Phase fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const { data: phase } = await supabase
+    .from("pipeline_phase")
+    .select("id, label, system_key")
+    .eq("id", parsed.data.phaseId)
+    .maybeSingle();
+
+  if (!phase) return { error: "Phase nicht gefunden.", ok: null };
+
+  if (phase.system_key) {
+    return {
+      error: `„${phase.label as string}" trägt die Systembedeutung „${phase.system_key as string}" und wird von Automatiken gebraucht.`,
+      ok: null,
+    };
+  }
+
+  const belegt = await zaehleBelegung(supabase, parsed.data.phaseId);
+  if (belegt > 0) {
+    return {
+      error: `In dieser Phase stehen noch ${belegt} Einträge. Erst verschieben, dann löschen.`,
+      ok: null,
+    };
+  }
+
+  const { error } = await supabase
+    .from("pipeline_phase")
+    .delete()
+    .eq("id", parsed.data.phaseId);
+
+  if (error) return { error: `Löschen fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  return { error: null, ok: `Phase „${phase.label as string}" gelöscht.` };
+}
+
+async function zaehleBelegung(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  phaseId: string,
+): Promise<number> {
+  const [jobs, quotes, tickets] = await Promise.all([
+    supabase.from("job").select("id", { count: "exact", head: true }).eq("phase_id", phaseId),
+    supabase.from("quote").select("id", { count: "exact", head: true }).eq("phase_id", phaseId),
+    supabase
+      .from("service_ticket")
+      .select("id", { count: "exact", head: true })
+      .eq("phase_id", phaseId),
+  ]);
+
+  return (jobs.count ?? 0) + (quotes.count ?? 0) + (tickets.count ?? 0);
+}
