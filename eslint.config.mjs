@@ -66,6 +66,14 @@ const eslintConfig = [
       "app/portal/**",
       "app/ops/**",
       "lib/mail/**",
+      /*
+       * Die Datenschicht des Kundenportals. Das Portal hat keine
+       * Supabase-Session, an der RLS greifen könnte — die gesamte
+       * Mandantentrennung dieses Pfades liegt in lib/portal/data.ts, und
+       * jede Abfrage dort schränkt selbst auf customer_id und company_id
+       * ein. Wer diese Datei ändert, ändert eine Sicherheitsgrenze.
+       */
+      "lib/portal/**",
       "lib/supabase/admin.ts",
       "scripts/**",
       "tests/**",

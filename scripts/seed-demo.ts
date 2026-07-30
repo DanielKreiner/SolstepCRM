@@ -9,7 +9,7 @@
  * Ausführen:  pnpm seed:users
  * Passwort:   SEED_PASSWORD setzen, sonst wird eines erzeugt und ausgegeben.
  */
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -549,6 +549,66 @@ async function seedDispo(admin: SupabaseClient) {
   }
 
   console.log(`${rows.length} Einsätze geplant (mit einem Ruhezeitverstoß).`);
+
+  await seedPortal(admin);
+}
+
+/*
+ * Portalzugang für den Demokunden.
+ *
+ * Der Token wird einmal ausgegeben und danach nur noch als Hash gespeichert.
+ * Deshalb steht er hier in der Konsolenausgabe — ein zweites Mal lässt er
+ * sich nicht rekonstruieren, nur neu erzeugen.
+ */
+async function seedPortal(admin: SupabaseClient) {
+  /*
+   * Bewusst hier nachgebaut statt lib/portal/token zu importieren: das
+   * Modul trägt "server-only" und lässt sich aus einem Skript nicht laden.
+   * Bricht das Format je auseinander, schlägt der Portaltest sofort fehl.
+   */
+  const secret = process.env.PORTAL_TOKEN_SECRET ?? loadEnv().PORTAL_TOKEN_SECRET;
+  if (!secret || secret.length < 32) {
+    console.log("PORTAL_TOKEN_SECRET fehlt — kein Portalzugang angelegt.");
+    return;
+  }
+  const sign = (body: string) =>
+    createHmac("sha256", secret).update(body).digest("base64url");
+  const createToken = (customerId: string) => {
+    const exp = Math.floor(Date.now() / 1000) + 90 * 86400;
+    const nonce = randomBytes(6).toString("base64url");
+    const body = `${customerId}.${exp}.${nonce}`;
+    return `${Buffer.from(body, "utf8").toString("base64url")}.${sign(body)}`;
+  };
+  const hashToken = (token: string) =>
+    createHmac("sha256", secret).update(token).digest("hex");
+
+  const { data: customer } = await admin
+    .from("customer")
+    .select("id, name")
+    .eq("company_id", COMPANY_A)
+    .eq("name", "Familie Brandstätter")
+    .maybeSingle();
+
+  if (!customer) {
+    console.log("Kein Demokunde für das Portal gefunden.");
+    return;
+  }
+
+  await admin.from("portal_access").delete().eq("company_id", COMPANY_A);
+
+  const token = createToken(customer.id as string);
+  const ablauf = new Date();
+  ablauf.setDate(ablauf.getDate() + 90);
+
+  const { error } = await admin.from("portal_access").insert({
+    company_id: COMPANY_A,
+    customer_id: customer.id,
+    token_hash: hashToken(token),
+    expires_at: ablauf.toISOString(),
+  });
+  if (error) throw error;
+
+  console.log(`Portalzugang: /portal/${token}`);
 }
 
 /** Wiener Wanduhrzeit als UTC-Instant, ohne date-fns-tz im Skript. */
