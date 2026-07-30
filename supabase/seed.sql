@@ -52,7 +52,10 @@ select c.id, r.role, a.area,
     when r.role = 'buero' and a.area in ('lager','mitarbeiter','berichte') then 'read'
 
     when r.role = 'bauleitung' and a.area in ('pipelines','zeiterfassung') then 'write'
-    when r.role = 'bauleitung' and a.area in ('angebote','crm','lager','berichte') then 'read'
+    -- Leserecht auf mitarbeiter: die Bauleitung muss die Zeiten und
+    -- Abwesenheiten ihrer Leute sehen. Ohne diesen Eintrag sieht sie nach
+    -- Migration 0008 nur noch die eigenen.
+    when r.role = 'bauleitung' and a.area in ('angebote','crm','lager','berichte','mitarbeiter') then 'read'
 
     when r.role = 'monteur' and a.area = 'zeiterfassung' then 'write'
     when r.role = 'monteur' and a.area = 'pipelines' then 'read'

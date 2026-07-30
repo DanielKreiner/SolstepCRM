@@ -1,0 +1,233 @@
+import { beforeAll, describe, expect, it } from "vitest";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+/*
+ * Rollenrechte innerhalb eines Mandanten.
+ *
+ * Der Isolationstest prüft die Grenze ZWISCHEN Mandanten. Dieser hier prüft
+ * die Grenze INNERHALB eines Mandanten — und die ist beim ersten Anlauf
+ * durchlässig gewesen:
+ *
+ *   - time_entry hing an can('zeiterfassung'), das ein Monteur zum eigenen
+ *     Stempeln braucht. Er sah damit die Zeiten aller Kollegen.
+ *   - app_user.hourly_cost war für jeden Angemeldeten lesbar.
+ *
+ * Beides ist behoben (Migrationen 0008 und 0009). Diese Tests halten es fest.
+ */
+
+const COMPANY_A = "11111111-1111-4111-8111-111111111111";
+
+type Rolle = "gf" | "buero" | "bauleitung" | "monteur" | "lager";
+
+const MAIL: Record<Rolle, string> = {
+  gf: "gf@hofstaetter.example.com",
+  buero: "buero@hofstaetter.example.com",
+  bauleitung: "bauleitung@hofstaetter.example.com",
+  monteur: "monteur@hofstaetter.example.com",
+  lager: "lager@hofstaetter.example.com",
+};
+
+/** Rollen, die fremde Personendaten sehen dürfen. */
+const DARF_PERSONALDATEN: Rolle[] = ["gf", "buero", "bauleitung"];
+
+let admin: SupabaseClient;
+const clients = new Map<Rolle, SupabaseClient>();
+const ids = new Map<Rolle, string>();
+
+async function anmelden(rolle: Rolle): Promise<SupabaseClient> {
+  const c = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { error } = await c.auth.signInWithPassword({
+    email: MAIL[rolle],
+    password: process.env.SEED_PASSWORD!,
+  });
+  if (error) throw new Error(`${rolle}: ${error.message}`);
+  return c;
+}
+
+beforeAll(async () => {
+  admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  for (const rolle of Object.keys(MAIL) as Rolle[]) {
+    clients.set(rolle, await anmelden(rolle));
+    const { data } = await admin
+      .from("app_user")
+      .select("id")
+      .eq("email", MAIL[rolle])
+      .single();
+    ids.set(rolle, data!.id as string);
+  }
+});
+
+describe("Fremde Zeitdaten", () => {
+  it("Monteur und Lager sehen ausschließlich die eigenen Zeiten", async () => {
+    for (const rolle of ["monteur", "lager"] as Rolle[]) {
+      const { data, error } = await clients
+        .get(rolle)!
+        .from("time_entry")
+        .select("user_id")
+        .limit(500);
+
+      expect(error, `${rolle}: ${error?.message}`).toBeNull();
+      const fremd = (data ?? []).filter((e) => e.user_id !== ids.get(rolle));
+      expect(fremd, `${rolle} sieht fremde Zeiten`).toHaveLength(0);
+    }
+  });
+
+  it("Rollen mit Personalrecht sehen die Zeiten des Teams", async () => {
+    // Sonst könnte niemand Zeiten prüfen oder freigeben.
+    for (const rolle of DARF_PERSONALDATEN) {
+      const { data } = await clients
+        .get(rolle)!
+        .from("time_entry")
+        .select("user_id")
+        .limit(500);
+
+      const fremd = (data ?? []).filter((e) => e.user_id !== ids.get(rolle));
+      expect(fremd.length, `${rolle} sieht keine fremden Zeiten`).toBeGreaterThan(0);
+    }
+  });
+
+  it("Monteur sieht keine fremden Abwesenheiten", async () => {
+    const { data } = await clients
+      .get("monteur")!
+      .from("absence")
+      .select("user_id")
+      .limit(500);
+
+    const fremd = (data ?? []).filter((a) => a.user_id !== ids.get("monteur"));
+    expect(fremd).toHaveLength(0);
+  });
+
+  it("Monteur sieht keine fremden Korrekturanträge", async () => {
+    const { data } = await clients
+      .get("monteur")!
+      .from("time_correction")
+      .select("user_id")
+      .limit(500);
+
+    const fremd = (data ?? []).filter((k) => k.user_id !== ids.get("monteur"));
+    expect(fremd).toHaveLength(0);
+  });
+});
+
+describe("Stundensätze", () => {
+  it("sind für keine Rolle als Spalte lesbar", async () => {
+    for (const rolle of Object.keys(MAIL) as Rolle[]) {
+      const { error } = await clients
+        .get(rolle)!
+        .from("app_user")
+        .select("hourly_cost")
+        .limit(1);
+
+      expect(error, `${rolle} kann hourly_cost lesen`).not.toBeNull();
+    }
+  });
+
+  it("kommen nur über die geprüfte Funktion, und nur mit Personalrecht", async () => {
+    for (const rolle of Object.keys(MAIL) as Rolle[]) {
+      const { data } = await clients
+        .get(rolle)!
+        .rpc("hourly_cost_of", { p_user: ids.get(rolle) });
+
+      if (DARF_PERSONALDATEN.includes(rolle)) {
+        expect(Number(data), `${rolle} bekommt keinen Satz`).toBeGreaterThan(0);
+      } else {
+        expect(data, `${rolle} bekommt einen Satz`).toBeNull();
+      }
+    }
+  });
+
+  it("verraten auch über die Funktion nichts über fremde Mandanten", async () => {
+    const { data: fremd } = await admin
+      .from("app_user")
+      .select("id")
+      .neq("company_id", COMPANY_A)
+      .limit(1)
+      .single();
+
+    const { data } = await clients
+      .get("gf")!
+      .rpc("hourly_cost_of", { p_user: fremd!.id });
+
+    expect(data).toBeNull();
+  });
+
+  it("die Namensliste bleibt für alle nutzbar", async () => {
+    // Ohne sie ließe sich kein Auswahlfeld füllen.
+    for (const rolle of Object.keys(MAIL) as Rolle[]) {
+      const { data, error } = await clients
+        .get(rolle)!
+        .from("app_user")
+        .select("id, name, role")
+        .limit(50);
+
+      expect(error, `${rolle}: ${error?.message}`).toBeNull();
+      expect((data ?? []).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("Rechnungen", () => {
+  it("sind nur mit Recht auf den Bereich sichtbar", async () => {
+    const { count: gesamt } = await admin
+      .from("invoice")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", COMPANY_A);
+
+    for (const rolle of ["monteur", "lager"] as Rolle[]) {
+      const { data } = await clients
+        .get(rolle)!
+        .from("invoice")
+        .select("id")
+        .limit(100);
+      expect(data ?? [], `${rolle} sieht Rechnungen`).toHaveLength(0);
+    }
+
+    const { data: gfSicht } = await clients
+      .get("gf")!
+      .from("invoice")
+      .select("id")
+      .limit(100);
+    expect((gfSicht ?? []).length).toBe(gesamt ?? 0);
+  });
+});
+
+describe("Lagerjournal", () => {
+  it("lässt sich von niemandem ändern oder löschen", async () => {
+    const { data: zeile } = await admin
+      .from("stock_move")
+      .select("id")
+      .eq("company_id", COMPANY_A)
+      .limit(1)
+      .single();
+
+    for (const rolle of Object.keys(MAIL) as Rolle[]) {
+      const c = clients.get(rolle)!;
+      const { error: delErr } = await c
+        .from("stock_move")
+        .delete()
+        .eq("id", zeile!.id);
+      const { error: updErr } = await c
+        .from("stock_move")
+        .update({ qty: 1 })
+        .eq("id", zeile!.id);
+
+      expect(delErr, `${rolle} darf löschen`).not.toBeNull();
+      expect(updErr, `${rolle} darf ändern`).not.toBeNull();
+    }
+
+    const { count } = await admin
+      .from("stock_move")
+      .select("id", { count: "exact", head: true })
+      .eq("id", zeile!.id);
+    expect(count).toBe(1);
+  });
+});
