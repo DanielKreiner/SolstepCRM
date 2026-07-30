@@ -372,7 +372,26 @@ async function seedPipelines(admin: SupabaseClient, byMail: Map<string, string>)
     if (error) throw error;
   }
 
-  console.log(`${quoteRows.length} Angebote, ${ticketRows.length} Servicetickets.`);
+  // Postfach des Betriebs. Ohne Zugangsdaten und mit status 'unverified' —
+  // im Seed wird nichts versendet, aber der Versandweg ist vollständig
+  // durchspielbar (mail_outbox füllt sich, der Cron würde greifen).
+  await admin.from("mail_account").delete().eq("company_id", COMPANY_A);
+  const { error: mailErr } = await admin.from("mail_account").insert({
+    company_id: COMPANY_A,
+    provider: "imap",
+    address: "office@hofstaetter.example.com",
+    display_name: "Hofstätter Energietechnik",
+    is_default: true,
+    imap_host: "imap.example.com",
+    smtp_host: "smtp.example.com",
+    username: "office@hofstaetter.example.com",
+    status: "unverified",
+  });
+  if (mailErr) throw mailErr;
+
+  console.log(
+    `${quoteRows.length} Angebote, ${ticketRows.length} Servicetickets, 1 Postfach.`,
+  );
 }
 
 /** Wiener Wanduhrzeit als UTC-Instant, ohne date-fns-tz im Skript. */

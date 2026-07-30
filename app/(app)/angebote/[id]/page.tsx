@@ -7,6 +7,7 @@ import { Pill } from "@/components/ui/Pill";
 import { Stat } from "@/components/ui/Stat";
 import { date, dateTime, eur } from "@/lib/format";
 import { requireMe } from "@/lib/session";
+import { QuoteActions } from "./QuoteActions";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Angebot" };
@@ -25,7 +26,7 @@ export default async function AngebotPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireMe();
+  const me = await requireMe();
   const { id } = await params;
   const supabase = await createClient();
 
@@ -79,6 +80,12 @@ export default async function AngebotPage({
             {phase ? (
               <PhasePill label={phase.label} systemKey={phase.system_key} />
             ) : null}
+            <a
+              href={`/api/pdf/quote/${quote.id as string}`}
+              className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
+            >
+              PDF
+            </a>
             <Link
               href="/pipelines/vertrieb"
               className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
@@ -120,8 +127,8 @@ export default async function AngebotPage({
           </h2>
           {(items ?? []).length === 0 ? (
             <p className="text-[13px] text-muted">
-              Noch keine Positionen. Der Step-Planer-Import kommt in
-              Meilenstein 3.
+              Noch keine Positionen. Rechts eine Step-Planer-Planung
+              importieren.
             </p>
           ) : (
             <ul className="flex flex-col gap-2">
@@ -154,6 +161,12 @@ export default async function AngebotPage({
         </section>
 
         <div className="flex flex-col gap-4">
+          <QuoteActions
+            quoteId={quote.id as string}
+            accepted={Boolean(quote.accepted_at)}
+            canWrite={me.perms.angebote === "write"}
+          />
+
           <section className="rounded-[20px] bg-surface p-5 shadow-soft">
             <h2 className="mb-3 text-[15px] font-semibold">Verlauf</h2>
             <dl className="flex flex-col gap-[9px] text-[13px]">
