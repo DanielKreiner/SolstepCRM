@@ -3,8 +3,12 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import { KpiKarte } from "@/components/ui/KpiKarte";
-import { date, hhmm, initials } from "@/lib/format";
+import { date, hhmm, initials, viennaDay } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/nav";
+import {
+  VORWARNUNG_TAGE,
+  qualifikationsstand,
+} from "@/lib/rules/qualifikation";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -39,17 +43,19 @@ export default async function MitarbeiterPage() {
     ]);
 
   const rows = (users ?? []) as unknown as Row[];
-  const heute = new Date().toISOString().slice(0, 10);
-  const inSechzig = new Date();
-  inSechzig.setDate(inSechzig.getDate() + 60);
+  const heute = viennaDay();
 
+  /*
+   * Schwelle aus lib/rules/qualifikation.ts, nicht lokal gesetzt: hier stand
+   * 60, im Cockpit 120. Wer im Cockpit eine Warnung sah, fand hier nichts.
+   */
   const ablaufend = new Map<string, { name: string; bis: string }[]>();
   for (const q of qualifikationen ?? []) {
     const bis = q.valid_until as string | null;
-    if (!bis || bis > inSechzig.toISOString().slice(0, 10)) continue;
+    if (qualifikationsstand(bis, heute) === "gueltig") continue;
     const key = q.user_id as string;
     if (!ablaufend.has(key)) ablaufend.set(key, []);
-    ablaufend.get(key)!.push({ name: q.name as string, bis });
+    ablaufend.get(key)!.push({ name: q.name as string, bis: bis! });
   }
 
   const saldoMap = new Map(
@@ -145,7 +151,7 @@ export default async function MitarbeiterPage() {
     <>
       <PageHeader
         title="Mitarbeiter"
-        subtitle={`${rows.filter((u) => u.active).length} aktiv · Nachweise mit 60 Tagen Vorwarnung`}
+        subtitle={`${rows.filter((u) => u.active).length} aktiv · Nachweise mit ${VORWARNUNG_TAGE} Tagen Vorwarnung`}
       />
 
       <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
@@ -159,7 +165,7 @@ export default async function MitarbeiterPage() {
         <KpiKarte
           label="Nachweise laufen ab"
           wert={[...ablaufend.values()].flat().length}
-          pille={ablaufend.size > 0 ? "innerhalb 120 Tagen" : "nichts fällig"}
+          pille={ablaufend.size > 0 ? `innerhalb ${VORWARNUNG_TAGE} Tagen` : "nichts fällig"}
           ton={ablaufend.size > 0 ? "warn" : "gut"}
           notiz="Zertifikate und Unterweisungen"
         />

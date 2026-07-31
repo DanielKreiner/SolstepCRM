@@ -1,4 +1,5 @@
 import { aktiveMandanten, runCron } from "@/lib/cron";
+import { ERINNERUNGSSTUFEN } from "@/lib/rules/qualifikation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,10 +8,14 @@ export const dynamic = "force-dynamic";
  * Ablaufende Qualifikationen.
  *
  * Ein abgelaufener Nachweis ist kein Formfehler: ohne gültige Unterweisung
- * darf der Monteur nicht aufs Dach. Gewarnt wird 60, 30 und 7 Tage vorher —
- * 60 Tage, weil Kurse Vorlaufzeit haben.
+ * darf der Monteur nicht aufs Dach.
+ *
+ * Die Stufen kommen aus lib/rules/qualifikation.ts. Vorher stand hier eine
+ * eigene Liste, die bei 60 Tagen begann — die Oberfläche warnte teils schon
+ * bei 120, teils erst bei 60, und der Nachtlauf hielt sich an eine dritte
+ * Zahl. SPEC 3 und 7 legen 120 Tage als Vorwarnung fest.
  */
-const STUFEN = [60, 30, 7];
+const STUFEN = ERINNERUNGSSTUFEN;
 
 export async function GET(request: Request) {
   return runCron(request, "certificate-check", async (admin) => {

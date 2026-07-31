@@ -2,6 +2,7 @@ import "server-only";
 import { auslastungJeWoche, mittlereAuslastung } from "@/lib/rules/auslastung";
 import type { Wochenlast } from "@/lib/rules/auslastung";
 import { viennaDay } from "@/lib/format";
+import { VORWARNUNG_TAGE } from "@/lib/rules/qualifikation";
 import { createClient } from "@/lib/supabase/server";
 import {
   addDays,
@@ -130,7 +131,7 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
       .from("qualification")
       .select("id, name, valid_until, user:user_id ( name )")
       .not("valid_until", "is", null)
-      .lte("valid_until", addDays(heute, 120))
+      .lte("valid_until", addDays(heute, VORWARNUNG_TAGE))
       .order("valid_until"),
     supabase
       .from("absence")

@@ -5,6 +5,7 @@ import { SignForm } from "@/app/(app)/mitarbeiter/PersonalForms";
 import { Pill } from "@/components/ui/Pill";
 import { dateShort, hhmm, hhmmSigned, viennaDay } from "@/lib/format";
 import { vacationBalance, workdays, type AbsenceRow } from "@/lib/absence";
+import { qualifikationsstand } from "@/lib/rules/qualifikation";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { addDays, endOfViennaDay, startOfViennaDay } from "@/lib/time";
@@ -275,9 +276,9 @@ export default async function ProfilPage() {
           <ul className="flex flex-col gap-2">
             {(qualifikationen ?? []).map((q) => {
               const bis = q.valid_until as string | null;
-              const abgelaufen = bis !== null && bis < heute;
-              const laeuftAb =
-                bis !== null && !abgelaufen && bis <= addDays(heute, 120);
+              const stand = qualifikationsstand(bis, heute);
+              const abgelaufen = stand === "abgelaufen";
+              const laeuftAb = stand === "laeuft_ab";
               return (
                 <li
                   key={q.id as string}
