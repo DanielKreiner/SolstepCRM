@@ -3,7 +3,7 @@ import Link from "next/link";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { date } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -120,13 +120,29 @@ export default async function CrmPage({
         subtitle={`${rows.length} Einträge${typ ? " · gefiltert" : ""}`}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Einträge" value={rows.length} />
-        <Stat label="Kunden" value={kunden} tone="done" />
-        <Stat label="Leads" value={leads} tone="doing" />
-        <Stat
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Kunden und Leads"
+          wert={rows.length}
+          pille={`${leads} ${leads === 1 ? "Lead" : "Leads"}`}
+          notiz="im Bestand geführt"
+        />
+        <KpiKarte
+          label="Bestandskunden"
+          wert={kunden}
+          ton="gut"
+          notiz="mindestens ein Auftrag abgeschlossen"
+        />
+        <KpiKarte
+          label="Leads"
+          wert={leads}
+          notiz="noch kein Auftrag, Vertrieb offen"
+        />
+        <KpiKarte
           label="Orte"
-          value={new Set(rows.map((r) => r.city).filter(Boolean)).size}
+          wert={new Set(rows.map((r) => r.city).filter(Boolean)).size}
+          notiz="Einzugsgebiet nach Gemeinden"
         />
       </div>
 

@@ -6,6 +6,7 @@ import {
   addPhase,
   deletePhase,
   renamePhase,
+  saveLocation,
   setPermission,
   type SettingsState,
 } from "./actions";
@@ -216,3 +217,194 @@ export function PhaseRowForm({
 
 const feld =
   "rounded-input border border-transparent bg-sunk px-[11px] py-[7px] text-[13px] text-ink outline-0 focus:border-accent focus:bg-surface";
+
+export type StandortWerte = {
+  id: string;
+  name: string;
+  holidayRegion: string;
+  minStaffing: number;
+  restHours: number;
+  maxDaily: number;
+  maxWeekly: number;
+  breakAfterMin: number;
+  breakMin: number;
+  mitarbeiter: number;
+};
+
+/* Feiertagsregionen Oesterreich. Die Kennungen folgen ISO 3166-2:AT. */
+const REGIONEN: [string, string][] = [
+  ["AT-1", "Burgenland"],
+  ["AT-2", "Kärnten"],
+  ["AT-3", "Niederösterreich"],
+  ["AT-4", "Oberösterreich"],
+  ["AT-5", "Salzburg"],
+  ["AT-6", "Steiermark"],
+  ["AT-7", "Tirol"],
+  ["AT-8", "Vorarlberg"],
+  ["AT-9", "Wien"],
+  ["DE", "Deutschland"],
+];
+
+/**
+ * Arbeitszeitregeln je Standort.
+ *
+ * Die Zahlen hier steuern die Konfliktpruefung in der Einsatzplanung. Neben
+ * jedem Feld steht der gesetzliche Wert — wer bewusst darunter geht, soll
+ * das sehen, und wer es versehentlich tut, soll stutzig werden.
+ */
+export function StandortForm({
+  standort,
+  gesperrt,
+}: {
+  standort: StandortWerte;
+  gesperrt: boolean;
+}) {
+  const [state, formAction] = useActionState(saveLocation, INITIAL);
+  const id = (f: string) => `st-${standort.id}-${f}`;
+
+  return (
+    <form action={formAction} className="rounded-input bg-panel p-4">
+      <input type="hidden" name="locationId" value={standort.id} />
+
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[14px] font-semibold">{standort.name}</h3>
+        <span className="num text-[11.5px] text-faint">
+          {standort.mitarbeiter}{" "}
+          {standort.mitarbeiter === 1 ? "Mitarbeiter" : "Mitarbeiter"}
+        </span>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Feld id={id("region")} label="Feiertagsregion" hinweis="steuert den Jahresplaner">
+          <select
+            id={id("region")}
+            name="holidayRegion"
+            defaultValue={standort.holidayRegion}
+            disabled={gesperrt}
+            className={`${feld} w-full`}
+          >
+            {REGIONEN.map(([wert, text]) => (
+              <option key={wert} value={wert}>
+                {text}
+              </option>
+            ))}
+          </select>
+        </Feld>
+
+        <Zahl
+          id={id("min")}
+          name="minStaffing"
+          label="Mindestbesetzung"
+          hinweis="Monteure je Woche"
+          value={standort.minStaffing}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id={id("rest")}
+          name="restHours"
+          label="Ruhezeit"
+          hinweis="gesetzlich 11 h"
+          value={standort.restHours}
+          step={0.5}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id={id("daily")}
+          name="maxDaily"
+          label="Höchstarbeitszeit Tag"
+          hinweis="gesetzlich 12 h"
+          value={standort.maxDaily}
+          step={0.5}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id={id("weekly")}
+          name="maxWeekly"
+          label="Höchstarbeitszeit Woche"
+          hinweis="gesetzlich 60 h"
+          value={standort.maxWeekly}
+          step={0.5}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id={id("bafter")}
+          name="breakAfterMin"
+          label="Pause fällig nach"
+          hinweis="Minuten, gesetzlich 360"
+          value={standort.breakAfterMin}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id={id("bmin")}
+          name="breakMin"
+          label="Pausendauer"
+          hinweis="Minuten, gesetzlich 30"
+          value={standort.breakMin}
+          gesperrt={gesperrt}
+        />
+      </div>
+
+      {!gesperrt ? (
+        <div className="mt-4">
+          <Submit label="Standort speichern" />
+        </div>
+      ) : null}
+      <Meldung state={state} />
+    </form>
+  );
+}
+
+function Feld({
+  id,
+  label,
+  hinweis,
+  children,
+}: {
+  id: string;
+  label: string;
+  hinweis: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-[4px]">
+      <label htmlFor={id} className="text-[11.5px] font-medium text-muted">
+        {label}
+      </label>
+      {children}
+      <span className="text-[10.5px] text-faint">{hinweis}</span>
+    </div>
+  );
+}
+
+function Zahl({
+  id,
+  name,
+  label,
+  hinweis,
+  value,
+  step = 1,
+  gesperrt,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  hinweis: string;
+  value: number;
+  step?: number;
+  gesperrt: boolean;
+}) {
+  return (
+    <Feld id={id} label={label} hinweis={hinweis}>
+      <input
+        id={id}
+        name={name}
+        type="number"
+        step={step}
+        min={0}
+        defaultValue={value}
+        disabled={gesperrt}
+        className={`${feld} num w-full`}
+      />
+    </Feld>
+  );
+}

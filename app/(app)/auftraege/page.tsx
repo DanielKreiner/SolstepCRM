@@ -3,7 +3,7 @@ import Link from "next/link";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhasePill } from "@/components/ui/PhasePill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { date, eurShort, hours, num } from "@/lib/format";
 import { jobKpis, listJobs, projectPhases, type JobRow } from "@/lib/queries/jobs";
 import { requireMe } from "@/lib/session";
@@ -114,17 +114,36 @@ export default async function AuftraegePage({
         subtitle={`${jobs.length} ${jobs.length === 1 ? "Auftrag" : "Aufträge"}${phase ? " · gefiltert" : ""} · Beträge exkl. USt.`}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Offene Aufträge" value={offen.length} />
-        <Stat label="Volumen offen" value={eurShort(volumen)} />
-        <Stat
-          label="Stunden ist / plan"
-          value={`${Math.round(stundenIst)} / ${Math.round(stundenPlan)}`}
-          tone={stundenIst > stundenPlan && stundenPlan > 0 ? "crit" : undefined}
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Volumen offen"
+          wert={eurShort(volumen)}
+          pille={`${offen.length} ${offen.length === 1 ? "Auftrag" : "Aufträge"}`}
+          notiz="exkl. USt."
         />
-        <Stat
+        <KpiKarte
+          label="Offene Aufträge"
+          wert={offen.length}
+          notiz="noch nicht abgeschlossen"
+        />
+        <KpiKarte
+          label="Stunden ist / plan"
+          wert={`${Math.round(stundenIst)} / ${Math.round(stundenPlan)}`}
+          pille={
+            stundenPlan > 0
+              ? `${Math.round((stundenIst / stundenPlan) * 100)} %`
+              : "kein Plan"
+          }
+          ton={
+            stundenIst > stundenPlan && stundenPlan > 0 ? "kritisch" : "neutral"
+          }
+          notiz="gebucht gegen kalkuliert"
+        />
+        <KpiKarte
           label="Ø Stunden je Auftrag"
-          value={offen.length ? hours((stundenIst / offen.length) * 60) : "—"}
+          wert={offen.length ? hours((stundenIst / offen.length) * 60) : "—"}
+          notiz="Mittel über die offenen Aufträge"
         />
       </div>
 

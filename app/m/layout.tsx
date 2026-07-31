@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
-import { Icon } from "@/components/ui/Icon";
 import { BRAND } from "@/lib/brand";
 import { requireMe } from "@/lib/session";
+import { MobileNav } from "./MobileNav";
 import { OfflineBanner } from "./OfflineBanner";
 
 export const metadata: Metadata = {
@@ -23,12 +22,6 @@ export const viewport: Viewport = {
  * Monteur-App. 390px zuerst, Touchziele mindestens 56px (CLAUDE.md
  * Abschnitt 8). Kein Sidebar-Layout — auf dem Dach zählt jeder Zentimeter.
  */
-const TABS = [
-  { href: "/m/heute", label: "Heute", icon: "cockpit" },
-  { href: "/m/stempeln", label: "Stempeln", icon: "zeit" },
-  { href: "/m/material", label: "Material", icon: "lager" },
-] as const;
-
 export default async function MobileLayout({
   children,
 }: {
@@ -57,20 +50,10 @@ export default async function MobileLayout({
 
       <OfflineBanner />
 
-      <main className="flex-1 px-4 pb-[96px]">{children}</main>
+      {/* Platz unten für die Leiste plus den überstehenden Stempeln-Knopf. */}
+      <main className="flex-1 px-4 pb-[112px]">{children}</main>
 
-      <nav className="fixed right-0 bottom-0 left-0 flex border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
-        {TABS.map((t) => (
-          <Link
-            key={t.href}
-            href={t.href}
-            className="flex min-h-[64px] flex-1 flex-col items-center justify-center gap-1 text-[12px] text-muted"
-          >
-            <Icon name={t.icon} size={22} />
-            {t.label}
-          </Link>
-        ))}
-      </nav>
+      <MobileNav />
     </div>
   );
 }

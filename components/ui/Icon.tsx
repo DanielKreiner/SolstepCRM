@@ -99,6 +99,9 @@ export const ICONS = {
   glocke: [P("M6 16V11a6 6 0 1 1 12 0v5l1.5 2.5H4.5z"), P("M10 19a2 2 0 0 0 4 0")],
   pfeilLinks: [L(19, 12, 5, 12), P("M11 6 5 12l6 6")],
   pfeilRechts: [L(5, 12, 19, 12), P("M13 6l6 6-6 6")],
+  /* Diagonal nach aussen — steht in der Vorlage auf jeder Kennzahlkarte
+     und heisst "hier geht es zur Liste dahinter", nicht "weiter". */
+  pfeilRausOben: [L(7, 17, 17, 7), P("M9 7h8v8")],
   haken: [P("M5 12.5 10 17.5 19 7")],
   kreuz: [L(6, 6, 18, 18), L(18, 6, 6, 18)],
   abmelden: [P("M14 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8"), L(10, 12, 21, 12), P("M17.5 8.5 21 12l-3.5 3.5")],

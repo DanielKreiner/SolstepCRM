@@ -58,6 +58,14 @@ export type PipelineCard = {
   city: string | null;
   note: string | null;
   ownerId: string | null;
+  /* Fuer die Kartendarstellung, SPEC 4.2. Bei Vertrieb und Service teils
+     null — ein Servicefall hat keinen Stundenplan, und das soll man sehen. */
+  hoursActual: number | null;
+  plannedHours: number | null;
+  /** Deckungsbeitrag in Prozent. Bei Projekten nach Material, nicht nach Lohn. */
+  marginPct: number | null;
+  /** Anlagengroesse des Kunden in kWp. */
+  kwp: number | null;
 };
 
 export async function loadPhases(kind: Kind): Promise<Phase[]> {
@@ -100,7 +108,7 @@ export async function loadCards(
   let query = supabase
     .from("v_pipeline_card")
     .select(
-      "id, kind, number, phase_id, customer_id, customer_name, value_net, due_at, city, note, owner_id",
+      "id, kind, number, phase_id, customer_id, customer_name, value_net, due_at, city, note, owner_id, hours_actual, planned_hours, margin_pct, kwp",
     )
     .eq("kind", kind)
     .order("due_at", { ascending: true, nullsFirst: false })
@@ -130,7 +138,22 @@ export async function loadCards(
     city: (r.city as string | null) ?? null,
     note: (r.note as string | null) ?? null,
     ownerId: (r.owner_id as string | null) ?? null,
+    hoursActual: zahlOderNull(r.hours_actual),
+    plannedHours: zahlOderNull(r.planned_hours),
+    marginPct: zahlOderNull(r.margin_pct),
+    kwp: zahlOderNull(r.kwp),
   }));
+}
+
+/*
+ * null bleibt null. Number(null) ist 0, und 0 hieße auf der Karte
+ * "0 % Deckungsbeitrag" statt "kein Wert hinterlegt" — zwei sehr
+ * verschiedene Aussagen.
+ */
+function zahlOderNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** Farbe je Phase — hängt an system_key, nie am Label (CLAUDE.md 5.1a). */

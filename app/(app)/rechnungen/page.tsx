@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
-import { date, eur } from "@/lib/format";
+import { date, eur, eurShort, viennaDay } from "@/lib/format";
 import { KIND_LABEL, round2, type InvoiceKind } from "@/lib/money";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -76,7 +76,25 @@ export default async function RechnungenPage() {
   const offenSumme = round2(
     offen.reduce((s, r) => s + Number(r.amount_net) + Number(r.vat_amount), 0),
   );
-  const ueberfaellig = offen.filter((r) => r.due_date < new Date().toISOString().slice(0, 10));
+  const heute = viennaDay();
+  const ueberfaellig = offen.filter((r) => r.due_date < heute);
+  const ueberfaelligSumme = round2(
+    ueberfaellig.reduce(
+      (s, r) => s + Number(r.amount_net) + Number(r.vat_amount),
+      0,
+    ),
+  );
+  const aeltesteUeberfaellig =
+    ueberfaellig
+      .map((r) =>
+        Math.round(
+          (new Date(`${heute}T12:00:00Z`).getTime() -
+            new Date(`${r.due_date}T12:00:00Z`).getTime()) /
+            86400000,
+        ),
+      )
+      .sort((a, b) => b - a)[0] ?? null;
+  const gemahnt = offen.filter((r) => r.dunning_level > 0);
   const bezahlt = round2(
     aktiv
       .filter((r) => r.status === "paid")
@@ -100,15 +118,42 @@ export default async function RechnungenPage() {
         subtitle={`${rows.length} Rechnungen · Beträge netto, USt. gesondert`}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Offen" value={offen.length} />
-        <Stat label="Offener Betrag" value={eur(offenSumme)} hint="brutto" />
-        <Stat
-          label="Überfällig"
-          value={ueberfaellig.length}
-          tone={ueberfaellig.length > 0 ? "crit" : "done"}
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Offener Betrag"
+          wert={eurShort(offenSumme)}
+          pille={`${offen.length} ${offen.length === 1 ? "Rechnung" : "Rechnungen"}`}
+          notiz="brutto, inkl. USt."
         />
-        <Stat label="Bezahlt (netto)" value={eur(bezahlt)} tone="done" />
+        <KpiKarte
+          label="Überfällig"
+          wert={ueberfaellig.length}
+          pille={ueberfaellig.length > 0 ? eurShort(ueberfaelligSumme) : "nichts offen"}
+          ton={ueberfaellig.length > 0 ? "kritisch" : "gut"}
+          notiz={
+            aeltesteUeberfaellig !== null
+              ? `ältester Rückstand ${aeltesteUeberfaellig} Tage`
+              : "alle im Zahlungsziel"
+          }
+        />
+        <KpiKarte
+          label="In Mahnung"
+          wert={gemahnt.length}
+          pille={
+            gemahnt.length > 0
+              ? `Stufe ${Math.max(...gemahnt.map((r) => r.dunning_level))} erreicht`
+              : "keine Mahnung"
+          }
+          ton={gemahnt.length > 0 ? "warn" : "gut"}
+          notiz="Erinnerung, Mahnstufe 1, Mahnstufe 2"
+        />
+        <KpiKarte
+          label="Bezahlt"
+          wert={eurShort(bezahlt)}
+          ton="gut"
+          notiz="netto, alle abgeschlossenen Rechnungen"
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr] xl:items-start">

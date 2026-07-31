@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { daysInMonth, vacationBalance, type AbsenceRow } from "@/lib/absence";
 import { date, initials } from "@/lib/format";
 import { requireMe } from "@/lib/session";
@@ -110,17 +110,33 @@ export default async function AbwesenheitenPage({
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Mein Anspruch" value={`${meinSaldo.anspruch} Tage`} />
-        <Stat label="Übertrag" value={`${meinSaldo.uebertrag} Tage`} />
-        <Stat
-          label="Genommen / beantragt"
-          value={`${meinSaldo.genommen} / ${meinSaldo.beantragt}`}
-        />
-        <Stat
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
           label="Mein Resturlaub"
-          value={`${meinSaldo.rest} Tage`}
-          tone={meinSaldo.rest < 0 ? "crit" : "done"}
+          wert={`${meinSaldo.rest} Tage`}
+          pille={`${meinSaldo.genommen} genommen`}
+          notiz={`${meinSaldo.beantragt} Tage beantragt, noch nicht genehmigt`}
+        />
+        <KpiKarte
+          label="Jahresanspruch"
+          wert={`${meinSaldo.anspruch} Tage`}
+          notiz="aus dem Dienstvertrag"
+        />
+        <KpiKarte
+          label="Übertrag aus dem Vorjahr"
+          wert={`${meinSaldo.uebertrag} Tage`}
+          notiz="wird zuerst verbraucht"
+        />
+        <KpiKarte
+          label="Genommen und beantragt"
+          wert={`${meinSaldo.genommen} / ${meinSaldo.beantragt}`}
+          ton={meinSaldo.rest < 0 ? "kritisch" : "neutral"}
+          notiz={
+            meinSaldo.rest < 0
+              ? "über dem Anspruch"
+              : "genehmigt / offen"
+          }
         />
       </div>
 

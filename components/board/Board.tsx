@@ -270,6 +270,15 @@ function Card({
   );
 }
 
+/*
+ * Die Karte nach SPEC 4.2: Nummer, Kunde, Ort und Anlagengroesse, Wert,
+ * naechster Schritt, Fortschritt Stunden ist/soll, Person,
+ * Deckungsbeitrag-Ampel.
+ *
+ * Die Ampel traegt neben der Farbe immer die Zahl. Eine Karte, die nur
+ * rot leuchtet, sagt einem Bauleiter nicht, ob es um zwei oder zwanzig
+ * Prozentpunkte geht.
+ */
 function CardBody({
   card,
   owner,
@@ -279,15 +288,22 @@ function CardBody({
   owner?: string | undefined;
   color: string;
 }) {
+  const plan = card.plannedHours ?? 0;
+  const ist = card.hoursActual ?? 0;
+  const fortschritt = plan > 0 ? (ist / plan) * 100 : null;
+  const ueberzogen = fortschritt !== null && fortschritt > 100;
+
   return (
     <div className="flex cursor-pointer flex-col gap-[9px] rounded-[18px] bg-surface p-[15px] shadow-soft transition-transform duration-200 ease-out-quint hover:-translate-y-[2px]">
       <div className="flex items-center justify-between gap-2">
         <span className="num rounded-pill bg-panel px-[9px] py-[3px] text-[11px] text-muted">
           {card.number}
         </span>
-        {card.city ? (
-          <span className="text-[11.5px] text-faint">{card.city}</span>
-        ) : null}
+        <span className="num truncate text-[11.5px] text-faint">
+          {[card.city, card.kwp ? `${card.kwp} kWp` : null]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
       </div>
 
       <div className="text-[15.5px] leading-[1.25] font-semibold tracking-[-0.015em]">
@@ -298,12 +314,40 @@ function CardBody({
         <div className="line-clamp-2 text-[12.5px] text-muted">{card.note}</div>
       ) : null}
 
-      <div className="num mt-[2px] flex justify-between text-[11px] text-muted">
+      {fortschritt !== null ? (
+        <div>
+          <div
+            className="h-[5px] w-full overflow-hidden rounded-pill bg-sunk"
+            role="img"
+            aria-label={`Stunden ${Math.round(ist)} von ${Math.round(plan)}`}
+          >
+            <div
+              className="h-full rounded-pill"
+              style={{
+                width: `${Math.min(100, fortschritt)}%`,
+                background: ueberzogen
+                  ? "var(--s-crit)"
+                  : "linear-gradient(90deg,var(--accent-from),var(--accent-to))",
+              }}
+            />
+          </div>
+          <div className="num mt-[5px] flex justify-between text-[10.5px] text-faint">
+            <span className={ueberzogen ? "text-s-crit" : undefined}>
+              {Math.round(ist)} / {Math.round(plan)} h
+            </span>
+            <span className={ueberzogen ? "text-s-crit" : undefined}>
+              {Math.round(fortschritt)} %
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="num flex items-center justify-between gap-2 text-[11px] text-muted">
         <span>{card.valueNet > 0 ? eur(card.valueNet) : ""}</span>
         <span>{card.dueAt ? date(card.dueAt) : ""}</span>
       </div>
 
-      <div className="mt-[2px] flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
         {owner ? (
           <span
             className="flex h-[26px] w-[26px] items-center justify-center rounded-pill border-2 border-surface text-[10px] font-semibold text-white"
@@ -311,6 +355,24 @@ function CardBody({
             title={owner}
           >
             {initials(owner)}
+          </span>
+        ) : (
+          <span />
+        )}
+
+        {card.marginPct !== null ? (
+          <span
+            title="Deckungsbeitrag nach Material"
+            className={[
+              "num rounded-pill px-[8px] py-[2px] text-[10.5px] font-semibold",
+              card.marginPct >= 25
+                ? "bg-s-done/12 text-s-done"
+                : card.marginPct >= 12
+                  ? "bg-accent/14 text-accent-ink"
+                  : "bg-s-crit/12 text-s-crit",
+            ].join(" ")}
+          >
+            DB {Math.round(card.marginPct)} %
           </span>
         ) : null}
       </div>

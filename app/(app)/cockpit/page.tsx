@@ -1,295 +1,297 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { PhasePill } from "@/components/ui/PhasePill";
-import { Pill } from "@/components/ui/Pill";
-import { RingStat, Stat } from "@/components/ui/Stat";
-import { date, eur, eurShort, hhmm, num } from "@/lib/format";
+import { LaufendeZeit } from "@/components/app/LaufendeZeit";
+import { Abschnitt, Zaehler } from "@/components/ui/Abschnitt";
+import { Avatar } from "@/components/ui/Avatar";
+import { Balkenchart } from "@/components/ui/Balkenchart";
+import { LinkButton } from "@/components/ui/Button";
+import { KpiKarte } from "@/components/ui/KpiKarte";
+import { Ring } from "@/components/ui/RingKarte";
+import { eurShort, num, time, weekday } from "@/lib/format";
+import { ladeCockpit } from "@/lib/queries/cockpit";
 import { requireMe } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
-import { endOfViennaDay, startOfViennaDay } from "@/lib/time";
-import { viennaDay } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Cockpit" };
 
+const STATUS_TON: Record<string, string> = {
+  eingestempelt: "bg-s-done/12 text-s-done",
+  pause: "bg-accent/14 text-accent-ink",
+  dienstgang: "bg-s-doing/12 text-s-doing",
+  abwesend: "bg-s-crit/12 text-s-crit",
+  offen: "bg-sunk text-faint",
+};
+
+const HANDLUNG_PUNKT: Record<string, string> = {
+  kritisch: "bg-s-crit",
+  warn: "bg-accent",
+  doing: "bg-s-doing",
+};
+
 export default async function CockpitPage() {
   const me = await requireMe();
-  const supabase = await createClient();
-  const today = viennaDay();
+  const c = await ladeCockpit(me.id);
 
-  const [
-    { data: jobs },
-    { data: kpis },
-    { data: heute },
-    { data: lowStock },
-    { data: leads },
-  ] = await Promise.all([
-    supabase
-      .from("job")
-      .select(
-        "id, number, city, zip, scheduled_from, value_net, planned_hours, next_step, phase:phase_id ( label, system_key ), customer:customer_id ( name )",
-      )
-      .order("scheduled_from", { ascending: true, nullsFirst: false })
-      .limit(50),
-    supabase.from("v_job_kpi").select("job_id, hours_actual, planned_hours"),
-    supabase
-      .from("time_entry")
-      .select("duration_min, kind, user_id")
-      .gte("started_at", startOfViennaDay(today).toISOString())
-      .lt("started_at", endOfViennaDay(today).toISOString()),
-    supabase.from("v_stock_alert").select("id, sku, name, stock, min_stock, unit"),
-    supabase.from("customer").select("id").eq("type", "lead").is("deleted_at", null),
-  ]);
+  const heute = new Date().toLocaleDateString("de-AT", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 
-  type Job = {
-    id: string;
-    number: string;
-    city: string | null;
-    zip: string | null;
-    scheduled_from: string | null;
-    value_net: string;
-    planned_hours: string;
-    next_step: string | null;
-    phase: { label: string; system_key: string | null } | null;
-    customer: { name: string } | null;
-  };
-
-  const jobRows = (jobs ?? []) as unknown as Job[];
-  const offen = jobRows.filter((j) => j.phase?.system_key !== "closed");
-  const inMontage = jobRows.filter((j) => j.phase?.system_key === "in_execution");
-  const zuFakturieren = jobRows.filter(
-    (j) => j.phase?.system_key === "ready_to_invoice",
-  );
-
-  const volumen = offen.reduce((s, j) => s + Number(j.value_net), 0);
-
-  const kpiMap = new Map(
-    (kpis ?? []).map((k) => [
-      k.job_id as string,
-      {
-        ist: Number(k.hours_actual ?? 0),
-        plan: Number(k.planned_hours ?? 0),
-      },
-    ]),
-  );
-
-  const stundenIst = offen.reduce((s, j) => s + (kpiMap.get(j.id)?.ist ?? 0), 0);
-  const stundenPlan = offen.reduce((s, j) => s + Number(j.planned_hours), 0);
-
-  const heuteMin = (heute ?? [])
-    .filter((e) => e.kind !== "break")
-    .reduce((s, e) => s + Number(e.duration_min ?? 0), 0);
-  const heuteLeute = new Set((heute ?? []).map((e) => e.user_id as string)).size;
-
-  const alerts = (lowStock ?? []) as unknown as {
-    id: string;
-    sku: string;
-    name: string;
-    stock: string;
-    min_stock: string;
-    unit: string;
-  }[];
+  const stundenDiff = Math.round((c.stundenWoche.ist - c.stundenWoche.soll) * 10) / 10;
 
   return (
     <>
-      <PageHeader
-        title="Cockpit"
-        subtitle={`${me.company.name} · ${new Date().toLocaleDateString("de-AT", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}`}
-        actions={
-          <Link
-            href="/auftraege"
-            className="rounded-pill bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-[22px] py-[13px] text-sm font-semibold text-white shadow-[0_6px_18px_rgba(201,121,24,0.28)]"
-          >
-            Zu den Aufträgen
-          </Link>
-        }
-      />
+      <PageKopf firma={me.company.name} heute={heute} />
 
+      {/* Kennzahlen. Genau eine Akzentkarte — Vorlage Abschnitt 9. */}
       <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Offene Aufträge" value={offen.length} />
-        <Stat label="Volumen offen" value={eurShort(volumen)} hint="exkl. USt." />
-        <Stat
-          label="Heute gebucht"
-          value={hhmm(heuteMin)}
-          hint={`${heuteLeute} ${heuteLeute === 1 ? "Person" : "Personen"}`}
+        <KpiKarte
+          akzent
+          label="Auftragsbestand"
+          wert={eurShort(c.auftragsbestand)}
+          pille={`${c.auftraegeOffen} offen`}
+          notiz="exkl. USt."
+          href="/pipelines/projekte"
         />
-        <Stat
-          label="Unter Mindestbestand"
-          value={alerts.length}
-          tone={alerts.length > 0 ? "crit" : "done"}
+        <KpiKarte
+          label="Auslastung 4 Wochen"
+          wert={`${c.auslastung4} %`}
+          pille={
+            c.kapazitaetProWoche > 0
+              ? `${num(c.kapazitaetProWoche)} h/Woche`
+              : "keine Kapazität hinterlegt"
+          }
+          /* Die Pille traegt hier die Kapazitaet, kein Urteil — deshalb
+             neutral. Gruen an einer Auslastung von 24 % waere schlicht
+             gelogen. */
+          ton="neutral"
+          notiz="Kapazität aller aktiven Mitarbeiter"
+          href="/dispo"
+        />
+        <KpiKarte
+          label="Stunden diese Woche"
+          wert={num(c.stundenWoche.ist)}
+          pille={`${stundenDiff >= 0 ? "+" : ""}${num(stundenDiff)} h`}
+          ton={stundenDiff >= 0 ? "gut" : "warn"}
+          notiz={`von ${num(c.stundenWoche.soll)} Soll`}
+          href="/zeiterfassung"
+        />
+        <KpiKarte
+          label="Offene Rechnungen"
+          wert={eurShort(c.rechnungen.offen)}
+          pille={
+            c.rechnungen.ueberfaellig > 0
+              ? `${c.rechnungen.ueberfaellig} überfällig`
+              : "nichts überfällig"
+          }
+          ton={c.rechnungen.ueberfaellig > 0 ? "kritisch" : "gut"}
+          notiz={
+            c.rechnungen.aeltesteTage !== null
+              ? `ältester Rückstand ${c.rechnungen.aeltesteTage} Tage`
+              : undefined
+          }
+          href="/rechnungen"
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr] xl:items-start">
-        <div className="flex flex-col gap-4">
-          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold">In Montage</h2>
-              <span className="num text-[12px] text-muted">
-                {inMontage.length}
-              </span>
-            </div>
-            {inMontage.length === 0 ? (
-              <p className="text-[13px] text-muted">
-                Aktuell ist kein Auftrag in Montage.
+      <div className="mb-4 grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr] xl:items-start">
+        <Abschnitt
+          titel="Auslastung nach Woche"
+          rechts={
+            c.kapazitaetProWoche > 0 ? (
+              <Zaehler>Kapazität {num(c.kapazitaetProWoche)} h</Zaehler>
+            ) : null
+          }
+        >
+          <Balkenchart
+            balken={c.auslastung.map((w) => ({
+              label: w.label,
+              prozent: w.prozent,
+              offen: w.leer,
+              titel: `${w.label}: ${num(w.stunden)} von ${num(c.kapazitaetProWoche)} h`,
+            }))}
+          />
+        </Abschnitt>
+
+        <Abschnitt titel="Nächster Termin">
+          {c.naechsterTermin ? (
+            <>
+              <p className="text-[19px] leading-[1.2] font-semibold tracking-[-0.02em]">
+                {c.naechsterTermin.titel}
               </p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {inMontage.map((j) => {
-                  const k = kpiMap.get(j.id);
-                  const pct =
-                    k && k.plan > 0 ? Math.round((k.ist / k.plan) * 100) : 0;
-                  return (
-                    <li key={j.id}>
-                      <Link
-                        href={`/auftraege/${j.id}`}
-                        className="flex flex-wrap items-center gap-3 rounded-input bg-panel px-4 py-3 text-ink transition-colors hover:bg-sunk"
-                      >
-                        <span className="num text-[13px] font-semibold">
-                          {j.number}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-[13px]">
-                          {j.customer?.name ?? "—"}
-                        </span>
-                        <span className="num text-[12px] text-muted">
-                          {[j.zip, j.city].filter(Boolean).join(" ")}
-                        </span>
-                        <Pill tone={pct > 100 ? "crit" : "doing"} mono>
-                          {pct} %
-                        </Pill>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-            <h2 className="mb-3 text-[15px] font-semibold">Nächste Termine</h2>
-            {offen.filter((j) => j.scheduled_from).length === 0 ? (
-              <p className="text-[13px] text-muted">Kein Termin gesetzt.</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {offen
-                  .filter((j) => j.scheduled_from)
-                  .slice(0, 6)
-                  .map((j) => (
-                    <li key={j.id}>
-                      <Link
-                        href={`/auftraege/${j.id}`}
-                        className="flex flex-wrap items-center gap-3 rounded-input bg-panel px-4 py-3 text-ink transition-colors hover:bg-sunk"
-                      >
-                        <span className="num w-[92px] shrink-0 text-[12.5px] text-muted">
-                          {date(j.scheduled_from)}
-                        </span>
-                        <span className="num text-[13px] font-semibold">
-                          {j.number}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-[13px]">
-                          {j.next_step ?? j.customer?.name ?? "—"}
-                        </span>
-                        {j.phase ? (
-                          <PhasePill
-                            label={j.phase.label}
-                            systemKey={j.phase.system_key}
-                          />
-                        ) : null}
-                      </Link>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </section>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-            <h2 className="mb-4 text-[15px] font-semibold">Auslastung</h2>
-            <div className="flex flex-wrap gap-5">
-              <RingStat
-                label="Stunden verbraucht"
-                percent={stundenPlan > 0 ? (stundenIst / stundenPlan) * 100 : 0}
-                center={`${Math.round(stundenPlan > 0 ? (stundenIst / stundenPlan) * 100 : 0)}%`}
-                tone={stundenIst > stundenPlan && stundenPlan > 0 ? "crit" : "accent"}
-              />
-            </div>
-            <p className="num mt-3 text-[12.5px] text-muted">
-              {num(Math.round(stundenIst * 10) / 10)} von {num(stundenPlan)} h
+              <p className="num mt-2 text-[12.5px] text-muted">
+                {weekday(c.naechsterTermin.start)},{" "}
+                {new Date(c.naechsterTermin.start).toLocaleDateString("de-AT")} ·{" "}
+                {time(c.naechsterTermin.start)}
+              </p>
+              <p className="mt-1 text-[12.5px] text-faint">
+                {[c.naechsterTermin.kunde, c.naechsterTermin.ort]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              <div className="mt-4">
+                <Link
+                  href={`/auftraege/${c.naechsterTermin.jobId}`}
+                  className="inline-flex w-full items-center justify-center rounded-pill bg-[#151210] px-5 py-[13px] text-[13px] font-semibold text-white hover:text-white"
+                >
+                  Zum Auftrag {c.naechsterTermin.nummer}
+                </Link>
+              </div>
+            </>
+          ) : (
+            <p className="text-[13px] text-muted">
+              Kein Auftrag terminiert. In der{" "}
+              <Link href="/dispo">Einsatzplanung</Link> liegen die
+              nicht terminierten Aufträge im Pool.
             </p>
-          </section>
+          )}
+        </Abschnitt>
 
-          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold">Zu fakturieren</h2>
-              <span className="num text-[12px] text-muted">
-                {zuFakturieren.length}
-              </span>
-            </div>
-            {zuFakturieren.length === 0 ? (
-              <p className="text-[13px] text-muted">Nichts offen.</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {zuFakturieren.map((j) => (
-                  <li key={j.id}>
-                    <Link
-                      href={`/auftraege/${j.id}`}
-                      className="flex items-center gap-3 rounded-input bg-panel px-4 py-3 text-ink transition-colors hover:bg-sunk"
-                    >
-                      <span className="num text-[13px] font-semibold">
-                        {j.number}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[13px]">
-                        {j.customer?.name ?? "—"}
-                      </span>
-                      <span className="num text-[12.5px]">
-                        {eur(j.value_net)}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {alerts.length > 0 ? (
-            <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-              <h2 className="mb-3 text-[15px] font-semibold">Material knapp</h2>
-              <ul className="flex flex-col gap-2">
-                {alerts.slice(0, 6).map((a) => (
-                  <li key={a.id}>
-                    <Link
-                      href={`/lager/${a.id}`}
-                      className="flex items-center gap-3 rounded-input bg-panel px-4 py-3 text-ink transition-colors hover:bg-sunk"
-                    >
-                      <span className="num text-[12px] text-muted">{a.sku}</span>
-                      <span className="min-w-0 flex-1 truncate text-[13px]">
-                        {a.name}
-                      </span>
-                      <Pill tone="crit" mono>
-                        {num(a.stock)} / {num(a.min_stock)}
-                      </Pill>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-            <h2 className="mb-1 text-[15px] font-semibold">Leads</h2>
-            <p className="num text-[24px] font-semibold">
-              {(leads ?? []).length}
+        <Abschnitt
+          titel="Handlungsbedarf"
+          rechts={
+            c.handlungsbedarf.length > 0 ? (
+              <Zaehler>{c.handlungsbedarf.length}</Zaehler>
+            ) : null
+          }
+        >
+          {c.handlungsbedarf.length === 0 ? (
+            <p className="text-[13px] text-muted">
+              Nichts offen — keine Überlast, keine überfällige Rechnung, kein
+              Material unter Mindestbestand.
             </p>
-            <Link
-              href="/crm?typ=lead"
-              className="mt-2 inline-block text-[13px] text-accent-ink hover:underline"
-            >
-              Im CRM ansehen
-            </Link>
-          </section>
-        </div>
+          ) : (
+            <ul className="flex flex-col gap-[10px]">
+              {c.handlungsbedarf.map((h, i) => (
+                <li key={`${h.titel}-${i}`}>
+                  <Link
+                    href={h.href}
+                    className="flex gap-[10px] text-ink hover:text-ink"
+                  >
+                    <span
+                      aria-hidden
+                      className={`mt-[6px] h-[7px] w-[7px] shrink-0 rounded-pill ${HANDLUNG_PUNKT[h.ton]}`}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] leading-snug font-medium">
+                        {h.titel}
+                      </span>
+                      <span className="num block text-[11.5px] text-faint">
+                        {h.detail}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Abschnitt>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr] xl:items-start">
+        <Abschnitt
+          titel="Team heute"
+          rechts={
+            <Zaehler>
+              {c.team.filter((t) => t.status === "eingestempelt").length} von{" "}
+              {c.team.length} eingestempelt
+            </Zaehler>
+          }
+        >
+          {c.team.length === 0 ? (
+            <p className="text-[13px] text-muted">Keine aktiven Mitarbeiter.</p>
+          ) : (
+            <ul className="flex flex-col gap-[2px]">
+              {c.team.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-3 rounded-input px-2 py-[7px]"
+                >
+                  <Avatar name={p.name} size={30} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] font-medium">
+                      {p.name}
+                    </span>
+                    <span className="num block truncate text-[11.5px] text-faint">
+                      {[p.auftrag, p.rolle].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-pill px-[9px] py-[3px] text-[11px] font-medium ${STATUS_TON[p.status]}`}
+                  >
+                    {p.statusText}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Abschnitt>
+
+        <Abschnitt titel="Pipeline-Fortschritt">
+          <div className="flex flex-col items-center gap-3 py-2">
+            <Ring
+              prozent={c.pipeline.prozent}
+              size={116}
+              dicke={11}
+              label="Abgeschlossene Aufträge"
+              ton="done"
+            />
+            <p className="num text-[12.5px] text-muted">
+              {c.pipeline.abgeschlossen} von {c.pipeline.gesamt} Aufträgen
+              abgeschlossen
+            </p>
+          </div>
+        </Abschnitt>
+
+        {c.laufend ? (
+          <LaufendeZeit
+            seit={c.laufend.seit}
+            auftragNummer={c.laufend.auftragNummer}
+            auftragId={c.laufend.auftragId}
+            personen={c.laufend.personen}
+            eigene={c.laufend.eigene}
+          />
+        ) : (
+          <Abschnitt titel="Zeit läuft">
+            <p className="text-[13px] text-muted">
+              Gerade steht niemand auf der Uhr.
+            </p>
+            <div className="mt-4">
+              <LinkButton href="/zeiterfassung" variant="quiet">
+                Zeiterfassung öffnen
+              </LinkButton>
+            </div>
+          </Abschnitt>
+        )}
       </div>
     </>
+  );
+}
+
+function PageKopf({ firma, heute }: { firma: string; heute: string }) {
+  return (
+    <div className="mb-[22px] flex flex-wrap items-start gap-4">
+      <div className="min-w-[240px] flex-1">
+        <h1 className="text-[32px] leading-[1.1] font-bold tracking-[-0.03em]">
+          Cockpit
+        </h1>
+        <p className="mt-[6px] text-[14.5px] text-muted">
+          {firma} · {heute}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-[10px]">
+        {/*
+          Die Vorlage zeigt hier "Auftrag anlegen". Aufträge entstehen in
+          diesem System aber aus angenommenen Angeboten (SPEC 4.4, Schritt 6)
+          — ein Knopf, der einen Auftrag aus dem Nichts erzeugt, umginge die
+          Kalkulation. Der Weg führt deshalb über das Angebot.
+        */}
+        <LinkButton href="/angebote">Angebot erstellen</LinkButton>
+        <LinkButton href="/berichte" variant="ghost">
+          Berichte
+        </LinkButton>
+      </div>
+    </div>
   );
 }

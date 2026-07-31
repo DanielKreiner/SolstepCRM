@@ -234,6 +234,74 @@ export async function deletePhase(
   return { error: null, ok: `Phase „${phase.label as string}" gelöscht.` };
 }
 
+const standortSchema = z.object({
+  locationId: z.string().uuid(),
+  holidayRegion: z.string().trim().min(2).max(10),
+  minStaffing: z.coerce.number().int().min(0).max(99),
+  restHours: z.coerce.number().min(0).max(24),
+  maxDaily: z.coerce.number().min(1).max(24),
+  maxWeekly: z.coerce.number().min(1).max(100),
+  breakAfterMin: z.coerce.number().int().min(0).max(1440),
+  breakMin: z.coerce.number().int().min(0).max(240),
+});
+
+/**
+ * Arbeitszeitregeln und Feiertagsregion eines Standorts.
+ *
+ * Diese Werte sind kein Anzeigekram: `lib/rules/worktime.ts` prueft die
+ * Dienstplanung gegen genau sie, und `blocksPublication()` haelt eine
+ * Veroeffentlichung an, wenn die Ruhezeit unterschritten wird. Wer hier die
+ * Ruhezeit auf 0 setzt, schaltet die Pruefung ab — deshalb steht neben dem
+ * Feld, was gesetzlich gilt, und deshalb laeuft die Aenderung durch das
+ * Audit-Log.
+ */
+export async function saveLocation(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const me = await requireMe();
+  if (me.perms.einstellungen !== "write") {
+    return { error: "Keine Berechtigung für Einstellungen.", ok: null };
+  }
+
+  const parsed = standortSchema.safeParse({
+    locationId: formData.get("locationId"),
+    holidayRegion: formData.get("holidayRegion"),
+    minStaffing: formData.get("minStaffing"),
+    restHours: formData.get("restHours"),
+    maxDaily: formData.get("maxDaily"),
+    maxWeekly: formData.get("maxWeekly"),
+    breakAfterMin: formData.get("breakAfterMin"),
+    breakMin: formData.get("breakMin"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+
+  const d = parsed.data;
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("location")
+    .update({
+      holiday_region: d.holidayRegion,
+      min_staffing: d.minStaffing,
+      worktime_rules: {
+        rest_hours: d.restHours,
+        max_daily: d.maxDaily,
+        max_weekly: d.maxWeekly,
+        break_after_min: d.breakAfterMin,
+        break_min: d.breakMin,
+      },
+    })
+    .eq("id", d.locationId);
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  revalidatePath("/dispo");
+  return { error: null, ok: "Standort gespeichert." };
+}
+
 async function zaehleBelegung(
   supabase: Awaited<ReturnType<typeof createClient>>,
   phaseId: string,

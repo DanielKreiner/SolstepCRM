@@ -3,7 +3,7 @@ import Link from "next/link";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhasePill } from "@/components/ui/PhasePill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { date, eur, eurShort } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -136,14 +136,31 @@ export default async function AngebotePage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Offen" value={offen.length} />
-        <Stat label="Volumen offen" value={eurShort(volumen)} />
-        <Stat label="Gewonnen" value={gewonnen.length} tone="done" />
-        <Stat
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Volumen offen"
+          wert={eurShort(volumen)}
+          pille={`${offen.length} ${offen.length === 1 ? "Angebot" : "Angebote"}`}
+          notiz="exkl. USt."
+        />
+        <KpiKarte
+          label="Offen beim Kunden"
+          wert={offen.length}
+          notiz="versendet oder geöffnet, noch keine Antwort"
+        />
+        <KpiKarte
+          label="Gewonnen"
+          wert={gewonnen.length}
+          ton="gut"
+          notiz="angenommen, Auftrag angelegt"
+        />
+        <KpiKarte
           label="Abgelaufen"
-          value={abgelaufen.length}
-          tone={abgelaufen.length > 0 ? "crit" : "done"}
+          wert={abgelaufen.length}
+          pille={abgelaufen.length > 0 ? "nachfassen" : "nichts abgelaufen"}
+          ton={abgelaufen.length > 0 ? "kritisch" : "gut"}
+          notiz="Gültigkeit überschritten"
         />
       </div>
 

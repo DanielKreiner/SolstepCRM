@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { dateTime } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -60,14 +60,30 @@ export default async function DokumentePage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Sichtbar" value={alle.length} />
-        <Stat label="Baustelle und Kunde" value={baustelle.length} />
-        <Stat label="Personalakte" value={personal.length} />
-        <Stat
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Sichtbare Dokumente"
+          wert={alle.length}
+          pille={`${baustelle.length} Baustelle`}
+          notiz="was deine Rolle sehen darf"
+        />
+        <KpiKarte
+          label="Baustelle und Kunde"
+          wert={baustelle.length}
+          notiz="Lieferscheine, Fotos, Übergaben"
+        />
+        <KpiKarte
+          label="Personalakte"
+          wert={personal.length}
+          notiz="Lohnzettel, Verträge, Nachweise"
+        />
+        <KpiKarte
           label="Unterschrift offen"
-          value={offen}
-          tone={offen > 0 ? "warn" : "done"}
+          wert={offen}
+          pille={offen > 0 ? "erinnern" : "alles unterschrieben"}
+          ton={offen > 0 ? "warn" : "gut"}
+          notiz="E-Signatur angefordert, noch nicht erledigt"
         />
       </div>
 

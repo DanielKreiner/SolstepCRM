@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { date, hhmm, hhmmSigned, initials, time, viennaDay } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -62,17 +62,32 @@ export default async function StundenkontoPage() {
         subtitle="Ist-Zeit aus gebuchten und genehmigten Einträgen, plus manuelle Bewegungen"
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Meine Iststunden" value={hhmm(meinSaldo)} />
-        <Stat label="Meine Wochenstunden" value={`${me.weeklyHours} h`} />
-        <Stat
-          label="Offene Korrekturen"
-          value={offeneKorrekturen.length}
-          tone={offeneKorrekturen.length > 0 ? "warn" : "done"}
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Meine Iststunden"
+          wert={hhmm(meinSaldo)}
+          pille={`${me.weeklyHours} h/Woche`}
+          notiz="gebucht und genehmigt"
         />
-        <Stat
+        <KpiKarte
+          label="Meine Wochenstunden"
+          wert={`${me.weeklyHours} h`}
+          notiz="vereinbartes Arbeitszeitmodell"
+        />
+        <KpiKarte
+          label="Offene Korrekturen"
+          wert={offeneKorrekturen.length}
+          pille={
+            offeneKorrekturen.length > 0 ? "warten auf Entscheidung" : "nichts offen"
+          }
+          ton={offeneKorrekturen.length > 0 ? "warn" : "gut"}
+          notiz="Zeitkorrekturen brauchen eine Begründung"
+        />
+        <KpiKarte
           label="Personen"
-          value={darfSehen ? (users ?? []).length : 1}
+          wert={darfSehen ? (users ?? []).length : 1}
+          notiz={darfSehen ? "im Zugriff deiner Rolle" : "nur das eigene Konto"}
         />
       </div>
 

@@ -3,8 +3,8 @@ import Link from "next/link";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
-import { eur, num } from "@/lib/format";
+import { KpiKarte } from "@/components/ui/KpiKarte";
+import { eur, eurShort, num } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { StockMoveForm } from "./StockMoveForm";
@@ -176,17 +176,30 @@ export default async function LagerPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Artikel" value={rows.length} />
-        <Stat
-          label="Unter Mindestbestand"
-          value={unterMindest.length}
-          tone={unterMindest.length > 0 ? "crit" : "done"}
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Lagerwert"
+          wert={eurShort(lagerwert)}
+          pille={`${rows.length} Artikel`}
+          notiz="zum Einkaufspreis"
         />
-        <Stat label="Lagerwert (EK)" value={eur(lagerwert)} />
-        <Stat
+        <KpiKarte
+          label="Unter Mindestbestand"
+          wert={unterMindest.length}
+          pille={unterMindest.length > 0 ? "nachbestellen" : "Bestand gedeckt"}
+          ton={unterMindest.length > 0 ? "kritisch" : "gut"}
+          notiz="Bestellvorschlag im Reiter Bestellungen"
+        />
+        <KpiKarte
+          label="Artikel"
+          wert={rows.length}
+          notiz="Stammdaten gepflegt"
+        />
+        <KpiKarte
           label="Kategorien"
-          value={new Set(rows.map((a) => a.category).filter(Boolean)).size}
+          wert={new Set(rows.map((a) => a.category).filter(Boolean)).size}
+          notiz="Gliederung des Sortiments"
         />
       </div>
 

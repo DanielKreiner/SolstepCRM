@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { dateShort, initials, time, viennaDay } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -138,22 +138,39 @@ export default async function DispoPage({
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Einsätze" value={alleTermine.length} />
-        <Stat
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Einsätze diese Woche"
+          wert={alleTermine.length}
+          pille={offen.length > 0 ? `${offen.length} im Pool` : "alles terminiert"}
+          notiz="Blöcke im Wochenraster"
+        />
+        <KpiKarte
           label="Ohne Zuordnung"
-          value={offen.length}
-          tone={offen.length > 0 ? "warn" : "done"}
+          wert={offen.length}
+          pille={offen.length > 0 ? "aus dem Pool ziehen" : "Pool leer"}
+          ton={offen.length > 0 ? "warn" : "gut"}
+          notiz="Aufträge und Tickets ohne Termin"
         />
-        <Stat
+        <KpiKarte
           label="Blockierende Verstöße"
-          value={blockierende.length}
-          tone={blockierende.length > 0 ? "crit" : "done"}
+          wert={blockierende.length}
+          pille={
+            blockierende.length > 0 ? "Veröffentlichung gesperrt" : "Plan ist sauber"
+          }
+          ton={blockierende.length > 0 ? "kritisch" : "gut"}
+          notiz="Ruhezeit, Doppelbelegung, Wochenstunden"
         />
-        <Stat
+        <KpiKarte
           label="Veröffentlicht"
-          value={veroeffentlicht ? "ja" : "nein"}
-          tone={veroeffentlicht ? "done" : undefined}
+          wert={veroeffentlicht ? "ja" : "nein"}
+          ton={veroeffentlicht ? "gut" : "warn"}
+          notiz={
+            veroeffentlicht
+              ? "Mannschaft ist benachrichtigt"
+              : "noch niemand benachrichtigt"
+          }
         />
       </div>
 

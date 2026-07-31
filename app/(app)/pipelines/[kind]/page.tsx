@@ -6,7 +6,8 @@ import { Timeline } from "@/components/board/Timeline";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhasePill } from "@/components/ui/PhasePill";
-import { RingStat, Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
+import { Ring } from "@/components/ui/RingKarte";
 import { date, eur, eurShort } from "@/lib/format";
 import {
   KINDS,
@@ -207,16 +208,38 @@ export default async function PipelinePage({
       </div>
 
       <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Offen" value={offen.length} />
-        <Stat label="Volumen offen" value={eurShort(volumenOffen)} />
-        <Stat label="Gewonnen" value={gewonnen.length} tone="done" />
-        <div className="rounded-input bg-panel px-[14px] py-3">
-          <RingStat
-            label="Erfolgsquote"
-            percent={quote}
-            center={`${Math.round(quote)}%`}
-            tone={quote >= 50 ? "done" : "crit"}
-          />
+        <KpiKarte
+          akzent
+          label="Volumen offen"
+          wert={eurShort(volumenOffen)}
+          pille={`${offen.length} offen`}
+          notiz="exkl. USt."
+        />
+        <KpiKarte
+          label="Offen"
+          wert={offen.length}
+          notiz="Karten in aktiven Phasen"
+        />
+        <KpiKarte
+          label="Gewonnen"
+          wert={gewonnen.length}
+          ton="gut"
+          notiz="in dieser Pipeline abgeschlossen"
+        />
+        <div className="rounded-[20px] bg-surface px-5 py-[18px] shadow-soft">
+          <div className="text-[12.5px] text-muted">Erfolgsquote</div>
+          <div className="mt-3 flex items-center gap-4">
+            <Ring
+              prozent={quote}
+              size={72}
+              dicke={8}
+              label="Erfolgsquote"
+              ton={quote >= 50 ? "done" : "kritisch"}
+            />
+            <span className="num text-[11.5px] text-faint">
+              {gewonnen.length} von {gewonnen.length + offen.length}
+            </span>
+          </div>
         </div>
       </div>
 

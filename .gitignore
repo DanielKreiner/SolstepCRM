@@ -63,3 +63,6 @@ design/support.js
 /playwright-report/
 /public/sw*.js
 /public/swe-worker*.js
+
+# Gerenderte Designvorlagen, nur zum Vergleich im Browser — nicht ins Repo
+public/_vorlagen/

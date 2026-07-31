@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { date, hhmm, initials } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/nav";
 import { requireMe } from "@/lib/session";
@@ -148,21 +148,33 @@ export default async function MitarbeiterPage() {
         subtitle={`${rows.filter((u) => u.active).length} aktiv · Nachweise mit 60 Tagen Vorwarnung`}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Aktiv" value={rows.filter((u) => u.active).length} />
-        <Stat
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Aktive Mitarbeiter"
+          wert={rows.filter((u) => u.active).length}
+          pille={`${rows.length} insgesamt`}
+          notiz="Zugänge vergibt die Geschäftsführung"
+        />
+        <KpiKarte
           label="Nachweise laufen ab"
-          value={[...ablaufend.values()].flat().length}
-          tone={ablaufend.size > 0 ? "warn" : "done"}
+          wert={[...ablaufend.values()].flat().length}
+          pille={ablaufend.size > 0 ? "innerhalb 120 Tagen" : "nichts fällig"}
+          ton={ablaufend.size > 0 ? "warn" : "gut"}
+          notiz="Zertifikate und Unterweisungen"
         />
-        <Stat
+        <KpiKarte
           label="Abgelaufen"
-          value={abgelaufen}
-          tone={abgelaufen > 0 ? "crit" : "done"}
+          wert={abgelaufen}
+          pille={abgelaufen > 0 ? "Einsatz prüfen" : "alles gültig"}
+          ton={abgelaufen > 0 ? "kritisch" : "gut"}
+          notiz="Qualifikation nicht mehr gedeckt"
         />
-        <Stat
+        <KpiKarte
           label="Standorte"
-          value={new Set(rows.map((u) => u.location?.name).filter(Boolean)).size}
+          wert={new Set(rows.map((u) => u.location?.name).filter(Boolean)).size}
+          notiz="je Standort eigene Arbeitszeitregeln"
+          href="/einstellungen?bereich=standorte"
         />
       </div>
 

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { hhmm, hhmmSigned, time, viennaDay } from "@/lib/format";
 import { addDays, endOfViennaDay, startOfViennaDay } from "@/lib/time";
 import { requireMe } from "@/lib/session";
@@ -207,14 +207,21 @@ export default async function ZeiterfassungPage({
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Gebucht" value={hhmm(gebucht)} />
-        <Stat label="Pause" value={hhmm(pause)} />
-        <Stat label="Tagessoll" value={hhmm(soll)} />
-        <Stat
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Gebucht heute"
+          wert={hhmm(gebucht)}
+          pille={hhmmSigned(gebucht - soll)}
+          notiz={`Tagessoll ${hhmm(soll)}`}
+        />
+        <KpiKarte label="Pause" wert={hhmm(pause)} notiz="nicht als Arbeitszeit gezählt" />
+        <KpiKarte label="Tagessoll" wert={hhmm(soll)} notiz="aus den Wochenstunden gerechnet" />
+        <KpiKarte
           label="Differenz"
-          value={hhmmSigned(gebucht - soll)}
-          tone={gebucht - soll < 0 ? "crit" : "done"}
+          wert={hhmmSigned(gebucht - soll)}
+          ton={gebucht - soll < 0 ? "warn" : "gut"}
+          notiz={gebucht - soll < 0 ? "unter Soll" : "über Soll"}
         />
       </div>
 

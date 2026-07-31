@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { date } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -47,17 +47,29 @@ export default async function BewerberPage() {
         subtitle={`${laufend.length} im Verfahren · ${alle.length} insgesamt`}
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Im Verfahren" value={laufend.length} />
-        <Stat
-          label="Zusagen"
-          value={proStufe.get("zusage")?.length ?? 0}
-          tone="done"
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        <KpiKarte
+          akzent
+          label="Im Verfahren"
+          wert={laufend.length}
+          pille={`${new Set(laufend.map((b) => b.position)).size} Positionen`}
+          notiz="von Neu bis Probearbeit"
         />
-        <Stat label="Abgelehnt" value={proStufe.get("abgelehnt")?.length ?? 0} />
-        <Stat
+        <KpiKarte
+          label="Zusagen"
+          wert={proStufe.get("zusage")?.length ?? 0}
+          ton="gut"
+          notiz="Vertrag folgt"
+        />
+        <KpiKarte
+          label="Abgelehnt"
+          wert={proStufe.get("abgelehnt")?.length ?? 0}
+          notiz="Daten werden nach sechs Monaten gelöscht"
+        />
+        <KpiKarte
           label="Offene Positionen"
-          value={new Set(laufend.map((b) => b.position)).size}
+          wert={new Set(laufend.map((b) => b.position)).size}
+          notiz="Stellen mit laufenden Bewerbungen"
         />
       </div>
 

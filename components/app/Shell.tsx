@@ -10,6 +10,15 @@ import { createClient } from "@/lib/supabase/server";
  * beim ersten Designwechsel auseinanderlaufen. Was sie unterscheidet, ist
  * ausschließlich der Inhalt.
  */
+/** Nullen und fehlende Zaehler weglassen — eine "0" ist keine Meldung. */
+function nurEchte(
+  roh: Record<string, number | null>,
+): Record<string, number> {
+  const aus: Record<string, number> = {};
+  for (const [k, v] of Object.entries(roh)) if (v && v > 0) aus[k] = v;
+  return aus;
+}
+
 export async function Shell({
   me,
   children,
@@ -19,21 +28,64 @@ export async function Shell({
 }) {
   const supabase = await createClient();
 
-  const [{ data: location }, { count: unread }, { count: lowStock }] =
-    await Promise.all([
-      me.locationId
-        ? supabase
-            .from("location")
-            .select("name")
-            .eq("id", me.locationId)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      supabase
-        .from("notification")
-        .select("id", { count: "exact", head: true })
-        .is("read_at", null),
-      supabase.from("v_stock_alert").select("id", { count: "exact", head: true }),
-    ]);
+  /*
+   * Zaehler in der Navigation. In der Vorlage traegt fast jeder Eintrag
+   * einen — und zwar nicht die Gesamtzahl der Datensaetze, sondern das,
+   * was Arbeit macht: offene Angebote, unbezahlte Rechnungen, unbeantwortete
+   * Antraege. Eine "214" neben CRM, die nur sagt, wie viele Kunden es gibt,
+   * ist Dekoration; sie wird nie kleiner und niemand handelt danach.
+   *
+   * Alle Zaehler laufen als head-Count ueber RLS: was die Rolle nicht sehen
+   * darf, zaehlt sie auch nicht mit.
+   */
+  const [
+    { data: location },
+    { count: unread },
+    { count: lowStock },
+    { count: angeboteOffen },
+    { count: rechnungenOffen },
+    { count: antraegeOffen },
+    { count: korrekturenOffen },
+    { count: ticketsOffen },
+    { count: bewerberOffen },
+  ] = await Promise.all([
+    me.locationId
+      ? supabase
+          .from("location")
+          .select("name")
+          .eq("id", me.locationId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("notification")
+      .select("id", { count: "exact", head: true })
+      .is("read_at", null),
+    supabase.from("v_stock_alert").select("id", { count: "exact", head: true }),
+    supabase
+      .from("quote")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["sent", "opened"]),
+    supabase
+      .from("invoice")
+      .select("id", { count: "exact", head: true })
+      .not("status", "in", "(paid,draft)"),
+    supabase
+      .from("absence")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "requested"),
+    supabase
+      .from("time_correction")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "requested"),
+    supabase
+      .from("service_ticket")
+      .select("id", { count: "exact", head: true })
+      .not("status", "in", "(closed,resolved)"),
+    supabase
+      .from("applicant")
+      .select("id", { count: "exact", head: true })
+      .not("stage", "in", "(zusage,abgelehnt)"),
+  ]);
 
   const visibleAreas = Object.entries(me.perms)
     .filter(([, level]) => level !== "none")
@@ -46,7 +98,15 @@ export async function Shell({
           companyName={me.company.name}
           locationName={location?.name ?? "Alle Standorte"}
           visibleAreas={visibleAreas}
-          badges={lowStock ? { "/lager": lowStock } : {}}
+          badges={nurEchte({
+            "/angebote": angeboteOffen,
+            "/lager": lowStock,
+            "/rechnungen": rechnungenOffen,
+            "/zeiterfassung": korrekturenOffen,
+            "/abwesenheiten": antraegeOffen,
+            "/crm": ticketsOffen,
+            "/bewerber": bewerberOffen,
+          })}
         />
       </div>
 

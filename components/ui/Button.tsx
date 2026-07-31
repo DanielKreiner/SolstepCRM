@@ -1,4 +1,5 @@
-import type { ButtonHTMLAttributes } from "react";
+import Link from "next/link";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 type Variant = "primary" | "ghost" | "quiet";
 
@@ -44,5 +45,45 @@ export function Button({
         .join(" ")}
       {...rest}
     />
+  );
+}
+
+/*
+ * Derselbe Knopf als Navigation. Getrennt gehalten, weil ein <button> mit
+ * router.push() die Mittelklick- und Kontextmenue-Erwartung bricht: eine
+ * Aktion, die den Screen wechselt, gehoert in ein <a>.
+ */
+export function LinkButton({
+  href,
+  variant = "primary",
+  block = false,
+  className = "",
+  children,
+}: {
+  href: string;
+  variant?: Variant;
+  block?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={[
+        "inline-flex items-center justify-center gap-[9px] rounded-pill px-[22px] py-[13px]",
+        "text-sm no-underline transition-[filter,background-color] duration-200 ease-out-quint",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        // Die Variantenklassen setzen die Textfarbe; der globale a-Stil
+        // wuerde sie sonst auf die Akzentfarbe ziehen.
+        variant === "primary" ? "hover:text-white" : "text-ink hover:text-ink",
+        VARIANTS[variant],
+        block ? "w-full" : "",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {children}
+    </Link>
   );
 }
