@@ -5,9 +5,15 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   /*
-   * Getrennte Verzeichnisse für dev und build. Sonst überschreibt ein
-   * "pnpm build" die Chunks des laufenden Dev-Servers, und der antwortet
-   * bis zum Neustart mit "Cannot find module ./317.js".
+   * Der Dev-Server schreibt nach .next-dev, der Build ins Standard-.next.
+   * Grund für die Trennung: sonst überschreibt ein "pnpm build" die Chunks
+   * des laufenden Dev-Servers, und der antwortet bis zum Neustart mit
+   * "Cannot find module ./317.js".
+   *
+   * Warum der BUILD das Standardverzeichnis behält und nicht der Dev-Server:
+   * Vercel liest next.config, um das Ausgabeverzeichnis zu finden — in einem
+   * Prozess, in dem NEXT_DIST_DIR nicht gesetzt ist. Ein abweichendes
+   * distDir für den Build lässt das Deployment ins Leere greifen.
    */
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
   typescript: {

@@ -55,7 +55,7 @@ yarn-error.log*
 design/support.js
 
 # Build-Verzeichnis, getrennt vom Dev-Server
-/.next-build/
+/.next-dev/
 
 /.next-e2e/
 /e2e-results/
