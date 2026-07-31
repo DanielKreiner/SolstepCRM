@@ -176,3 +176,83 @@ export async function createTicketFromPortal(
     ok: `Ihr Anliegen ist unter ${ticket.number as string} erfasst.`,
   };
 }
+
+const confirmSchema = z.object({
+  token: z.string().min(10),
+  appointmentId: z.string().uuid(),
+});
+
+/**
+ * Terminbestätigung durch den Kunden (SPEC 5.1).
+ *
+ * Der Termin muss zu einem Auftrag DIESES Kunden gehören. job_appointment
+ * trägt selbst kein customer_id, deshalb wird der Auftrag mitgelesen und
+ * gegen die Sitzung geprüft — ein Token allein darf keinen fremden Termin
+ * bestätigen können.
+ *
+ * Verschieben gibt es hier bewusst nicht: ein Kunde, der einen Termin
+ * eigenmächtig verlegt, kollidiert mit der Einsatzplanung und mit der
+ * Ruhezeitprüfung. Der Weg führt über ein Anliegen, das jemand sieht.
+ */
+export async function confirmAppointmentFromPortal(
+  _prev: PortalState,
+  formData: FormData,
+): Promise<PortalState> {
+  const parsed = confirmSchema.safeParse({
+    token: formData.get("token"),
+    appointmentId: formData.get("appointmentId"),
+  });
+  if (!parsed.success) return { error: "Eingabe fehlt.", ok: null };
+
+  const session = await resolvePortal(parsed.data.token);
+  if (!session) return { error: "Der Zugang ist abgelaufen.", ok: null };
+
+  const admin = createAdminClient();
+
+  const { data: termin } = await admin
+    .from("job_appointment")
+    .select("id, starts_at, customer_confirmed, job:job_id ( id, number, customer_id )")
+    .eq("id", parsed.data.appointmentId)
+    .eq("company_id", session.companyId)
+    .maybeSingle();
+
+  const job = termin?.job as unknown as
+    | { id: string; number: string; customer_id: string }
+    | null;
+
+  if (!termin || !job || job.customer_id !== session.customerId) {
+    return { error: "Termin nicht gefunden.", ok: null };
+  }
+
+  if (termin.customer_confirmed) {
+    return { error: null, ok: "Der Termin ist bereits bestätigt." };
+  }
+
+  const { error } = await admin
+    .from("job_appointment")
+    .update({ customer_confirmed: true })
+    .eq("id", termin.id);
+
+  if (error) {
+    return { error: `Bestätigung fehlgeschlagen: ${error.message}`, ok: null };
+  }
+
+  // Der Betrieb soll es mitbekommen, ohne ins Portal schauen zu müssen.
+  await admin.from("notification").insert({
+    company_id: session.companyId,
+    kind: "appointment_confirmed",
+    title: `Termin bestätigt — ${session.customerName}`,
+    body: `${job.number} am ${new Date(termin.starts_at as string).toLocaleDateString("de-AT")}`,
+    link: `/auftraege/${job.id}`,
+  });
+
+  await admin.from("contact_activity").insert({
+    company_id: session.companyId,
+    customer_id: session.customerId,
+    kind: "portal",
+    body: `Termin zu ${job.number} im Kundenportal bestätigt.`,
+  });
+
+  revalidatePath(`/portal/${parsed.data.token}`);
+  return { error: null, ok: "Danke, der Termin ist bestätigt." };
+}

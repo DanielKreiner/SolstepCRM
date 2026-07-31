@@ -98,6 +98,90 @@ export async function portalQuotes(session: PortalSession) {
   return data ?? [];
 }
 
+/**
+ * Die Phasen der Projektpipeline, für die Fortschrittsleiste (SPEC 5.1).
+ *
+ * Die Leiste zeigt den Weg des Projekts, nicht nur den aktuellen Stand.
+ * Deshalb kommen alle Phasen mit, nicht bloß die erreichte — der Kunde soll
+ * sehen, was noch aussteht.
+ *
+ * Verlorene und abgebrochene Phasen bleiben draußen: eine Leiste, die dem
+ * Kunden "Verloren" als kommenden Schritt anzeigt, ist absurd.
+ */
+export async function portalPhases(session: PortalSession) {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("pipeline_phase")
+    .select("id, label, sort, system_key, pipeline:pipeline_id ( kind )")
+    .eq("company_id", session.companyId)
+    .order("sort");
+
+  return (data ?? [])
+    .filter(
+      (p) =>
+        (p.pipeline as unknown as { kind: string } | null)?.kind === "projekte" &&
+        p.system_key !== "lost",
+    )
+    .map((p) => ({
+      id: p.id as string,
+      label: p.label as string,
+      sort: p.sort as number,
+      systemKey: (p.system_key as string | null) ?? null,
+    }));
+}
+
+/** Anlagendaten des Kunden — Leistung, Speicher, Module. */
+export async function portalPlant(session: PortalSession) {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("plant")
+    .select("kwp, storage_kwh, modules, inverter, commissioned_on")
+    .eq("customer_id", session.customerId)
+    .eq("company_id", session.companyId)
+    .order("kwp", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+/**
+ * Kommende Termine beim Kunden.
+ *
+ * Nur was in der Zukunft liegt: ein Portal, das vergangene Termine als
+ * "nächster Termin" führt, verwirrt mehr als es hilft. `customer_confirmed`
+ * entscheidet, ob der Bestätigen-Knopf noch etwas zu tun hat.
+ */
+export async function portalAppointments(session: PortalSession) {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("job_appointment")
+    .select(
+      "id, starts_at, ends_at, title, customer_confirmed, job:job_id ( id, number )",
+    )
+    .eq("company_id", session.companyId)
+    .gte("starts_at", new Date().toISOString())
+    .order("starts_at")
+    .limit(20);
+
+  /*
+   * job_appointment trägt kein customer_id. Der Bezug läuft über den
+   * Auftrag — deshalb wird hier gegen die Aufträge dieses Kunden gefiltert
+   * und nicht auf die Abfrage vertraut.
+   */
+  const meine = await admin
+    .from("job")
+    .select("id")
+    .eq("customer_id", session.customerId)
+    .eq("company_id", session.companyId);
+
+  const erlaubt = new Set((meine.data ?? []).map((j) => j.id as string));
+
+  return (data ?? []).filter((t) => {
+    const job = t.job as unknown as { id: string } | null;
+    return job !== null && erlaubt.has(job.id);
+  });
+}
+
 export async function portalTickets(session: PortalSession) {
   const admin = createAdminClient();
   const { data } = await admin

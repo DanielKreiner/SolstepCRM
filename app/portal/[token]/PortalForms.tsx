@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   acceptFromPortal,
+  confirmAppointmentFromPortal,
   createTicketFromPortal,
   type PortalState,
 } from "./actions";
@@ -130,6 +131,33 @@ export function TicketForm({ token }: { token: string }) {
       <div className="mt-4">
         <Submit label="Anliegen senden" busy="Wird gesendet …" />
       </div>
+    </form>
+  );
+}
+
+/**
+ * Terminbestätigung. Ein Knopf, kein Formular mit Feldern — der Kunde
+ * bestätigt einen Termin, den der Betrieb gesetzt hat, und hat dabei nichts
+ * einzutragen.
+ */
+export function ConfirmAppointmentForm({
+  token,
+  appointmentId,
+}: {
+  token: string;
+  appointmentId: string;
+}) {
+  const [state, formAction] = useActionState(
+    confirmAppointmentFromPortal,
+    INITIAL,
+  );
+
+  return (
+    <form action={formAction}>
+      <input type="hidden" name="token" value={token} />
+      <input type="hidden" name="appointmentId" value={appointmentId} />
+      <Submit label="Termin bestätigen" busy="Wird bestätigt …" />
+      <Meldung state={state} />
     </form>
   );
 }

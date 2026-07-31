@@ -50,7 +50,9 @@ test("Die Matrix zeigt die tatsächlichen Rechte", async ({ page }) => {
   await login(page, DEMO.gf);
   await page.goto("/einstellungen");
 
-  await expect(page.getByRole("heading", { name: "Rollenmatrix" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Rollen und Rechte" }),
+  ).toBeVisible();
 
   // Monteur hat auf Rechnungen keinen Zugriff, GF Schreibrecht.
   await expect(page.getByLabel("rechnungen für monteur")).toHaveValue("none");
@@ -118,7 +120,7 @@ test("Die Geschäftsführung kann sich nicht selbst aussperren", async ({
 test("Eine eigene Phase lässt sich anlegen und benutzen", async ({ page }) => {
   await aufraeumen();
   await login(page, DEMO.gf);
-  await page.goto("/einstellungen");
+  await page.goto("/einstellungen?bereich=phasen");
 
   const { data: pipeline } = await admin()
     .from("pipeline")
@@ -175,7 +177,7 @@ test("Eine Systemphase lässt sich umbenennen, aber nicht löschen", async ({
     .single();
 
   await login(page, DEMO.gf);
-  await page.goto("/einstellungen");
+  await page.goto("/einstellungen?bereich=phasen");
 
   /*
    * Nicht über den Zeilentext suchen: die Bezeichnung steht im Wert des
@@ -228,7 +230,7 @@ test("Eine belegte Phase lässt sich nicht löschen", async ({ page }) => {
   await db.from("job").update({ phase_id: phase!.id }).eq("id", job!.id);
 
   await login(page, DEMO.gf);
-  await page.goto("/einstellungen");
+  await page.goto("/einstellungen?bereich=phasen");
 
   const zeile = page
     .locator("li")
@@ -260,11 +262,41 @@ test("Eine belegte Phase lässt sich nicht löschen", async ({ page }) => {
 
 test("Ohne Schreibrecht sind die Einstellungen nur lesbar", async ({ page }) => {
   await login(page, DEMO.bauleitung);
-  await page.goto("/einstellungen");
 
+  // Rechte und Phasen liegen seit der Unternavigation in getrennten
+  // Bereichen — die Sperre muss in beiden greifen, nicht nur im ersten.
+  await page.goto("/einstellungen?bereich=rechte");
   await expect(page.getByText("sehen, aber nicht ändern")).toBeVisible();
   await expect(page.getByLabel("rechnungen für gf")).toBeDisabled();
+
+  await page.goto("/einstellungen?bereich=phasen");
+  await expect(page.getByText("sehen, aber nicht ändern")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Phase anlegen" }),
   ).toHaveCount(0);
+});
+
+test("Die Unternavigation führt in jeden Bereich", async ({ page }) => {
+  await login(page, DEMO.gf);
+
+  for (const [bereich, ueberschrift] of [
+    ["rechte", "Rollen und Rechte"],
+    ["standorte", "Standorte und Arbeitszeitregeln"],
+    ["phasen", "Phasen"],
+    ["nummernkreise", "Nummernkreise"],
+    ["integrationen", "Integrationen"],
+    ["daten", "Daten mitnehmen"],
+  ] as const) {
+    await page.goto(`/einstellungen?bereich=${bereich}`);
+    await expect(
+      page.getByRole("heading", { name: ueberschrift }),
+      bereich,
+    ).toBeVisible();
+  }
+
+  // Ein unbekannter Bereich fällt auf die Rechte zurück, statt leer zu bleiben.
+  await page.goto("/einstellungen?bereich=gibtsnicht");
+  await expect(
+    page.getByRole("heading", { name: "Rollen und Rechte" }),
+  ).toBeVisible();
 });

@@ -2,9 +2,28 @@
 
 Stand 31.07.2026. Reihenfolge und Definition of Done aus `CLAUDE.md` Abschnitt 12.
 
-**99 E2E-Tests, 73 Unit-Tests.** `pnpm typecheck`, `pnpm lint` und `pnpm build`
+**100 E2E-Tests, 83 Unit-Tests.** `pnpm typecheck`, `pnpm lint` und `pnpm build`
 laufen sauber durch. Der Seed-Zustand ist nach der kompletten Testsuite
 unverändert — die Tests hinterlassen keine Drift.
+
+## Design nach den Vorlagen in `export/`
+
+Die drei gerenderten Vorlagen sind die verbindliche Referenz. Farben und
+Typografie stimmten von Anfang an; gefehlt haben die Bauteile, die daraus
+ein Werkzeug machen. Nachgezogen:
+
+- `KpiKarte` (Akzentvariante, Pille, Klartextzeile) auf allen 15 Screens
+  statt der kleinen `Stat`-Kacheln
+- `Balkenchart`, `Ring`, `Avatar`, `Abschnitt`, `LaufendeZeit`,
+  `Fortschrittsleiste`
+- Cockpit vollständig nach SPEC 4.1
+- Einstellungen mit Unternavigation, neu darin Standorte mit
+  Arbeitszeitregeln und die Nummernkreise aus `doc_counter`
+- Pipelinekarte mit Stundenfortschritt, Deckungsbeitrag-Ampel und
+  Anlagengröße (Migration 0011)
+- Monteur-App: Bottom-Nav mit fünf Punkten und hervorgehobenem Stempeln,
+  neue Screens Auftragsliste und Profil
+- Kundenportal: Fortschrittsleiste, Anlagendaten, Terminbestätigung
 
 ## Fertig und getestet
 

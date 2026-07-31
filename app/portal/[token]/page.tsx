@@ -1,14 +1,21 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Pill } from "@/components/ui/Pill";
-import { date, eur } from "@/lib/format";
 import {
+  Fortschrittsleiste,
+  type Schritt,
+} from "@/components/ui/Fortschrittsleiste";
+import { Pill } from "@/components/ui/Pill";
+import { date, dateShort, eur, num, time } from "@/lib/format";
+import {
+  portalAppointments,
   portalJobs,
+  portalPhases,
+  portalPlant,
   portalQuotes,
   portalTickets,
   resolvePortal,
 } from "@/lib/portal/data";
-import { AcceptForm, TicketForm } from "./PortalForms";
+import { AcceptForm, ConfirmAppointmentForm, TicketForm } from "./PortalForms";
 
 export const metadata: Metadata = { title: "Kundenportal" };
 
@@ -38,15 +45,48 @@ export default async function PortalPage({
   // sich aus der Fehlermeldung nichts ableiten lässt.
   if (!session) notFound();
 
-  const [jobs, quotes, tickets] = await Promise.all([
+  const [jobs, quotes, tickets, phasen, anlage, termine] = await Promise.all([
     portalJobs(session),
     portalQuotes(session),
     portalTickets(session),
+    portalPhases(session),
+    portalPlant(session),
+    portalAppointments(session),
   ]);
 
   const offeneAngebote = quotes.filter(
     (q) => !q.accepted_at && q.status !== "lost" && q.status !== "expired",
   );
+
+  /*
+   * Das laufende Projekt: der jüngste Auftrag, der noch nicht abgeschlossen
+   * ist. Hat der Kunde mehrere, trägt die Leiste den aktuellen — die
+   * übrigen stehen weiter unten in der Liste.
+   */
+  const laufendes = jobs.find(
+    (j) =>
+      (j.phase as unknown as { system_key: string | null } | null)
+        ?.system_key !== "closed",
+  );
+
+  const aktuellerSort = laufendes
+    ? ((laufendes.phase as unknown as { sort: number } | null)?.sort ?? null)
+    : null;
+
+  const schritte: Schritt[] =
+    aktuellerSort === null
+      ? []
+      : phasen.map((p) => ({
+          label: p.label,
+          zustand:
+            p.sort < aktuellerSort
+              ? "erledigt"
+              : p.sort === aktuellerSort
+                ? "aktuell"
+                : "offen",
+        }));
+
+  const naechsterTermin = termine[0] ?? null;
 
   return (
     <main className="mx-auto w-full max-w-[820px] px-4 py-8">
@@ -56,6 +96,81 @@ export default async function PortalPage({
           {session.customerName}
         </h1>
       </header>
+
+      {schritte.length > 0 && laufendes ? (
+        <section className="mb-4 rounded-[20px] bg-surface p-5 shadow-soft">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-[15px] font-semibold">Ihr Projekt im Verlauf</h2>
+            <span className="num text-[12px] text-muted">
+              {laufendes.number as string}
+            </span>
+          </div>
+          <Fortschrittsleiste schritte={schritte} />
+        </section>
+      ) : null}
+
+      {naechsterTermin ? (
+        <section className="mb-4 rounded-[20px] bg-surface p-5 shadow-soft">
+          <h2 className="text-[15px] font-semibold">Nächster Termin</h2>
+          <p className="mt-2 text-[19px] leading-snug font-semibold tracking-[-0.02em]">
+            {(naechsterTermin.title as string | null) ?? "Termin vor Ort"}
+          </p>
+          <p className="num mt-1 text-[13px] text-muted">
+            {date(naechsterTermin.starts_at as string)} ·{" "}
+            {time(naechsterTermin.starts_at as string)}–
+            {time(naechsterTermin.ends_at as string)}
+          </p>
+
+          {naechsterTermin.customer_confirmed ? (
+            <p className="mt-3 text-[13px] text-s-done">
+              Von Ihnen bestätigt. Danke.
+            </p>
+          ) : (
+            <div className="mt-4">
+              <ConfirmAppointmentForm
+                token={token}
+                appointmentId={naechsterTermin.id as string}
+              />
+              <p className="mt-2 text-[11.5px] text-faint">
+                Passt der Termin nicht? Schreiben Sie uns unten über
+                {" „Anliegen“"} — wir melden uns.
+              </p>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {anlage ? (
+        <section className="mb-6 rounded-[20px] bg-surface p-5 shadow-soft">
+          <h2 className="mb-3 text-[15px] font-semibold">Ihre Anlage</h2>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Anlagenwert
+              label="Leistung"
+              wert={anlage.kwp ? `${num(anlage.kwp as string)} kWp` : "—"}
+            />
+            <Anlagenwert
+              label="Speicher"
+              wert={
+                anlage.storage_kwh
+                  ? `${num(anlage.storage_kwh as string)} kWh`
+                  : "kein Speicher"
+              }
+            />
+            <Anlagenwert
+              label="Module"
+              wert={(anlage.modules as string | null) ?? "—"}
+            />
+            <Anlagenwert
+              label="In Betrieb seit"
+              wert={
+                anlage.commissioned_on
+                  ? dateShort(anlage.commissioned_on as string)
+                  : "in Umsetzung"
+              }
+            />
+          </div>
+        </section>
+      ) : null}
 
       <section className="mb-6">
         <h2 className="mb-2 text-[15px] font-semibold">Ihre Projekte</h2>
@@ -202,5 +317,14 @@ export default async function PortalPage({
         Dieser Zugang ist persönlich. Bitte den Link nicht weitergeben.
       </footer>
     </main>
+  );
+}
+
+function Anlagenwert({ label, wert }: { label: string; wert: string }) {
+  return (
+    <div className="rounded-input bg-panel px-4 py-3">
+      <div className="text-[11.5px] text-muted">{label}</div>
+      <div className="num mt-[2px] text-[15px] font-semibold">{wert}</div>
+    </div>
   );
 }
