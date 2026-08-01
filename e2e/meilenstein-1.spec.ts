@@ -169,11 +169,13 @@ test("Auftragsdetail zeigt Zeiten und Material des Auftrags", async ({ page }) =
   await expect(
     page.getByRole("heading", { name: "A-2026-0041" }),
   ).toBeVisible();
-  await expect(page.getByText("Stunden ist / plan")).toBeVisible();
+  // Seit dem Umbau auf die drei Ringkennzahlen der Vorlage heißt die
+  // Kachel "Stunden ist / soll" und nennt den Wert im Klartext darunter.
+  await expect(page.getByText("Stunden ist / soll")).toBeVisible();
   await expect(page.getByRole("heading", { name: /^Zeiten/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /^Material \(/ })).toBeVisible();
   // 25,5 Iststunden aus dem Seed
-  await expect(page.getByText("25,5 / 64").first()).toBeVisible();
+  await expect(page.getByText("25,5 von 64 h").first()).toBeVisible();
 });
 
 test("Monteur sieht das Lager, darf aber nicht buchen", async ({ page }) => {

@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import { KpiKarte } from "@/components/ui/KpiKarte";
 import { date, hhmm, hhmmSigned, initials, time, viennaDay } from "@/lib/format";
+import { werktageImMonat } from "@/lib/absence";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { DecideCorrectionForm, RequestCorrectionForm } from "./CorrectionForms";
@@ -41,6 +42,58 @@ export default async function StundenkontoPage() {
         .order("started_at", { ascending: false })
         .limit(10),
     ]);
+
+  /*
+   * Saldoverlauf der letzten zwölf Monate (SPEC 4.9). Gerechnet aus den
+   * eigenen Buchungen: je Monat Iststunden minus Sollstunden, aufaddiert.
+   *
+   * Die Nulllinie ist betont — sie ist die Aussage. Ein Balken über der
+   * Linie heißt Überstunden, einer darunter Minusstunden, und ein Konto,
+   * das im Herbst kippt, sieht man nur im Verlauf, nicht am Endsaldo.
+   */
+  const heute = viennaDay();
+  const monate: string[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(`${heute.slice(0, 8)}01T12:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() - i);
+    monate.push(d.toISOString().slice(0, 7));
+  }
+
+  const { data: verlaufRoh } = await supabase
+    .from("time_entry")
+    .select("started_at, duration_min, kind")
+    .eq("user_id", me.id)
+    .in("status", ["booked", "approved"])
+    .gte("started_at", `${monate[0]}-01T00:00:00Z`);
+
+  const istJeMonat = new Map<string, number>();
+  for (const e of verlaufRoh ?? []) {
+    if (e.kind === "break") continue;
+    const m = (e.started_at as string).slice(0, 7);
+    istJeMonat.set(m, (istJeMonat.get(m) ?? 0) + Number(e.duration_min ?? 0));
+  }
+
+  const tagessollMin = (me.weeklyHours / 5) * 60;
+  const verlauf = monate.map((m) => {
+    const werktage = werktageImMonat(m);
+    const ist = istJeMonat.get(m) ?? 0;
+    const soll = werktage * tagessollMin;
+    return {
+      monat: m,
+      label: new Date(`${m}-01T12:00:00Z`).toLocaleDateString("de-AT", {
+        month: "short",
+      }),
+      diffMin: Math.round(ist - soll),
+      /* Monate ohne jede Buchung sind kein Minus, sondern unbekannt —
+         etwa vor dem Eintritt. Sie bleiben leer statt tiefrot. */
+      leer: ist === 0,
+    };
+  });
+
+  const maxAbweichung = Math.max(
+    60,
+    ...verlauf.filter((v) => !v.leer).map((v) => Math.abs(v.diffMin)),
+  );
 
   const saldoMap = new Map(
     (balances ?? []).map((b) => [
@@ -136,6 +189,62 @@ export default async function StundenkontoPage() {
           </ul>
         </section>
       ) : null}
+
+      {/* Saldoverlauf 12 Monate mit betonter Nulllinie (SPEC 4.9). */}
+      <section className="mb-4 rounded-[20px] bg-surface p-5 shadow-soft">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-[15px] font-semibold">Mein Saldoverlauf</h2>
+          <span className="num text-[11.5px] text-muted">
+            12 Monate · Ist gegen Soll je Monat
+          </span>
+        </div>
+
+        <div className="relative h-[168px]">
+          {/* Nulllinie: die Aussage der Grafik, deshalb durchgezogen. */}
+          <div
+            aria-hidden
+            className="absolute right-0 left-0 border-t border-line-strong"
+            style={{ top: "50%" }}
+          />
+          <div className="flex h-full items-stretch gap-[6px]">
+            {verlauf.map((v) => {
+              const anteil = v.leer
+                ? 0
+                : (Math.abs(v.diffMin) / maxAbweichung) * 50;
+              const plus = v.diffMin >= 0;
+              return (
+                <div
+                  key={v.monat}
+                  className="flex flex-1 flex-col items-center"
+                  title={
+                    v.leer
+                      ? `${v.label}: keine Buchung`
+                      : `${v.label}: ${hhmmSigned(v.diffMin)}`
+                  }
+                >
+                  <div className="relative w-full flex-1">
+                    {!v.leer ? (
+                      <div
+                        className="absolute left-1/2 w-full max-w-[24px] -translate-x-1/2 rounded-pill"
+                        style={{
+                          height: `${Math.max(3, anteil)}%`,
+                          [plus ? "bottom" : "top"]: "50%",
+                          background: plus
+                            ? "linear-gradient(180deg,var(--accent-from),var(--accent-to))"
+                            : "var(--s-crit)",
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                  <span className="num mt-1 text-[10px] text-faint">
+                    {v.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1.4fr] xl:items-start">
         {darfSehen ? (

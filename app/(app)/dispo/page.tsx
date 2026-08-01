@@ -44,10 +44,11 @@ export default async function DispoPage({
     { data: abwesenheiten },
     { data: veroeffentlicht },
     { conflicts },
+    { data: poolRoh },
   ] = await Promise.all([
     supabase
       .from("app_user")
-      .select("id, name, role")
+      .select("id, name, role, weekly_hours")
       .eq("active", true)
       .in("role", ["monteur", "bauleitung", "lager"])
       .order("name"),
@@ -71,6 +72,14 @@ export default async function DispoPage({
       .eq("iso_week", isoWeek(montag))
       .maybeSingle(),
     loadConflicts(montag),
+    supabase
+      .from("job")
+      .select(
+        "id, number, planned_hours, phase:phase_id ( system_key ), customer:customer_id ( name )",
+      )
+      .is("scheduled_from", null)
+      .order("number", { ascending: false })
+      .limit(30),
   ]);
 
   type Termin = {
@@ -89,6 +98,56 @@ export default async function DispoPage({
 
   const alleTermine = (termine ?? []) as unknown as Termin[];
   const offen = alleTermine.filter((t) => !t.user_id);
+
+  /*
+   * Pool: offene Aufträge ohne Termin. Nicht dasselbe wie ein Termin ohne
+   * Person — das eine ist ungeplante Arbeit, das andere ein Block, dem der
+   * Monteur fehlt. Die Vorlage zeigt beides, und sie meint hier das erste.
+   */
+  type PoolZeile = {
+    id: string;
+    number: string;
+    customer: string;
+    plannedHours: number;
+  };
+  const nichtTerminiert: PoolZeile[] = (
+    (poolRoh ?? []) as unknown as {
+      id: string;
+      number: string;
+      planned_hours: string;
+      phase: { system_key: string | null } | null;
+      customer: { name: string } | null;
+    }[]
+  )
+    .filter((j) => j.phase?.system_key !== "closed")
+    .map((j) => ({
+      id: j.id,
+      number: j.number,
+      customer: j.customer?.name ?? "—",
+      plannedHours: Number(j.planned_hours ?? 0),
+    }));
+
+  /*
+   * Wochenstunden je Person aus den Blöcken dieser Woche. Gerechnet wird
+   * die Dauer der Termine, nicht die Plankosten des Auftrags — im Dienstplan
+   * zählt, wie lange jemand eingeteilt ist.
+   */
+  const geplantJe = new Map<string, number>();
+  for (const t of alleTermine) {
+    if (!t.user_id) continue;
+    const min =
+      (new Date(t.ends_at).getTime() - new Date(t.starts_at).getTime()) / 60000;
+    geplantJe.set(t.user_id, (geplantJe.get(t.user_id) ?? 0) + Math.max(0, min));
+  }
+
+  const wochenlast = (users ?? [])
+    .map((u) => ({
+      id: u.id as string,
+      name: u.name as string,
+      geplant: Math.round(((geplantJe.get(u.id as string) ?? 0) / 60) * 10) / 10,
+      soll: Number(u.weekly_hours ?? 0),
+    }))
+    .filter((w) => w.geplant > 0 || w.soll > 0);
 
   const konfliktProSchicht = new Map<string, typeof conflicts>();
   for (const c of conflicts) {
@@ -289,6 +348,94 @@ export default async function DispoPage({
         </section>
 
         <div className="flex flex-col gap-4">
+          {/*
+            Pool "Nicht terminiert" (SPEC 4.7). Was hier liegt, ist Arbeit,
+            die zugesagt ist und keinen Platz im Plan hat — die Zahl gehört
+            neben den Plan, nicht auf einen anderen Screen.
+          */}
+          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-[15px] font-semibold">Nicht terminiert</h2>
+              <span className="num rounded-pill bg-sunk px-[9px] py-[3px] text-[11px] text-muted">
+                {nichtTerminiert.length}
+              </span>
+            </div>
+            {nichtTerminiert.length === 0 ? (
+              <p className="text-[13px] text-muted">
+                Jeder offene Auftrag hat einen Termin.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {nichtTerminiert.slice(0, 8).map((j) => (
+                  <li key={j.id}>
+                    <Link
+                      href={`/auftraege/${j.id}`}
+                      className="flex flex-wrap items-center gap-2 rounded-input bg-panel px-4 py-3 text-ink hover:bg-sunk hover:text-ink"
+                    >
+                      <span className="num text-[12.5px] font-semibold">
+                        {j.number}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[12.5px]">
+                        {j.customer}
+                      </span>
+                      <span className="num text-[11.5px] text-faint">
+                        {j.plannedHours > 0 ? `${j.plannedHours} h` : "—"}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+                {nichtTerminiert.length > 8 ? (
+                  <li className="num pl-1 text-[11.5px] text-faint">
+                    und {nichtTerminiert.length - 8} weitere
+                  </li>
+                ) : null}
+              </ul>
+            )}
+          </section>
+
+          {/* Wochenstunden je Person gegen Soll — die rechte Spalte der Vorlage. */}
+          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
+            <h2 className="mb-3 text-[15px] font-semibold">
+              Wochenstunden gegen Soll
+            </h2>
+            {wochenlast.length === 0 ? (
+              <p className="text-[13px] text-muted">Niemand verplant.</p>
+            ) : (
+              <ul className="flex flex-col gap-[10px]">
+                {wochenlast.map((w) => {
+                  const anteil =
+                    w.soll > 0 ? Math.min(140, (w.geplant / w.soll) * 100) : 0;
+                  const drueber = w.geplant > w.soll;
+                  return (
+                    <li key={w.id}>
+                      <div className="mb-[5px] flex items-baseline justify-between gap-2">
+                        <span className="truncate text-[12.5px] font-medium">
+                          {w.name}
+                        </span>
+                        <span
+                          className={`num text-[11.5px] ${drueber ? "text-s-crit" : "text-muted"}`}
+                        >
+                          {w.geplant} / {w.soll} h
+                        </span>
+                      </div>
+                      <div className="h-[6px] w-full overflow-hidden rounded-pill bg-sunk">
+                        <div
+                          className="h-full rounded-pill"
+                          style={{
+                            width: `${Math.min(100, anteil)}%`,
+                            background: drueber
+                              ? "var(--s-crit)"
+                              : "linear-gradient(90deg,var(--accent-from),var(--accent-to))",
+                          }}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
           {me.perms.pipelines === "write" ? (
             <PublishForm week={montag} blockierende={blockierende.length} />
           ) : (

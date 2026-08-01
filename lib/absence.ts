@@ -107,3 +107,18 @@ export function daysInMonth(
   }
   return tage;
 }
+
+/**
+ * Werktage (Montag–Freitag) eines Monats, "2026-08".
+ *
+ * Feiertage bleiben aussen vor — location.holiday_region ist gepflegt, wird
+ * aber noch nicht ausgewertet. Das Sollstundenmodell liegt dadurch in
+ * Feiertagsmonaten zu hoch; das steht so in docs/STATUS.md und ist kein
+ * stiller Fehler.
+ */
+export function werktageImMonat(monat: string): number {
+  const [jahr, m] = monat.split("-").map(Number);
+  if (!jahr || !m) return 0;
+  const letzter = new Date(Date.UTC(jahr, m, 0)).getUTCDate();
+  return workdays(`${monat}-01`, `${monat}-${String(letzter).padStart(2, "0")}`);
+}

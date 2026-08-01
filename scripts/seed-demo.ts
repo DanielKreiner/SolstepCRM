@@ -551,6 +551,7 @@ async function seedDispo(admin: SupabaseClient) {
   console.log(`${rows.length} Einsätze geplant (mit einem Ruhezeitverstoß).`);
 
   await seedPortal(admin);
+  await syncNummernkreise(admin);
 }
 
 /*
@@ -609,6 +610,35 @@ async function seedPortal(admin: SupabaseClient) {
   if (error) throw error;
 
   console.log(`Portalzugang: /portal/${token}`);
+}
+
+/*
+ * Nummernkreise auf den Bestand heben.
+ *
+ * Der Seed schreibt Belegnummern fest ("S-2026-0031"), ohne doc_counter
+ * mitzuzählen. Ohne diesen Abgleich holt der Zähler die eingefügten Nummern
+ * irgendwann ein, und next_number() liefert eine Nummer, die es schon gibt —
+ * beobachtet an service_ticket nach genügend Testläufen.
+ *
+ * Dasselbe gilt für den CSV-Import von Altbeständen (CLAUDE.md 12.a): wer
+ * fremde Nummern einfügt, muss den Zähler nachziehen.
+ */
+async function syncNummernkreise(admin: SupabaseClient): Promise<void> {
+  const jahr = new Date().getFullYear();
+  const arten = ["quote", "job", "invoice", "ticket", "purchase_order"];
+
+  for (const companyId of [COMPANY_A, COMPANY_B]) {
+    for (const kind of arten) {
+      const { error } = await admin.rpc("sync_doc_counter", {
+        p_company: companyId,
+        p_kind: kind,
+        p_year: jahr,
+      });
+      if (error) throw new Error(`Nummernkreis ${kind}: ${error.message}`);
+    }
+  }
+
+  console.log("Nummernkreise auf den Bestand gehoben.");
 }
 
 /** Wiener Wanduhrzeit als UTC-Instant, ohne date-fns-tz im Skript. */

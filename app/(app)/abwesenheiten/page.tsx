@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import { KpiKarte } from "@/components/ui/KpiKarte";
 import { daysInMonth, vacationBalance, type AbsenceRow } from "@/lib/absence";
-import { date, initials } from "@/lib/format";
+import { date, initials, viennaDay } from "@/lib/format";
+import { addDays, isoWeek, startOfViennaWeek } from "@/lib/time";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { DecideForm, RequestForm } from "./AbsenceForms";
@@ -47,10 +48,11 @@ export default async function AbwesenheitenPage({
     ? Number(jahr)
     : new Date().getFullYear();
 
-  const [{ data: users }, { data: absences }] = await Promise.all([
+  const [{ data: users }, { data: absences }, { data: standorte }] =
+    await Promise.all([
     supabase
       .from("app_user")
-      .select("id, name, vacation_days_year, vacation_carry")
+      .select("id, name, role, vacation_days_year, vacation_carry")
       .eq("active", true)
       .order("name"),
     supabase
@@ -59,6 +61,7 @@ export default async function AbwesenheitenPage({
       .lte("from_date", `${year}-12-31`)
       .gte("to_date", `${year}-01-01`)
       .order("from_date"),
+    supabase.from("location").select("min_staffing").order("name").limit(1),
   ]);
 
   const alle = (absences ?? []).map((a) => ({
@@ -74,6 +77,37 @@ export default async function AbwesenheitenPage({
 
   const offen = alle.filter((a) => a.status === "requested");
   const darfEntscheiden = me.perms.mitarbeiter === "write";
+
+  /*
+   * Besetzung der kommenden zwölf Wochen. Gezählt werden Monteure — die
+   * Mindestbesetzung des Standorts meint die Montage, nicht das Büro.
+   */
+  const monteure = (users ?? []).filter((u) => u.role === "monteur");
+  const mindestbesetzung = Number(
+    (standorte ?? [])[0]?.min_staffing ?? 4,
+  );
+
+  const startWoche = startOfViennaWeek(viennaDay());
+  const besetzung = Array.from({ length: 12 }, (_, i) => {
+    const montag = addDays(startWoche, i * 7);
+    const sonntag = addDays(montag, 6);
+
+    const abwesendeIds = new Set(
+      alle
+        .filter(
+          (a) =>
+            a.status === "approved" && a.from <= sonntag && a.to >= montag,
+        )
+        .map((a) => a.userId),
+    );
+
+    return {
+      kw: `KW ${isoWeek(montag).slice(-2)}`,
+      gesamt: monteure.length,
+      verfuegbar: monteure.filter((m) => !abwesendeIds.has(m.id as string))
+        .length,
+    };
+  });
 
   const eigene = alle.filter((a) => a.userId === me.id);
   const ich = (users ?? []).find((u) => u.id === me.id);
@@ -267,14 +301,71 @@ export default async function AbwesenheitenPage({
           </div>
         </section>
 
-        <RequestForm
-          meId={me.id}
-          users={(users ?? []).map((u) => ({
-            id: u.id as string,
-            name: u.name as string,
-          }))}
-          canForOthers={darfEntscheiden}
-        />
+        <div className="flex flex-col gap-4">
+          {/*
+            Besetzung je Woche gegen Mindestbesetzung (SPEC 4.11). Die Zahl
+            aus location.min_staffing ist die, an der ein Betrieb entscheidet,
+            ob er einen Urlaub genehmigen kann — sie gehört neben die Anträge
+            und nicht in die Einstellungen versteckt.
+          */}
+          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-[15px] font-semibold">Besetzung je Woche</h2>
+              <span className="num text-[11.5px] text-muted">
+                Minimum {mindestbesetzung}
+              </span>
+            </div>
+
+            {besetzung.length === 0 ? (
+              <p className="text-[13px] text-muted">Keine Monteure hinterlegt.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {besetzung.map((w) => {
+                  const knapp = w.verfuegbar < mindestbesetzung;
+                  return (
+                    <li
+                      key={w.kw}
+                      className="flex items-center gap-3 rounded-input bg-panel px-4 py-[10px]"
+                    >
+                      <span className="num w-[54px] shrink-0 text-[12px] text-muted">
+                        {w.kw}
+                      </span>
+                      <span className="h-[6px] flex-1 overflow-hidden rounded-pill bg-sunk">
+                        <span
+                          className="block h-full rounded-pill"
+                          style={{
+                            width: `${w.gesamt > 0 ? (w.verfuegbar / w.gesamt) * 100 : 0}%`,
+                            background: knapp
+                              ? "var(--s-crit)"
+                              : "linear-gradient(90deg,var(--accent-from),var(--accent-to))",
+                          }}
+                        />
+                      </span>
+                      <span
+                        className={`num shrink-0 text-[12px] font-semibold ${knapp ? "text-s-crit" : ""}`}
+                      >
+                        {w.verfuegbar} / {w.gesamt}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <p className="mt-3 text-[11.5px] text-faint">
+              Gezählt werden Monteure ohne genehmigte Abwesenheit in der Woche.
+            </p>
+          </section>
+
+          <RequestForm
+            meId={me.id}
+            users={(users ?? []).map((u) => ({
+              id: u.id as string,
+              name: u.name as string,
+            }))}
+            canForOthers={darfEntscheiden}
+          />
+        </div>
       </div>
     </>
   );

@@ -102,10 +102,18 @@ test("Storno statt Löschen", async ({ page }) => {
     .single();
 
   await login(page, DEMO.gf);
-  await page.goto("/rechnungen");
 
-  const karte = page.locator("article", { hasText: String(rechnung!.number) });
-  await karte.getByRole("button", { name: "stornieren" }).click();
+  /*
+   * Die Aktionen liegen seit dem Umbau im Detailpanel, nicht mehr an jeder
+   * Zeile — so wie in der Vorlage. Welcher Beleg im Panel steht, sagt die
+   * URL, deshalb wird er hier direkt angesteuert.
+   */
+  await page.goto(`/rechnungen?beleg=${rechnung!.id}`);
+  await expect(
+    page.getByRole("heading", { name: /^Teilrechnungen/ }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "stornieren" }).click();
 
   await expect
     .poll(async () => {

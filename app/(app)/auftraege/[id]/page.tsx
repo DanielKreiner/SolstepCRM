@@ -5,7 +5,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhasePill } from "@/components/ui/PhasePill";
 import { Pill } from "@/components/ui/Pill";
-import { RingStat, Stat } from "@/components/ui/Stat";
+import { RingKarte } from "@/components/ui/RingKarte";
 import { StockMoveForm } from "@/app/(app)/lager/StockMoveForm";
 import { date, dateTime, eur, hhmm, num, time } from "@/lib/format";
 import { requireMe } from "@/lib/session";
@@ -240,50 +240,49 @@ export default async function AuftragPage({
         }
       />
 
-      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
-        <Stat
-          label="Stunden ist / plan"
-          value={`${num(Math.round(stundenIst * 10) / 10)} / ${num(stundenPlan)}`}
-          tone={stundenPlan > 0 && stundenIst > stundenPlan ? "crit" : "done"}
-          hint={
+      {/*
+        Die drei Ringkennzahlen aus der Vorlage (SPEC 4.3). Sie stehen ganz
+        oben, weil sie zusammen die eine Frage beantworten, wegen der man
+        einen Auftrag aufmacht: läuft er noch im Plan?
+
+        Der Deckungsbeitrag ist der nach Material, nicht nach Lohn — der
+        Stundensatz ist Personendatum (Migration 0009) und darf hier nicht
+        durchschlagen. Das steht auch unter dem Ring.
+      */}
+      <div className="mb-4 grid gap-4 sm:grid-cols-3">
+        <RingKarte
+          titel="Stunden ist / soll"
+          prozent={stundenPlan > 0 ? (stundenIst / stundenPlan) * 100 : 0}
+          ton={
+            stundenPlan > 0 && stundenIst > stundenPlan ? "kritisch" : "doing"
+          }
+          fuss={
             stundenPlan > 0
-              ? `${Math.round((stundenIst / stundenPlan) * 100)} % verbraucht`
-              : "kein Planwert"
+              ? `${num(Math.round(stundenIst * 10) / 10)} von ${num(stundenPlan)} h`
+              : "kein Planwert hinterlegt"
           }
         />
-        <Stat
-          label="Material ist / plan"
-          value={`${eur(materialIst)} / ${eur(materialPlan)}`}
-          tone={materialPlan > 0 && materialIst > materialPlan ? "crit" : "done"}
+        <RingKarte
+          titel="Material kalkuliert"
+          prozent={materialPlan > 0 ? (materialIst / materialPlan) * 100 : 0}
+          ton={
+            materialPlan > 0 && materialIst > materialPlan ? "kritisch" : "done"
+          }
+          fuss={
+            materialPlan > 0
+              ? `${eur(materialIst)} von ${eur(materialPlan)}`
+              : "keine Materialkalkulation"
+          }
         />
-        <Stat label="Auftragswert" value={eur(wert)} />
-        <Stat
-          label="Nach Material"
-          value={eur(deckung)}
-          tone={deckung < 0 ? "crit" : undefined}
-          hint="ohne Lohnkosten"
+        <RingKarte
+          titel="Deckungsbeitrag"
+          prozent={wert > 0 ? (deckung / wert) * 100 : 0}
+          ton={deckung < 0 ? "kritisch" : "accent"}
+          fuss={`${eur(deckung)} nach Material · ohne Lohn`}
         />
       </div>
 
-      <div className="mb-4 grid gap-4 lg:grid-cols-[1fr_1fr_1fr]">
-        <div className="rounded-[20px] bg-surface p-5 shadow-soft">
-          <h2 className="mb-3 text-[15px] font-semibold">Fortschritt</h2>
-          <div className="flex flex-wrap gap-5">
-            <RingStat
-              label="Stunden"
-              percent={stundenPlan > 0 ? (stundenIst / stundenPlan) * 100 : 0}
-              center={`${Math.round(stundenPlan > 0 ? (stundenIst / stundenPlan) * 100 : 0)}%`}
-              tone={stundenIst > stundenPlan && stundenPlan > 0 ? "crit" : "accent"}
-            />
-            <RingStat
-              label="Material"
-              percent={materialPlan > 0 ? (materialIst / materialPlan) * 100 : 0}
-              center={`${Math.round(materialPlan > 0 ? (materialIst / materialPlan) * 100 : 0)}%`}
-              tone={materialIst > materialPlan && materialPlan > 0 ? "crit" : "accent"}
-            />
-          </div>
-        </div>
-
+      <div className="mb-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
         <div className="rounded-[20px] bg-surface p-5 shadow-soft">
           <h2 className="mb-3 text-[15px] font-semibold">Eckdaten</h2>
           <dl className="flex flex-col gap-[9px] text-[13px]">

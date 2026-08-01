@@ -1,12 +1,53 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Icon, type IconName } from "@/components/ui/Icon";
+import { KpiKarte } from "@/components/ui/KpiKarte";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Stat } from "@/components/ui/Stat";
 import { BERICHTE, baueBericht, istBerichtId, jahresZeitraum } from "@/lib/reports";
 import { requireMe } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Berichte" };
+
+/*
+ * Zweck und Zeitplan je Bericht. Steht hier und nicht in lib/reports.ts:
+ * das ist Beschriftung für diesen Screen, keine Eigenschaft des Berichts.
+ */
+type BibliotheksEintrag = {
+  icon: IconName;
+  zweck: string;
+  zeitplan: string;
+};
+
+/* Fallback, damit ein neuer Bericht in lib/reports.ts die Kachel nicht sprengt. */
+const KACHEL_FALLBACK: BibliotheksEintrag = {
+  icon: "berichte",
+  zweck: "Auswertung",
+  zeitplan: "auf Abruf",
+};
+
+const BIBLIOTHEK: Record<string, BibliotheksEintrag> = {
+  auftraege: {
+    icon: "pipelines",
+    zweck: "Stunden und Material gegen Kalkulation",
+    zeitplan: "auf Abruf",
+  },
+  umsatz: {
+    icon: "rechnungen",
+    zweck: "Fakturierung je Monat",
+    zeitplan: "auf Abruf · Export nächtlich",
+  },
+  zeiten: {
+    icon: "zeit",
+    zweck: "Iststunden je Person",
+    zeitplan: "auf Abruf · Monatsbericht am 1.",
+  },
+  material: {
+    icon: "lager",
+    zweck: "Verbrauch je Artikel",
+    zeitplan: "auf Abruf",
+  },
+};
 
 export default async function BerichtePage({
   searchParams,
@@ -70,24 +111,52 @@ export default async function BerichtePage({
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <nav className="flex flex-wrap gap-[3px] rounded-pill bg-surface p-1 shadow-soft">
-          {BERICHTE.map((b) => (
+      {/*
+        Berichtsbibliothek als Kachelraster (SPEC 4.16). Jede Kachel nennt
+        Zweck und Zeitplan — welcher Bericht nachts von selbst läuft und
+        welcher nur auf Abruf entsteht, ist die Frage, die ein
+        Geschäftsführer hier zuerst hat.
+      */}
+      <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
+        {BERICHTE.map((b) => {
+          const info = BIBLIOTHEK[b.id] ?? KACHEL_FALLBACK;
+          const an = b.id === id;
+          return (
             <Link
               key={b.id}
               href={`/berichte?bericht=${b.id}&jahr=${jahr}`}
+              aria-current={an ? "page" : undefined}
               className={[
-                "rounded-pill px-[17px] py-[9px] text-[13.5px] transition-colors",
-                b.id === id
-                  ? "bg-sunk font-semibold text-ink"
-                  : "font-normal text-muted hover:text-ink",
+                "group flex gap-[13px] rounded-[20px] px-5 py-[18px] text-ink shadow-soft transition-colors duration-200 ease-out-quint",
+                an ? "bg-accent-sunk" : "bg-surface hover:bg-panel",
               ].join(" ")}
             >
-              {b.label}
+              <span
+                aria-hidden
+                className={[
+                  "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-icon",
+                  an ? "bg-accent text-white" : "bg-panel text-faint",
+                ].join(" ")}
+              >
+                <Icon name={info.icon} size={17} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[14px] leading-snug font-semibold">
+                  {b.label}
+                </span>
+                <span className="mt-[3px] block text-[11.5px] text-muted">
+                  {info.zweck}
+                </span>
+                <span className="mt-[6px] block text-[10.5px] text-faint">
+                  {info.zeitplan}
+                </span>
+              </span>
             </Link>
-          ))}
-        </nav>
+          );
+        })}
+      </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <nav className="flex gap-1 rounded-pill bg-surface p-1 shadow-soft">
           {[jahr - 1, jahr, jahr + 1].map((j) => (
             <Link
@@ -108,14 +177,21 @@ export default async function BerichtePage({
 
       {summen.length > 0 ? (
         <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
-          <Stat label="Zeilen" value={bericht.zeilen.length} />
+          <KpiKarte
+            akzent
+            label="Zeilen"
+            wert={bericht.zeilen.length}
+            pille={`${jahr}`}
+            notiz={bericht.titel}
+          />
           {summen.slice(0, 3).map((s) => (
-            <Stat
+            <KpiKarte
               key={s.key}
               label={`Summe ${s.label}`}
-              value={new Intl.NumberFormat("de-AT", {
+              wert={new Intl.NumberFormat("de-AT", {
                 maximumFractionDigits: 2,
               }).format(Math.round(s.wert * 100) / 100)}
+              notiz={`über ${bericht.zeilen.length} Zeilen`}
             />
           ))}
         </div>
