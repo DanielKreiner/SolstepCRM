@@ -63,8 +63,11 @@ drop function if exists public.log_quote_activity();
 drop function if exists public.log_job_phase_activity();
 
 -- ---------------------------------------------------------- 3. VIEWS
-drop view if exists v_job_kpi;
+-- Von aussen nach innen: v_pipeline_card liest v_job_kpi. Umgekehrt
+-- bricht der Drop ab. Bewusst ohne cascade — cascade nimmt mit, was es
+-- findet, und hier soll genau das fallen, was hier steht.
 drop view if exists v_pipeline_card;
+drop view if exists v_job_kpi;
 
 -- -------------------------------------------------------- 4. SPALTEN
 -- Die alten Fremdschlüssel an den überlebenden Tabellen.
