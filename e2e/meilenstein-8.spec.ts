@@ -168,7 +168,14 @@ test("Angebotsannahme hält Name, Zeitpunkt und IP fest", async ({ page }) => {
     .eq("quote_id", quote!.id);
   for (const j of alteAuftraege ?? []) {
     await db.from("job_checklist_item").delete().eq("job_id", j.id);
-    await db.from("job").delete().eq("id", j.id);
+    const { error } = await db.from("job").delete().eq("id", j.id);
+    /*
+     * Den Fehler lesen: ein stilles Fehlschlagen liess den Auftrag
+     * stehen, die Annahme hielt das Angebot für längst angenommen und
+     * schrieb weder Name noch Zeitpunkt — gesucht wurde das anschliessend
+     * an der falschen Stelle.
+     */
+    expect(error?.message ?? null).toBeNull();
   }
 
   /*
