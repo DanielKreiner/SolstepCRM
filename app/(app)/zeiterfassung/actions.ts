@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { ausJson, pausenabzug, runde } from "@/lib/rules/zeitregeln";
 import { requireMe } from "@/lib/session";
 import { viennaClock } from "@/lib/time";
 
@@ -59,13 +60,60 @@ export async function createTimeEntry(
   }
 
   const supabase = await createClient();
+
+  const { data: firma } = await supabase
+    .from("company")
+    .select("time_settings")
+    .eq("id", me.companyId)
+    .maybeSingle();
+
+  const regeln = ausJson(firma?.time_settings);
+
+  const beginn = viennaClock(day, from);
+  const rohMin = Math.round(
+    (viennaClock(day, to).getTime() - beginn.getTime()) / 60000,
+  );
+
+  /*
+   * Runden verändert das Ende, nicht den Beginn: der Arbeitstag hat
+   * angefangen, wann er angefangen hat. Die gerundete Dauer steht danach
+   * in duration_min, das die Datenbank selbst rechnet — der Client
+   * bestimmt sie nach wie vor nicht (CLAUDE.md 5.3).
+   */
+  const gerundet = runde(rohMin, regeln);
+  const ende = new Date(beginn.getTime() + gerundet * 60000);
+
+  /*
+   * Der Pausenabzug greift nur bei Arbeit. Eine Fahrt oder eine Schulung
+   * bekommt keine Pause abgezogen, und eine gebuchte Pause schon gar nicht.
+   * Angerechnet werden Pausen, die am selben Tag ohnehin gestempelt sind —
+   * wer sich ausstempelt, zahlt sie nicht ein zweites Mal.
+   */
+  let autoPause = 0;
+  if (kind === "work") {
+    const { data: pausen } = await supabase
+      .from("time_entry")
+      .select("duration_min")
+      .eq("user_id", userId)
+      .eq("kind", "break")
+      .gte("started_at", viennaClock(day, "00:00").toISOString())
+      .lt("started_at", viennaClock(day, "23:59").toISOString());
+
+    const gebucht = (pausen ?? []).reduce(
+      (sum, p) => sum + Number(p.duration_min ?? 0),
+      0,
+    );
+    autoPause = pausenabzug(gerundet, gebucht, regeln).abzugMin;
+  }
+
   const { error } = await supabase.from("time_entry").insert({
     company_id: me.companyId,
     user_id: userId,
     job_id: jobId,
     kind,
-    started_at: viennaClock(day, from).toISOString(),
-    ended_at: viennaClock(day, to).toISOString(),
+    started_at: beginn.toISOString(),
+    ended_at: ende.toISOString(),
+    auto_break_min: autoPause,
     note,
     status: "booked",
     created_by: me.id,
@@ -77,7 +125,26 @@ export async function createTimeEntry(
   revalidatePath("/stundenkonto");
   if (jobId) revalidatePath(`/auftraege/${jobId}`);
 
-  return { error: null, ok: "Buchung gespeichert." };
+  /*
+   * Was die Regeln verändert haben, steht in der Rückmeldung. Eine
+   * Rundung, die stillschweigend Minuten wegnimmt, ist der schnellste Weg
+   * zu einem Streit über den Stundenzettel.
+   */
+  const hinweise: string[] = [];
+  if (gerundet !== rohMin) {
+    hinweise.push(`auf ${regeln.rundungMin} Minuten gerundet`);
+  }
+  if (autoPause > 0) {
+    hinweise.push(`${autoPause} Minuten Pause abgezogen`);
+  }
+
+  return {
+    error: null,
+    ok:
+      hinweise.length > 0
+        ? `Buchung gespeichert — ${hinweise.join(", ")}.`
+        : "Buchung gespeichert.",
+  };
 }
 
 const deleteSchema = z.object({ id: z.string().uuid() });

@@ -231,3 +231,96 @@ describe("Lagerjournal", () => {
     expect(count).toBe(1);
   });
 });
+
+/*
+ * Firmendaten: der Mandant pflegt seine Stammdaten selbst, aber nicht
+ * seine Abrechnung. Die Trennung liegt in Spaltenrechten (0023) — eine
+ * Row-Level-Policy kann sie nicht leisten, sie entscheidet über Zeilen.
+ */
+describe("company", () => {
+  it("lässt die Geschäftsführung Stammdaten und Zeitregeln ändern", async () => {
+    const c = clients.get("gf")!;
+
+    const { data: vorher } = await admin
+      .from("company")
+      .select("iban, time_settings")
+      .eq("id", COMPANY_A)
+      .single();
+
+    const { error } = await c
+      .from("company")
+      .update({ time_settings: { rundungMin: 5 } })
+      .eq("id", COMPANY_A);
+    expect(error).toBeNull();
+
+    const { data: nachher } = await admin
+      .from("company")
+      .select("time_settings")
+      .eq("id", COMPANY_A)
+      .single();
+    expect((nachher!.time_settings as { rundungMin: number }).rundungMin).toBe(5);
+
+    await admin
+      .from("company")
+      .update({ time_settings: vorher!.time_settings })
+      .eq("id", COMPANY_A);
+  });
+
+  it("lässt niemanden den eigenen Tarif schreiben", async () => {
+    const { data: vorher } = await admin
+      .from("company")
+      .select("plan, seats, status, storage_quota_mb")
+      .eq("id", COMPANY_A)
+      .single();
+
+    for (const rolle of Object.keys(MAIL) as Rolle[]) {
+      const c = clients.get(rolle)!;
+
+      for (const feld of ["plan", "seats", "status", "storage_quota_mb"]) {
+        const wert =
+          feld === "plan" ? "gratis" : feld === "status" ? "active" : 9999;
+        const { error } = await c
+          .from("company")
+          .update({ [feld]: wert })
+          .eq("id", COMPANY_A);
+
+        expect(error, `${rolle} darf ${feld} schreiben`).not.toBeNull();
+      }
+    }
+
+    const { data: nachher } = await admin
+      .from("company")
+      .select("plan, seats, status, storage_quota_mb")
+      .eq("id", COMPANY_A)
+      .single();
+    expect(nachher).toEqual(vorher);
+  });
+
+  it("lässt die Montage keine Bankverbindung ändern", async () => {
+    const c = clients.get("monteur")!;
+    const { data: vorher } = await admin
+      .from("company")
+      .select("iban")
+      .eq("id", COMPANY_A)
+      .single();
+
+    const { error } = await c
+      .from("company")
+      .update({ iban: "AT000000000000000000" })
+      .eq("id", COMPANY_A);
+
+    /*
+     * Die Policy verlangt Schreibrecht auf "einstellungen". Ein UPDATE
+     * ohne passende Zeile meldet keinen Fehler — geprüft wird deshalb die
+     * Wirkung, nicht die Rückmeldung.
+     */
+    expect(error).toBeNull();
+
+    const { data: nachher } = await admin
+      .from("company")
+      .select("iban")
+      .eq("id", COMPANY_A)
+      .single();
+    expect(nachher!.iban).toBe(vorher!.iban);
+  });
+});

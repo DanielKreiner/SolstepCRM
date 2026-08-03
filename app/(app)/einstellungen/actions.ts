@@ -317,3 +317,84 @@ async function zaehleBelegung(
 
   return (jobs.count ?? 0) + (quotes.count ?? 0) + (tickets.count ?? 0);
 }
+
+/* ------------------------------------------------------ ZEITERFASSUNG */
+
+const zeitSchema = z.object({
+  rundungMin: z.coerce.number().int().min(0).max(60),
+  pauseAbMin: z.coerce.number().int().min(0).max(720),
+  pauseAbzugMin: z.coerce.number().int().min(0).max(180),
+  abendAb: z.string().regex(/^\d{2}:\d{2}$/, "Uhrzeit als HH:MM."),
+  nachtAb: z.string().regex(/^\d{2}:\d{2}$/, "Uhrzeit als HH:MM."),
+  nachtBis: z.string().regex(/^\d{2}:\d{2}$/, "Uhrzeit als HH:MM."),
+  zuschlagAbendPct: z.coerce.number().min(0).max(300),
+  zuschlagNachtPct: z.coerce.number().min(0).max(300),
+  zuschlagSamstagPct: z.coerce.number().min(0).max(300),
+  zuschlagSonntagPct: z.coerce.number().min(0).max(300),
+  zuschlagFeiertagPct: z.coerce.number().min(0).max(300),
+});
+
+/**
+ * Zeiterfassungsregeln des Betriebs.
+ *
+ * Rundung, Pausenautomatik und Zuschlagssätze — kaufmännische Konvention,
+ * deshalb je Mandant und nicht je Standort. Die Arbeitszeitgrenzen
+ * (Ruhezeit, Höchstarbeitszeit) bleiben am Standort: das ist Arbeitsrecht
+ * und kann sich zwischen zwei Niederlassungen unterscheiden.
+ */
+export async function saveTimeSettings(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const me = await requireMe();
+  if (me.perms.einstellungen !== "write") {
+    return { error: "Keine Berechtigung für Einstellungen.", ok: null };
+  }
+
+  const parsed = zeitSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  if (d.pauseAbMin > 0 && d.pauseAbzugMin === 0) {
+    return {
+      error: "Ein Pausenabzug von null Minuten ist keine Automatik — bitte Schwelle auf 0 setzen.",
+      ok: null,
+    };
+  }
+
+  const supabase = await createClient();
+
+  /*
+   * Mit .select() geprüft, ob tatsächlich eine Zeile geschrieben wurde.
+   * Ein UPDATE, das an einer Policy vorbeiläuft, meldet keinen Fehler —
+   * es trifft null Zeilen und der Nutzer sähe eine Erfolgsmeldung für
+   * etwas, das nicht passiert ist.
+   */
+  const { data: geschrieben, error } = await supabase
+    .from("company")
+    .update({ time_settings: d })
+    .eq("id", me.companyId)
+    .select("id");
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+  if (!geschrieben || geschrieben.length === 0) {
+    return {
+      error:
+        "Nicht gespeichert — die Firmendaten sind für deinen Zugang schreibgeschützt.",
+      ok: null,
+    };
+  }
+
+  revalidatePath("/einstellungen");
+  revalidatePath("/zeiterfassung");
+  revalidatePath("/stundenkonto");
+  return {
+    error: null,
+    ok:
+      d.rundungMin > 0
+        ? `Gespeichert. Neue Buchungen werden auf ${d.rundungMin} Minuten gerundet.`
+        : "Gespeichert.",
+  };
+}

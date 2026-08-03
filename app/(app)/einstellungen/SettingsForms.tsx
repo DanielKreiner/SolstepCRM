@@ -7,6 +7,7 @@ import {
   deletePhase,
   renamePhase,
   saveLocation,
+  saveTimeSettings,
   setPermission,
   type SettingsState,
 } from "./actions";
@@ -402,6 +403,191 @@ function Zahl({
         step={step}
         min={0}
         defaultValue={value}
+        disabled={gesperrt}
+        className={`${feld} num w-full`}
+      />
+    </Feld>
+  );
+}
+
+export type ZeitWerte = {
+  rundungMin: number;
+  pauseAbMin: number;
+  pauseAbzugMin: number;
+  abendAb: string;
+  nachtAb: string;
+  nachtBis: string;
+  zuschlagAbendPct: number;
+  zuschlagNachtPct: number;
+  zuschlagSamstagPct: number;
+  zuschlagSonntagPct: number;
+  zuschlagFeiertagPct: number;
+};
+
+/**
+ * Zeiterfassungsregeln des Betriebs.
+ *
+ * Bewusst mit ausgeschriebenen Erklärungen: das sind die Stellschrauben,
+ * an denen ein Betrieb sich vertut, und die Folge steht am Monatsende auf
+ * dem Lohnzettel.
+ */
+export function ZeitregelnForm({
+  werte,
+  gesperrt,
+}: {
+  werte: ZeitWerte;
+  gesperrt: boolean;
+}) {
+  const [state, formAction] = useActionState(saveTimeSettings, INITIAL);
+
+  return (
+    <form action={formAction} className="rounded-input bg-panel p-4">
+      <h3 className="mb-1 text-[14px] font-semibold">Erfassen und Runden</h3>
+      <p className="mb-3 text-[12px] text-muted">
+        Gerundet wird kaufmännisch, nicht abwärts — sieben Minuten fallen
+        weg, acht werden zur vollen Viertelstunde. Eine Rundung, die immer
+        zulasten des Mitarbeiters geht, ist angreifbar.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Zahl
+          id="zr-rundung"
+          name="rundungMin"
+          label="Rundung je Buchung"
+          hinweis="Minuten, 0 = nicht runden"
+          value={werte.rundungMin}
+          step={5}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id="zr-pause-ab"
+          name="pauseAbMin"
+          label="Pause ab"
+          hinweis="Minuten Arbeit, 0 = keine Automatik"
+          value={werte.pauseAbMin}
+          step={30}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id="zr-pause-abzug"
+          name="pauseAbzugMin"
+          label="Pausenabzug"
+          hinweis="Minuten, selbst gebuchte Pausen zählen an"
+          value={werte.pauseAbzugMin}
+          step={5}
+          gesperrt={gesperrt}
+        />
+      </div>
+
+      <h3 className="mt-5 mb-1 text-[14px] font-semibold">Zuschläge</h3>
+      <p className="mb-3 text-[12px] text-muted">
+        Werden ausgewiesen, nicht ausbezahlt — was daraus wird, entscheidet
+        der Kollektivvertrag. Der Tagestyp schlägt die Uhrzeit: ein
+        Sonntagabend zählt als Sonntag, nicht doppelt.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Uhrzeit
+          id="zr-abend-ab"
+          name="abendAb"
+          label="Abend ab"
+          wert={werte.abendAb}
+          gesperrt={gesperrt}
+        />
+        <Uhrzeit
+          id="zr-nacht-ab"
+          name="nachtAb"
+          label="Nacht ab"
+          wert={werte.nachtAb}
+          gesperrt={gesperrt}
+        />
+        <Uhrzeit
+          id="zr-nacht-bis"
+          name="nachtBis"
+          label="Nacht bis"
+          wert={werte.nachtBis}
+          gesperrt={gesperrt}
+        />
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <Zahl
+          id="zr-z-abend"
+          name="zuschlagAbendPct"
+          label="Abend"
+          hinweis="Prozent"
+          value={werte.zuschlagAbendPct}
+          step={5}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id="zr-z-nacht"
+          name="zuschlagNachtPct"
+          label="Nacht"
+          hinweis="Prozent"
+          value={werte.zuschlagNachtPct}
+          step={5}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id="zr-z-samstag"
+          name="zuschlagSamstagPct"
+          label="Samstag"
+          hinweis="Prozent"
+          value={werte.zuschlagSamstagPct}
+          step={5}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id="zr-z-sonntag"
+          name="zuschlagSonntagPct"
+          label="Sonntag"
+          hinweis="Prozent"
+          value={werte.zuschlagSonntagPct}
+          step={5}
+          gesperrt={gesperrt}
+        />
+        <Zahl
+          id="zr-z-feiertag"
+          name="zuschlagFeiertagPct"
+          label="Feiertag"
+          hinweis="Prozent"
+          value={werte.zuschlagFeiertagPct}
+          step={5}
+          gesperrt={gesperrt}
+        />
+      </div>
+
+      {gesperrt ? null : (
+        <div className="mt-4">
+          <Submit label="Zeitregeln speichern" />
+        </div>
+      )}
+      <Meldung state={state} />
+    </form>
+  );
+}
+
+function Uhrzeit({
+  id,
+  name,
+  label,
+  wert,
+  gesperrt,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  wert: string;
+  gesperrt: boolean;
+}) {
+  return (
+    <Feld id={id} label={label} hinweis="Ortszeit">
+      <input
+        id={id}
+        name={name}
+        type="time"
+        defaultValue={wert}
         disabled={gesperrt}
         className={`${feld} num w-full`}
       />

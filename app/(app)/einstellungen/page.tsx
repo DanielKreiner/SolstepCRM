@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Abschnitt } from "@/components/ui/Abschnitt";
+import { ausJson } from "@/lib/rules/zeitregeln";
 import { KpiKarte } from "@/components/ui/KpiKarte";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
@@ -12,6 +13,7 @@ import {
   PermissionCell,
   PhaseRowForm,
   StandortForm,
+  ZeitregelnForm,
   type StandortWerte,
 } from "./SettingsForms";
 
@@ -46,6 +48,7 @@ const KIND_LABEL: Record<string, string> = {
 const BEREICHE = [
   ["rechte", "Rollen und Rechte"],
   ["standorte", "Standorte"],
+  ["zeit", "Zeiterfassung"],
   ["phasen", "Phasen"],
   ["nummernkreise", "Nummernkreise"],
   ["integrationen", "Integrationen"],
@@ -112,7 +115,7 @@ export default async function EinstellungenPage({
     supabase
       .from("company")
       .select(
-        "name, uid_nr, address, zip, city, country, iban, status, plan, seats",
+        "name, uid_nr, address, zip, city, country, iban, status, plan, seats, time_settings",
       )
       .maybeSingle(),
     supabase
@@ -331,6 +334,22 @@ export default async function EinstellungenPage({
                   })
                 )}
               </div>
+            </Abschnitt>
+          ) : null}
+
+          {bereich === "zeit" ? (
+            <Abschnitt titel="Zeiterfassung">
+              <p className="-mt-1 mb-4 text-[12.5px] text-muted">
+                Wie der Betrieb Zeiten erfasst und abrechnet. Die
+                Arbeitszeitgrenzen selbst — Ruhezeit und Höchstarbeitszeit —
+                stehen unter {"„Standorte“"}: das ist Arbeitsrecht und kann sich
+                zwischen zwei Niederlassungen unterscheiden, die Rundung
+                nicht.
+              </p>
+              <ZeitregelnForm
+                werte={ausJson(company?.time_settings)}
+                gesperrt={!darfSchreiben}
+              />
             </Abschnitt>
           ) : null}
 
