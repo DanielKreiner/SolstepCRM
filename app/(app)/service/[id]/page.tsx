@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhasePill } from "@/components/ui/PhasePill";
+import { PhasenWechsel } from "@/components/ui/PhasenWechsel";
 import { Pill } from "@/components/ui/Pill";
 import { Stat } from "@/components/ui/Stat";
 import { dateTime } from "@/lib/format";
@@ -39,7 +40,7 @@ export default async function TicketPage({
     .from("service_ticket")
     .select(
       `id, number, source, category, severity, status, body, created_at, assignee_id,
-       phase:phase_id ( label, system_key ),
+       phase:phase_id ( id, label, system_key ),
        customer:customer_id ( id, name, contact_person, email, phone, zip, city ),
        assignee:assignee_id ( name ),
        job:job_id ( id, number )`,
@@ -79,7 +80,22 @@ export default async function TicketPage({
     created_at: string;
   }[];
 
+  const { data: phasenRoh } = await supabase
+    .from("pipeline_phase")
+    .select("id, label, system_key, pipeline:pipeline_id ( kind )")
+    .order("sort");
+
+  const servicePhasen = ((phasenRoh ?? []) as unknown as {
+    id: string;
+    label: string;
+    system_key: string | null;
+    pipeline: { kind: string } | null;
+  }[])
+    .filter((p) => p.pipeline?.kind === "service")
+    .map((p) => ({ id: p.id, label: p.label, systemKey: p.system_key }));
+
   const phase = ticket.phase as unknown as {
+    id: string;
     label: string;
     system_key: string | null;
   } | null;
@@ -132,6 +148,16 @@ export default async function TicketPage({
         />
         <Stat label="Gemeldet" value={dateTime(ticket.created_at as string)} />
         <Stat label="Zuständig" value={assignee?.name ?? "—"} />
+      </div>
+
+      <div className="mb-4">
+        <PhasenWechsel
+          kind="service"
+          cardId={ticket.id as string}
+          gesperrt={!darfSchreiben}
+          aktuelleId={phase?.id ?? null}
+          phasen={servicePhasen}
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr] xl:items-start">

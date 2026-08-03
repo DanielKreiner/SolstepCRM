@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, jobHours, login, stockOf } from "./helpers";
+import { COMPANY_A, DEMO, admin, jobHours, login, stockOf, suchwahl } from "./helpers";
 
 /*
  * Definition of Done Meilenstein 1 (CLAUDE.md Abschnitt 12):
@@ -48,7 +48,7 @@ test("Zeitbuchung mit Auftragsbezug erhöht die Iststunden des Auftrags", async 
   const form = page.locator("form", { hasText: "Buchung anlegen" });
   await form.getByLabel("Beginn").fill("06:00");
   await form.getByLabel("Ende").fill("09:30");
-  await form.getByLabel(/^Auftrag/).selectOption(id);
+  await suchwahl(form, "Auftrag", AUFTRAG);
   await form.getByLabel("Notiz").fill("E2E Meilenstein 1");
   await form.getByRole("button", { name: /Buchung anlegen/ }).click();
 
@@ -73,7 +73,8 @@ test("Zeitbuchung mit Auftragsbezug erhöht die Iststunden des Auftrags", async 
 test("Verdrehte Zeiten werden abgewiesen und nicht gespeichert", async ({
   page,
 }) => {
-  const id = await jobId("A-2026-0042");
+  const AUFTRAG = "A-2026-0042";
+  const id = await jobId(AUFTRAG);
 
   await login(page, DEMO.bauleitung);
   await page.goto("/zeiterfassung");
@@ -81,7 +82,7 @@ test("Verdrehte Zeiten werden abgewiesen und nicht gespeichert", async ({
   const form = page.locator("form", { hasText: "Buchung anlegen" });
   await form.getByLabel("Beginn").fill("10:00");
   await form.getByLabel("Ende").fill("09:00");
-  await form.getByLabel(/^Auftrag/).selectOption(id);
+  await suchwahl(form, "Auftrag", AUFTRAG);
   await form.getByLabel("Notiz").fill("E2E verdreht");
   await form.getByRole("button", { name: /Buchung anlegen/ }).click();
 
@@ -105,7 +106,7 @@ test("Materialentnahme senkt den Bestand, Rückgabe hebt sie auf", async ({
   await page.goto("/lager");
 
   const form = page.locator("form", { hasText: "Material buchen" });
-  await form.getByLabel("Artikel").selectOption(id);
+  await suchwahl(form, "Artikel", SKU);
   await form.getByLabel("Art", { exact: true }).selectOption("out");
   await form.getByLabel(/^Menge/).fill("25");
   await form.getByLabel("Notiz").fill("E2E Entnahme");
@@ -114,7 +115,7 @@ test("Materialentnahme senkt den Bestand, Rückgabe hebt sie auf", async ({
   await expect(form.getByRole("status")).toContainText("Entnahme gebucht");
   expect(await stockOf(SKU)).toBe(vorher - 25);
 
-  await form.getByLabel("Artikel").selectOption(id);
+  await suchwahl(form, "Artikel", SKU);
   await form.getByLabel("Art", { exact: true }).selectOption("return");
   await form.getByLabel(/^Menge/).fill("25");
   await form.getByLabel("Notiz").fill("E2E Rückgabe");
@@ -132,7 +133,8 @@ test("Materialentnahme auf einen Auftrag erhöht dessen Materialkosten", async (
   const AUFTRAG = "A-2026-0042";
   const db = admin();
   const id = await jobId(AUFTRAG);
-  const artId = await articleId("MOD-JAS-440");
+  const artSku = "MOD-JAS-440";
+  const artId = await articleId(artSku);
 
   const { data: vor } = await db
     .from("v_job_kpi")
@@ -144,10 +146,10 @@ test("Materialentnahme auf einen Auftrag erhöht dessen Materialkosten", async (
   await page.goto("/lager");
 
   const form = page.locator("form", { hasText: "Material buchen" });
-  await form.getByLabel("Artikel").selectOption(artId);
+  await suchwahl(form, "Artikel", artSku);
   await form.getByLabel("Art", { exact: true }).selectOption("out");
   await form.getByLabel(/^Menge/).fill("10");
-  await form.getByLabel("Auftrag", { exact: true }).selectOption(id);
+  await suchwahl(form, "Auftrag", AUFTRAG);
   await form.getByLabel("Notiz").fill("E2E Auftragsmaterial");
   await form.getByRole("button", { name: "Buchen" }).click();
   await expect(form.getByRole("status")).toContainText("Entnahme gebucht");

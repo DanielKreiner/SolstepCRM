@@ -185,12 +185,22 @@ test("Ohne Schreibrecht auf Angebote gibt es keine Aktionen", async ({ page }) =
   await login(page, DEMO.monteur);
   await page.goto(`/angebote/${quoteId}`);
 
+  /*
+   * Auf der Seite steht der Hinweis inzwischen zweimal: einmal für die
+   * Angebotsaktionen, einmal für die Phasenleiste. Beides ist richtig,
+   * geprüft wird hier der erste.
+   */
   await expect(
-    page.getByText("fehlt deiner Rolle das Schreibrecht"),
+    page.getByText("Für Angebote fehlt deiner Rolle das Schreibrecht."),
   ).toBeVisible();
   await expect(
     page.locator("form", { hasText: "Annahme erfassen" }),
   ).toHaveCount(0);
+
+  // Auch die Phase lässt sich ohne Schreibrecht nicht verschieben.
+  await expect(
+    page.getByText("Für Phasenwechsel fehlt deiner Rolle das Schreibrecht."),
+  ).toBeVisible();
 });
 
 /**

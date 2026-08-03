@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhasePill } from "@/components/ui/PhasePill";
+import { PhasenWechsel } from "@/components/ui/PhasenWechsel";
 import { Pill } from "@/components/ui/Pill";
 import { date, dateTime, eur } from "@/lib/format";
 import { requireMe } from "@/lib/session";
@@ -37,7 +38,7 @@ export default async function AngebotPage({
       `id, number, status, net_total, cost_total, margin_pct, valid_until,
        intro_text, price_display, delivery_net,
        sent_at, opened_at, accepted_at, accepted_name, reminder_enabled, created_at,
-       phase:phase_id ( label, system_key ),
+       phase:phase_id ( id, label, system_key ),
        customer:customer_id ( id, name, contact_person, email, phone, zip, city ),
        owner:owner_id ( name )`,
     )
@@ -67,7 +68,22 @@ export default async function AngebotPage({
         .order("name"),
     ]);
 
+  const { data: phasenRoh } = await supabase
+    .from("pipeline_phase")
+    .select("id, label, system_key, pipeline:pipeline_id ( kind )")
+    .order("sort");
+
+  const vertriebsPhasen = ((phasenRoh ?? []) as unknown as {
+    id: string;
+    label: string;
+    system_key: string | null;
+    pipeline: { kind: string } | null;
+  }[])
+    .filter((p) => p.pipeline?.kind === "vertrieb")
+    .map((p) => ({ id: p.id, label: p.label, systemKey: p.system_key }));
+
   const phase = quote.phase as unknown as {
+    id: string;
     label: string;
     system_key: string | null;
   } | null;
@@ -141,6 +157,20 @@ export default async function AngebotPage({
               : "neutral"
           }
           notiz="danach nachfassen oder verlängern"
+        />
+      </div>
+
+      {/*
+        Phasenwechsel ohne Umweg über das Board — dieselbe Server Action
+        wie beim Ziehen einer Karte.
+      */}
+      <div className="mb-4">
+        <PhasenWechsel
+          kind="vertrieb"
+          cardId={quote.id as string}
+          gesperrt={me.perms.angebote !== "write"}
+          aktuelleId={phase?.id ?? null}
+          phasen={vertriebsPhasen}
         />
       </div>
 

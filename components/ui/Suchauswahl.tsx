@@ -161,6 +161,9 @@ export function Suchauswahl({
           aria-expanded={offen}
           aria-controls={listeId}
           aria-autocomplete="list"
+          aria-activedescendant={
+            offen && treffer[aktiv] ? `${listeId}-${aktiv}` : undefined
+          }
           autoComplete="off"
           required={pflicht && !gewaehlt}
           value={offen ? suche : (gewaehlt?.text ?? "")}
@@ -201,7 +204,7 @@ export function Suchauswahl({
             className="absolute z-40 mt-1 max-h-[280px] w-full overflow-auto rounded-input border border-line bg-surface py-1 shadow-[0_12px_32px_rgba(21,18,16,0.14)]"
           >
             {!pflicht ? (
-              <li>
+              <li role="presentation">
                 <Zeile
                   aktiv={false}
                   onWaehlen={() => waehle(null)}
@@ -212,13 +215,17 @@ export function Suchauswahl({
             ) : null}
 
             {treffer.length === 0 ? (
-              <li className="px-[13px] py-[10px] text-[12.5px] text-faint">
+              <li
+                role="presentation"
+                className="px-[13px] py-[10px] text-[12.5px] text-faint"
+              >
                 Nichts gefunden.
               </li>
             ) : (
               treffer.map((o, i) => (
-                <li key={o.wert}>
+                <li key={o.wert} role="presentation">
                   <Zeile
+                    id={`${listeId}-${i}`}
                     aktiv={i === aktiv}
                     gewaehlt={o.wert === gewaehlt?.wert}
                     onWaehlen={() => waehle(o)}
@@ -237,6 +244,7 @@ export function Suchauswahl({
 }
 
 function Zeile({
+  id,
   label,
   zusatz,
   aktiv,
@@ -245,6 +253,7 @@ function Zeile({
   onWaehlen,
   onZeigen,
 }: {
+  id?: string;
   label: string;
   zusatz?: string;
   aktiv: boolean;
@@ -256,6 +265,7 @@ function Zeile({
   return (
     <button
       type="button"
+      id={id}
       role="option"
       aria-selected={gewaehlt}
       onMouseEnter={onZeigen}

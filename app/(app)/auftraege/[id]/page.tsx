@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhasePill } from "@/components/ui/PhasePill";
+import { PhasenWechsel } from "@/components/ui/PhasenWechsel";
 import { Pill } from "@/components/ui/Pill";
 import { RingKarte } from "@/components/ui/RingKarte";
 import { StockMoveForm } from "@/app/(app)/lager/StockMoveForm";
@@ -117,7 +118,22 @@ export default async function AuftragPage({
   const materialPlan = Number(job.material_planned ?? 0);
   const wert = Number(job.value_net ?? 0);
 
+  const { data: phasenRoh } = await supabase
+    .from("pipeline_phase")
+    .select("id, label, system_key, pipeline:pipeline_id ( kind )")
+    .order("sort");
+
+  const projektPhasen = ((phasenRoh ?? []) as unknown as {
+    id: string;
+    label: string;
+    system_key: string | null;
+    pipeline: { kind: string } | null;
+  }[])
+    .filter((p) => p.pipeline?.kind === "projekte")
+    .map((p) => ({ id: p.id, label: p.label, systemKey: p.system_key }));
+
   const phase = job.phase as unknown as {
+    id: string;
     label: string;
     system_key: string | null;
   } | null;
@@ -258,6 +274,21 @@ export default async function AuftragPage({
           </>
         }
       />
+
+      {/*
+        Phasenwechsel auch ausserhalb des Boards. Wer im Auftrag steht und
+        merkt, dass die Montage begonnen hat, soll das hier setzen können
+        und nicht erst zurück ins Board wechseln müssen.
+      */}
+      <div className="mb-4">
+        <PhasenWechsel
+          kind="projekte"
+          cardId={id}
+          gesperrt={!darfSchreiben}
+          aktuelleId={phase?.id ?? null}
+          phasen={projektPhasen}
+        />
+      </div>
 
       {darfSchreiben && bearbeiten ? (
         <div className="mb-4">
