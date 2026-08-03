@@ -11,12 +11,34 @@ import {
   portalJobs,
   portalPhases,
   portalPlant,
-  portalQuotes,
   portalTickets,
   resolvePortal,
 } from "@/lib/portal/data";
 import Link from "next/link";
 import { ConfirmAppointmentForm, NachfrageForm, TicketForm } from "./PortalForms";
+import { portalVorgaenge } from "@/lib/portal/vorgang";
+import { PHASEN, phaseIndex, type Phase } from "@/lib/vorgang/modell";
+
+/* Phasennamen in Kundensprache — „Beauftragt" sagt einem Kunden nichts. */
+const KUNDENPHASE: Record<Phase, string> = {
+  anfrage: "Anfrage",
+  aufnahme: "Aufnahme",
+  angebot: "Angebot liegt vor",
+  beauftragt: "in Vorbereitung",
+  montage: "Montage",
+  abschluss: "Abschluss",
+  verloren: "ruht",
+};
+
+const KUNDENSATZ: Record<Phase, string> = {
+  anfrage: "Wir melden uns bei Ihnen.",
+  aufnahme: "Wir sehen uns Dach und Zähler an.",
+  angebot: "Ihr Angebot wartet auf Ihre Rückmeldung.",
+  beauftragt: "Material, Netzanmeldung und Förderung laufen.",
+  montage: "Wir bauen Ihre Anlage.",
+  abschluss: "Inbetriebnahme und Abrechnung.",
+  verloren: "Dieses Projekt ruht.",
+};
 
 export const metadata: Metadata = { title: "Kundenportal" };
 
@@ -54,9 +76,9 @@ export default async function PortalPage({
   // sich aus der Fehlermeldung nichts ableiten lässt.
   if (!session) notFound();
 
-  const [jobs, quotes, tickets, phasen, anlage, termine] = await Promise.all([
+  const [vorgaenge, jobs, tickets, phasen, anlage, termine] = await Promise.all([
+    portalVorgaenge(session),
     portalJobs(session),
-    portalQuotes(session),
     portalTickets(session),
     portalPhases(session),
     portalPlant(session),
@@ -177,104 +199,66 @@ export default async function PortalPage({
         </section>
       ) : null}
 
+      {/*
+        Ein Vorgang trägt den ganzen Weg — Anfrage, Angebot, Auftrag,
+        Rechnung. Der Kunde sieht eine Karte je Projekt und darin alles,
+        statt getrennter Listen für Aufträge und Angebote.
+      */}
       <section className="mb-6">
         <h2 className="mb-2 text-[15px] font-semibold">Ihre Projekte</h2>
-        {jobs.length === 0 ? (
+        {vorgaenge.length === 0 ? (
           <p className="rounded-[20px] bg-surface p-5 text-[13px] text-muted shadow-soft">
             Aktuell ist kein Projekt hinterlegt.
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
-            {jobs.map((j) => (
-              <li
-                key={j.id as string}
-                className="rounded-[20px] bg-surface p-5 shadow-soft"
-              >
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="num text-[13px] font-semibold">
-                    {j.number as string}
-                  </span>
-                  {j.phase ? (
-                    <Pill tone="doing">
-                      {(j.phase as unknown as { label: string }).label}
-                    </Pill>
-                  ) : null}
-                  <span className="num flex-1 text-[12.5px] text-muted">
-                    {[j.zip, j.city].filter(Boolean).join(" ")}
-                  </span>
-                </div>
-                {j.scheduled_from ? (
-                  <p className="num mt-2 text-[13px]">
-                    Termin {date(j.scheduled_from as string)}
-                    {j.scheduled_to
-                      ? ` – ${date(j.scheduled_to as string)}`
-                      : ""}
-                  </p>
-                ) : null}
-                {j.next_step ? (
-                  <p className="mt-1 text-[13px] text-muted">
-                    Nächster Schritt: {j.next_step as string}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="mb-6">
-        <h2 className="mb-2 text-[15px] font-semibold">Ihre Angebote</h2>
-        {quotes.length === 0 ? (
-          <p className="rounded-[20px] bg-surface p-5 text-[13px] text-muted shadow-soft">
-            Kein Angebot vorhanden.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {quotes.map((q) => {
+            {vorgaenge.map((v) => {
+              const idx = phaseIndex(v.phase);
+              const wert = v.auftragswertNetto ?? v.angebotswertNetto;
               return (
-                <li
-                  key={q.id as string}
-                  className="rounded-[20px] bg-surface p-5 shadow-soft"
-                >
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="num text-[13px] font-semibold">
-                      {q.number as string}
-                    </span>
-                    {q.accepted_at ? (
-                      <Pill tone="done">angenommen</Pill>
-                    ) : q.status === "lost" || q.status === "expired" ? (
-                      <Pill tone="neutral">nicht mehr aktuell</Pill>
-                    ) : (
-                      <Pill tone="warn">offen</Pill>
-                    )}
-                    <span className="num flex-1 text-right text-[15px] font-semibold">
-                      {eur(q.net_total as string)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[12px] text-muted">
-                    Beträge exkl. USt.
-                    {q.valid_until
-                      ? ` · gültig bis ${date(q.valid_until as string)}`
-                      : ""}
-                  </p>
-
-                  {q.accepted_at ? (
-                    <p className="num mt-2 text-[12.5px] text-s-done">
-                      Angenommen am {date(q.accepted_at as string)}
-                      {q.accepted_name ? ` durch ${q.accepted_name as string}` : ""}
-                    </p>
-                  ) : null}
-
-                  {/*
-                    Das Angebot hat eine eigene Seite — mit Anlagendaten,
-                    Produktbeschreibungen und den optionalen Erweiterungen.
-                    Die Annahme passiert dort, nicht in dieser Kurzliste.
-                  */}
+                <li key={v.id}>
                   <Link
-                    href={`/portal/${token}/angebot/${q.id as string}`}
-                    className="mt-3 inline-flex items-center justify-center rounded-pill bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-5 py-[11px] text-[13px] font-semibold text-white hover:text-white"
+                    href={`/portal/${token}/vorgang/${v.id}`}
+                    className="block rounded-[20px] bg-surface p-5 text-ink shadow-soft transition-colors hover:bg-panel hover:text-ink"
                   >
-                    {q.accepted_at ? "Angebot ansehen" : "Angebot ansehen und annehmen"}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="num text-[13px] font-semibold">
+                        {v.nummer}
+                      </span>
+                      {v.phase === "verloren" ? (
+                        <Pill tone="neutral">ruht</Pill>
+                      ) : (
+                        <Pill tone={idx >= 4 ? "done" : "doing"}>
+                          {KUNDENPHASE[v.phase] ?? v.phase}
+                        </Pill>
+                      )}
+                      <span className="num flex-1 text-right text-[13px] text-muted">
+                        {v.kwp ? `${num(v.kwp)} kWp` : ""}
+                      </span>
+                    </div>
+
+                    {v.phase !== "verloren" && idx >= 0 ? (
+                      <div className="mt-3 flex gap-1" aria-hidden>
+                        {PHASEN.map((p, i) => (
+                          <span
+                            key={p.key}
+                            className={[
+                              "h-[5px] flex-1 rounded-pill",
+                              i < idx
+                                ? "bg-s-done"
+                                : i === idx
+                                  ? "bg-accent"
+                                  : "bg-line",
+                            ].join(" ")}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <p className="mt-2 text-[12.5px] text-muted">
+                      {KUNDENSATZ[v.phase] ?? ""}
+                      {wert ? ` · ${eur(wert)} netto` : ""}
+                    </p>
                   </Link>
                 </li>
               );

@@ -64,6 +64,13 @@ const eslintConfig = [
       "app/api/export/**",
       "app/api/pdf/**",
       "app/portal/**",
+      /*
+       * Die Belegausgabe des Kundenportals. Sie liegt unter /api, gehört
+       * aber zum Portalpfad: dieselbe Begründung wie lib/portal — kein
+       * Supabase-Login, an dem RLS greifen könnte, und die Prüfung steckt
+       * in portalVorgangDetail, das nur Zeilen dieses Kunden liefert.
+       */
+      "app/api/portal/**",
       "app/ops/**",
       "lib/mail/**",
       /*

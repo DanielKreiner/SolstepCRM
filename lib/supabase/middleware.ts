@@ -7,6 +7,12 @@ const PUBLIC_PREFIXES = [
   "/login",
   "/auth",
   "/portal", // Kundenportal, eigener Token-Mechanismus statt Supabase-Auth
+  /*
+   * Die Belegausgabe des Portals. Ohne diesen Eintrag schickt die
+   * Middleware den Kunden auf die Anmeldung — er hat aber kein Konto,
+   * sondern einen Link. Die Prüfung steckt in der Route selbst.
+   */
+  "/api/portal",
   "/api/webhooks",
   "/api/cron",
   "/api/track",

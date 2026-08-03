@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, login, suchwahl } from "./helpers";
+import { COMPANY_A, DEMO, admin, login, portalToken, suchwahl } from "./helpers";
 
 /*
  * Der Vorgang von der Anfrage bis zum ausgelösten Auftrag.
@@ -675,4 +675,185 @@ test("14 — Die Bauleitung bekommt kein Rechnungs-PDF", async ({ page }) => {
     `/api/pdf/vorgang/${zustand.vorgangId}?art=ab`,
   );
   expect(ab.status()).toBe(200);
+});
+
+test("15 — Der Kunde sieht seinen Vorgang im Portal und nimmt an", async ({
+  page,
+}) => {
+  const db = admin();
+
+  /* Ein eigener Vorgang, damit dieser Test unabhängig annehmen kann. */
+  const { data: nr } = await db.rpc("next_number", {
+    p_company: COMPANY_A,
+    p_kind: "vorgang",
+  });
+
+  const { data: neu } = await db
+    .from("vorgang")
+    .insert({
+      company_id: COMPANY_A,
+      customer_id: zustand.kundeId!,
+      number: nr as string,
+      phase: "angebot",
+      kwp: 9.84,
+      speicher_kwh: 10,
+      adresse: "Rosenweg 8",
+      ort: "Linz",
+      zaehlpunkt: `${MARKE}-portal`,
+      anzahlung_prozent: 30,
+    })
+    .select("id, number")
+    .single();
+
+  await db.from("vorgang_position").insert({
+    company_id: COMPANY_A,
+    vorgang_id: neu!.id,
+    sort: 10,
+    bezeichnung: "PV-Anlage 9,84 kWp schlüsselfertig",
+    beschreibung: "Module, Wechselrichter, Unterkonstruktion und Montage.",
+    menge: 1,
+    einheit: "Stk",
+    ep_netto: 16800,
+    ust_satz: 20,
+    kalk_ek: 11000,
+    kalk_stunden: 42,
+    ist_material: true,
+  });
+
+  await db.from("vorgang_event").insert([
+    {
+      company_id: COMPANY_A,
+      vorgang_id: neu!.id,
+      typ: "phase_wechsel",
+      titel: "Angebot versendet",
+      body: "Ihr Angebot ist unterwegs.",
+      kunde_sichtbar: true,
+    },
+    {
+      company_id: COMPANY_A,
+      vorgang_id: neu!.id,
+      typ: "notiz",
+      titel: "Interne Notiz",
+      body: "GEHEIM-INTERN Nachbar ist schwierig, Vorsicht.",
+      kunde_sichtbar: false,
+    },
+  ]);
+
+  /* --------------------------------------------- Portallink erzeugen */
+  await login(page, DEMO.gf);
+  const token = await portalToken(page, zustand.kundeId!);
+
+  await page.context().clearCookies();
+  await page.goto(`/portal/${token}`);
+
+  // Die Übersicht zeigt den Vorgang mit Fortschrittsbalken.
+  await expect(page.getByText(neu!.number as string).first()).toBeVisible({
+    timeout: 15_000,
+  });
+
+  await page.goto(`/portal/${token}/vorgang/${neu!.id}`);
+
+  /* ---- Was der Kunde sieht ---- */
+  await expect(
+    page.getByRole("heading", { name: "Ihre Photovoltaikanlage" }),
+  ).toBeVisible();
+  await expect(page.getByText("9,84 kWp").first()).toBeVisible();
+  await expect(page.getByText("Wo Ihr Projekt steht")).toBeVisible();
+  // Phasen in Kundensprache, nicht „Beauftragt — Gates laufen".
+  await expect(page.getByText("Material, Netzanmeldung und Förderung laufen.")).toBeVisible();
+  await expect(page.getByText("PV-Anlage 9,84 kWp schlüsselfertig")).toBeVisible();
+  await expect(page.getByText("Angebot versendet")).toBeVisible();
+
+  /* ---- Was er nicht sieht ---- */
+  await expect(page.locator("body")).not.toContainText("GEHEIM-INTERN");
+
+  /* ---- Annehmen ---- */
+  await page.getByRole("button", { name: "Angebot annehmen" }).click();
+  await page.getByLabel(/Ihr Name/).fill("Katrin Weber");
+  await page.getByRole("button", { name: "Verbindlich annehmen" }).click();
+
+  /*
+   * Nicht auf die Dankesmeldung warten: mit der Zusage wechselt die Phase,
+   * die Annahmeleiste wird gar nicht mehr gerendert, und die Meldung
+   * verschwindet mit ihr. Geprüft wird die Wirkung.
+   */
+  await expect
+    .poll(async () => {
+      const { data } = await db
+        .from("vorgang")
+        .select("phase")
+        .eq("id", neu!.id)
+        .single();
+      return data?.phase;
+    }, { timeout: 30_000 })
+    .toBe("beauftragt");
+
+  /* ---- Die Kaskade lief, wie im Backoffice ---- */
+  const { data: v } = await db
+    .from("vorgang")
+    .select("phase, auftragswert_netto")
+    .eq("id", neu!.id)
+    .single();
+  expect(Number(v!.auftragswert_netto)).toBe(16800);
+
+  const { data: docs } = await db
+    .from("vorgang_dokument")
+    .select("typ, kunde_sichtbar")
+    .eq("vorgang_id", neu!.id);
+
+  expect((docs ?? []).map((d) => d.typ).sort()).toEqual([
+    "ab",
+    "anzahlungsrechnung",
+    "materialliste",
+  ]);
+  /* Die Materialbedarfsliste trägt Einkaufspreise — nie ins Portal. */
+  expect((docs ?? []).find((d) => d.typ === "materialliste")!.kunde_sichtbar).toBe(
+    false,
+  );
+
+  const { data: gates } = await db
+    .from("vorgang_gate")
+    .select("key")
+    .eq("vorgang_id", neu!.id);
+  expect(gates).toHaveLength(6);
+
+  /* ---- Das Angebot als PDF ---- */
+  const pdf = await page.request.get(`/api/portal/${token}/pdf/${neu!.id}?art=ab`);
+  expect(pdf.status()).toBe(200);
+  expect((await pdf.body()).subarray(0, 4).toString()).toBe("%PDF");
+
+  /* ---- Die Materialliste nicht ---- */
+  const gesperrt = await page.request.get(
+    `/api/portal/${token}/pdf/${neu!.id}?art=materialliste`,
+  );
+  expect(gesperrt.status()).toBe(404);
+
+  await db.from("vorgang_event").delete().eq("vorgang_id", neu!.id);
+  await db.from("vorgang_position").delete().eq("vorgang_id", neu!.id);
+  await db.from("vorgang_gate").delete().eq("vorgang_id", neu!.id);
+  await db.from("vorgang_dokument").delete().eq("vorgang_id", neu!.id);
+  await db.from("vorgang").delete().eq("id", neu!.id);
+});
+
+test("16 — Ein fremder Token öffnet den Vorgang nicht", async ({ page }) => {
+  const db = admin();
+  const { data: fremd } = await db
+    .from("customer")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .neq("id", zustand.kundeId!)
+    .is("deleted_at", null)
+    .limit(1)
+    .single();
+
+  await login(page, DEMO.gf);
+  const fremdToken = await portalToken(page, fremd!.id as string);
+
+  await page.context().clearCookies();
+  const antwort = await page.goto(
+    `/portal/${fremdToken}/vorgang/${zustand.vorgangId}`,
+  );
+  expect(antwort?.status()).toBe(404);
+
+  await db.from("portal_access").delete().eq("customer_id", fremd!.id);
 });
