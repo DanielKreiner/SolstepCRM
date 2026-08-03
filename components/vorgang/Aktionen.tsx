@@ -17,6 +17,7 @@ import {
   vorgangReaktivieren,
   vorgangVerloren,
 } from "@/app/(app)/vorgaenge/actions";
+import { angebotAngenommen } from "@/app/(app)/vorgaenge/kaskade-actions";
 
 /**
  * Das Aktionspanel: genau eine primäre Aktion je Phase.
@@ -51,9 +52,8 @@ const AKTION: Partial<Record<Phase, Aktion>> = {
   },
   angebot: {
     titel: "Rückmeldung des Kunden",
-    hinweis: "Angebot versendet. Die Annahme löst Auftrag, AB und Anzahlung aus.",
+    hinweis: "Die Annahme löst Auftragsbestätigung, Anzahlung, Materialliste und Gates aus.",
     label: "Angebot angenommen",
-    nach: "beauftragt",
   },
   beauftragt: {
     titel: "Montage terminieren",
@@ -81,6 +81,7 @@ export function Aktionspanel({
   offeneGates,
   darfSchreiben,
   verlorenGrund,
+  anzahlungProzent,
 }: {
   vorgangId: string;
   phase: Phase;
@@ -88,6 +89,7 @@ export function Aktionspanel({
   offeneGates: string[];
   darfSchreiben: boolean;
   verlorenGrund: string | null;
+  anzahlungProzent: number;
 }) {
   if (phase === "verloren") {
     return (
@@ -103,6 +105,21 @@ export function Aktionspanel({
   if (!a) return null;
 
   const blockiert = phase === "beauftragt" && offeneGates.length > 0;
+
+  /*
+   * Die Annahme ist kein einfacher Phasenwechsel, sondern die Kaskade:
+   * vier Antworten, und daraus entsteht alles Weitere. Deshalb ein
+   * eigener Dialog statt eines Knopfs.
+   */
+  if (phase === "angebot") {
+    return (
+      <AnnahmePanel
+        vorgangId={vorgangId}
+        anzahlungProzent={anzahlungProzent}
+        darfSchreiben={darfSchreiben}
+      />
+    );
+  }
 
   return (
     <section className="rounded-[20px] bg-surface p-5 shadow-soft">
@@ -356,5 +373,208 @@ function VerlorenPanel({
         </form>
       ) : null}
     </section>
+  );
+}
+
+
+/**
+ * Die Annahme-Kaskade.
+ *
+ * Vier Felder, Rest vorbelegt. Beim Bestätigen entstehen
+ * Auftragsbestätigung, Anzahlungsrechnung, Materialbedarfsliste, die
+ * Gates und die Soll-Werte — ohne dass jemand eine einzige Position neu
+ * eintippt. Genau das war bisher die Doppelarbeit.
+ */
+function AnnahmePanel({
+  vorgangId,
+  anzahlungProzent,
+  darfSchreiben,
+}: {
+  vorgangId: string;
+  anzahlungProzent: number;
+  darfSchreiben: boolean;
+}) {
+  const [offen, setOffen] = useState(false);
+  const [status, formAction] = useActionState<AktionsStatus, FormData>(
+    angebotAngenommen,
+    LEER,
+  );
+
+  return (
+    <section className="rounded-[20px] bg-surface p-5 shadow-soft">
+      <h2 className="text-[15px] font-semibold">Rückmeldung des Kunden</h2>
+      <p className="mt-1 mb-4 text-[12.5px] text-muted">
+        Die Annahme löst Auftragsbestätigung, Anzahlung, Materialliste und
+        Gates aus — in einem Zug, ohne Positionen neu zu erfassen.
+      </p>
+
+      {!offen ? (
+        <>
+          <button
+            type="button"
+            disabled={!darfSchreiben}
+            onClick={() => setOffen(true)}
+            className={[
+              "min-h-[52px] w-full rounded-pill border-0 px-6 text-[14.5px] font-semibold",
+              darfSchreiben
+                ? "cursor-pointer bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-white shadow-[0_8px_22px_rgba(201,121,24,0.28)]"
+                : "cursor-not-allowed bg-sunk text-faint",
+            ].join(" ")}
+          >
+            Angebot angenommen
+          </button>
+          {darfSchreiben ? (
+            <VerlorenKnopf vorgangId={vorgangId} phase="angebot" />
+          ) : null}
+        </>
+      ) : (
+        <form action={formAction}>
+          <input type="hidden" name="vorgangId" value={vorgangId} />
+
+          <div className="grid gap-3">
+            <Zahl
+              id="an-prozent"
+              name="anzahlungProzent"
+              label="Anzahlung in Prozent"
+              wert={anzahlungProzent}
+            />
+            <Text
+              id="an-zeitraum"
+              name="wunschZeitraum"
+              label="Wunsch-Zeitraum Montage"
+              platzhalter="KW 33 oder September"
+            />
+            <JaNein
+              id="an-geruest"
+              name="geruest"
+              label="Gerüst oder Hebebühne nötig?"
+              vorgabe="ja"
+              hinweis={"Nein setzt das Gate „Gerüst“ gleich auf nicht nötig."}
+            />
+            <JaNein
+              id="an-sub"
+              name="sub"
+              label="Sub nötig?"
+              vorgabe="nein"
+              hinweis={"Ja lässt das Gate „Team“ offen laufen."}
+            />
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <AnnahmeAbsenden />
+            <button
+              type="button"
+              onClick={() => setOffen(false)}
+              className="cursor-pointer border-0 bg-transparent text-[12.5px] text-muted underline"
+            >
+              Abbrechen
+            </button>
+          </div>
+
+          <Meldung status={status} />
+        </form>
+      )}
+    </section>
+  );
+}
+
+function AnnahmeAbsenden() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="min-h-[48px] flex-1 cursor-pointer rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-6 text-[14px] font-semibold text-white shadow-[0_8px_22px_rgba(201,121,24,0.28)] disabled:opacity-60"
+    >
+      {pending ? "Auftrag wird ausgelöst …" : "Auftrag auslösen"}
+    </button>
+  );
+}
+
+function Zahl({
+  id,
+  name,
+  label,
+  wert,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  wert: number;
+}) {
+  return (
+    <span className="flex flex-col gap-[5px]">
+      <label htmlFor={id} className="text-[12px] font-medium text-muted">
+        {label}
+      </label>
+      <input
+        id={id}
+        name={name}
+        type="number"
+        min={0}
+        max={100}
+        step={1}
+        defaultValue={wert}
+        className="num w-full rounded-input border border-transparent bg-sunk px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent focus:bg-surface"
+      />
+    </span>
+  );
+}
+
+function Text({
+  id,
+  name,
+  label,
+  platzhalter,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  platzhalter: string;
+}) {
+  return (
+    <span className="flex flex-col gap-[5px]">
+      <label htmlFor={id} className="text-[12px] font-medium text-muted">
+        {label}
+      </label>
+      <input
+        id={id}
+        name={name}
+        placeholder={platzhalter}
+        className="w-full rounded-input border border-transparent bg-sunk px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent focus:bg-surface"
+      />
+    </span>
+  );
+}
+
+function JaNein({
+  id,
+  name,
+  label,
+  vorgabe,
+  hinweis,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  vorgabe: "ja" | "nein";
+  hinweis: string;
+}) {
+  return (
+    <span className="flex flex-col gap-[5px]">
+      <label htmlFor={id} className="text-[12px] font-medium text-muted">
+        {label}
+      </label>
+      <select
+        id={id}
+        name={name}
+        defaultValue={vorgabe}
+        className="w-full cursor-pointer rounded-input border border-transparent bg-sunk px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent focus:bg-surface"
+      >
+        <option value="ja">ja</option>
+        <option value="nein">nein</option>
+      </select>
+      <span className="text-[10.5px] text-faint">{hinweis}</span>
+    </span>
   );
 }

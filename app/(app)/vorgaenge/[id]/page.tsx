@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Aktionspanel } from "@/components/vorgang/Aktionen";
 import { GateAmpel } from "@/components/vorgang/GateAmpel";
 import { Stepper } from "@/components/vorgang/Stepper";
+import { Positionen } from "@/components/vorgang/Positionen";
 import { Strom } from "@/components/vorgang/Strom";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
@@ -43,6 +44,7 @@ export default async function VorgangPage({
 
   const { kopf, gates, events, positionen, termine, dokumente } = daten;
   const darfSchreiben = me.perms.pipelines === "write";
+  const darfAngebote = me.perms.angebote !== "none";
 
   const offen = offenePflichtGates(gates);
   const s = summen(
@@ -58,8 +60,23 @@ export default async function VorgangPage({
 
   const tage = tageInPhase(kopf.phaseSeit, new Date());
 
-  const { data: team } = await createClient().then((c) =>
-    c.from("app_user").select("id, name").eq("active", true).order("name"),
+  const supabase = await createClient();
+  const [{ data: team }, { data: artikel }] = await Promise.all([
+    supabase.from("app_user").select("id, name").eq("active", true).order("name"),
+    supabase
+      .from("article")
+      .select("id, sku, name, sale_price, image_url")
+      .eq("active", true)
+      .order("name"),
+  ]);
+
+  /*
+   * Der Editor steht nur im Vertrieb offen. Ab „beauftragt" ist der
+   * Leistungsumfang vereinbart — Änderungen gehören in eine
+   * Nachtragsposition, nicht rückwirkend ins Angebot.
+   */
+  const editorGesperrt = ["beauftragt", "montage", "abschluss", "verloren"].includes(
+    kopf.phase,
   );
 
   const naechsterTermin = termine.find((t) => new Date(t.bis) >= new Date());
@@ -160,11 +177,32 @@ export default async function VorgangPage({
 
       {/* ------------------------------------------- STROM UND AKTIONEN */}
       <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr] xl:items-start">
-        <Strom
+        <div className="flex min-w-0 flex-col gap-4">
+          {darfAngebote ? (
+            <Positionen
+              vorgangId={kopf.id}
+              positionen={positionen}
+              gesperrt={editorGesperrt}
+              gesperrtGrund={
+                kopf.phase === "verloren"
+                  ? "Der Vorgang ist verloren. Die Positionen bleiben zur Auswertung stehen."
+                  : "Der Auftrag läuft bereits. Änderungen am Leistungsumfang gehören in eine Nachtragsposition."
+              }
+              artikel={(artikel ?? []).map((a) => ({
+                wert: a.id as string,
+                text: a.name as string,
+                zusatz: `${a.sku as string} · ${eur(a.sale_price)}`,
+                ...(a.image_url ? { bild: a.image_url as string } : {}),
+              }))}
+            />
+          ) : null}
+
+          <Strom
           vorgangId={kopf.id}
-          eintraege={events}
-          darfSchreiben={darfSchreiben}
-        />
+            eintraege={events}
+            darfSchreiben={darfSchreiben}
+          />
+        </div>
 
         <div className="flex flex-col gap-4">
           <Aktionspanel
@@ -173,6 +211,7 @@ export default async function VorgangPage({
             offeneGates={offen.map((g) => g.label)}
             darfSchreiben={darfSchreiben}
             verlorenGrund={kopf.verlorenGrund}
+            anzahlungProzent={kopf.anzahlungProzent}
           />
 
           {naechsterTermin ? (

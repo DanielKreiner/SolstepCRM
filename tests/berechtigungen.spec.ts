@@ -324,3 +324,53 @@ describe("company", () => {
     expect(nachher!.iban).toBe(vorher!.iban);
   });
 });
+
+/*
+ * Beträge am Vorgang. Die Grenze verlief zuerst über can('pipelines') —
+ * und damit sah die Montage den Auftragswert, weil sie dieses Recht
+ * braucht, um ihre Vorgänge überhaupt zu öffnen. Seit 0030 hängt die
+ * View an can('angebote'): Bauleitung liest, Montage und Lager nicht.
+ */
+describe("v_vorgang_wert", () => {
+  const DARF_BETRAEGE: Rolle[] = ["gf", "buero", "bauleitung"];
+
+  it("zeigt Beträge nur dem Vertrieb", async () => {
+    for (const rolle of Object.keys(MAIL) as Rolle[]) {
+      const c = clients.get(rolle)!;
+      const { data } = await c
+        .from("v_vorgang_wert")
+        .select("vorgang_id, auftragswert_netto")
+        .limit(1);
+
+      const sieht = (data ?? []).length > 0;
+      expect(sieht, `${rolle} sieht Beträge`).toBe(DARF_BETRAEGE.includes(rolle));
+    }
+  });
+
+  it("lässt die Montage die Spalten auch nicht direkt lesen", async () => {
+    /*
+     * Die View ist der einzige Weg. Wer sie umgeht und die Tabelle direkt
+     * fragt, bekommt gar nichts — die Spalten haben kein Leserecht für
+     * authenticated (0025).
+     */
+    const c = clients.get("monteur")!;
+    const { error } = await c
+      .from("vorgang")
+      .select("auftragswert_netto")
+      .limit(1);
+
+    expect(error).not.toBeNull();
+  });
+
+  it("lässt die Montage ihre Vorgänge trotzdem sehen", async () => {
+    // Ohne Adresse und Nummer könnte sie nicht zur Baustelle fahren.
+    const c = clients.get("monteur")!;
+    const { data, error } = await c
+      .from("vorgang")
+      .select("number, adresse, phase")
+      .limit(1);
+
+    expect(error).toBeNull();
+    expect((data ?? []).length).toBeGreaterThan(0);
+  });
+});

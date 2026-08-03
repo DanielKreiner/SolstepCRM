@@ -1,0 +1,332 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { summen } from "@/lib/vorgang/modell";
+import { requireMe } from "@/lib/session";
+import { createClient } from "@/lib/supabase/server";
+
+export type PosStatus = { error: string | null; ok: string | null };
+
+/**
+ * Angebotspositionen — inline im Vorgang, kein eigener Screen.
+ *
+ * Positionen ohne dokument_id sind der lebende Entwurf. Sobald ein
+ * Angebot erzeugt wird, bekommt eine Kopie die dokument_id der Version
+ * und ist damit eingefroren: ein verschicktes Angebot darf sich nicht
+ * ändern, weil jemand danach eine Menge korrigiert.
+ */
+
+type Zugang =
+  | { ok: true; me: Awaited<ReturnType<typeof requireMe>> }
+  | { ok: false; status: PosStatus };
+
+async function zugang(): Promise<Zugang> {
+  const me = await requireMe();
+  if (me.perms.angebote !== "write") {
+    return {
+      ok: false,
+      status: { error: "Für Angebote fehlt deiner Rolle das Schreibrecht.", ok: null },
+    };
+  }
+  if (me.company.status !== "active") {
+    return { ok: false, status: { error: "Der Zugang ist derzeit nur lesend.", ok: null } };
+  }
+  return { ok: true, me };
+}
+
+/**
+ * Ein Angebot, das schon versendet wurde, wird nicht mehr angefasst.
+ *
+ * Geändert wird über eine neue Version. Sonst bekommt der Kunde ein PDF
+ * mit anderen Zahlen als die, die im System stehen — und merkt es beim
+ * Vergleich mit der Rechnung.
+ */
+async function gesperrt(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  vorgangId: string,
+): Promise<PosStatus | null> {
+  const { data: v } = await supabase
+    .from("vorgang")
+    .select("phase")
+    .eq("id", vorgangId)
+    .maybeSingle();
+
+  if (!v) return { error: "Vorgang nicht gefunden.", ok: null };
+
+  const phase = v.phase as string;
+  if (["beauftragt", "montage", "abschluss"].includes(phase)) {
+    return {
+      error:
+        "Der Auftrag läuft bereits. Änderungen am Leistungsumfang gehören in eine Nachtragsposition, nicht ins Angebot.",
+      ok: null,
+    };
+  }
+  return null;
+}
+
+async function summeSchreiben(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  vorgangId: string,
+): Promise<void> {
+  const { data } = await supabase
+    .from("vorgang_position")
+    .select("menge, ep_netto, ust_satz, kalk_stunden, kalk_ek, ist_material")
+    .eq("vorgang_id", vorgangId)
+    .is("dokument_id", null);
+
+  const s = summen(
+    ((data ?? []) as unknown as {
+      menge: string;
+      ep_netto: string;
+      ust_satz: string;
+      kalk_stunden: string | null;
+      kalk_ek: string | null;
+      ist_material: boolean;
+    }[]).map((p) => ({
+      menge: Number(p.menge),
+      epNetto: Number(p.ep_netto),
+      ustSatz: Number(p.ust_satz),
+      kalkStunden: p.kalk_stunden === null ? null : Number(p.kalk_stunden),
+      kalkEk: p.kalk_ek === null ? null : Number(p.kalk_ek),
+      istMaterial: p.ist_material,
+    })),
+  );
+
+  await supabase
+    .from("vorgang")
+    .update({ angebotswert_netto: s.netto, updated_at: new Date().toISOString() })
+    .eq("id", vorgangId);
+}
+
+function frisch(vorgangId: string): void {
+  revalidatePath(`/vorgaenge/${vorgangId}`);
+  revalidatePath("/vorgaenge");
+}
+
+/* ------------------------------------------------------ ARTIKEL HOLEN */
+
+const artikelSchema = z.object({
+  vorgangId: z.string().uuid(),
+  articleId: z.string().uuid({ message: "Bitte einen Artikel wählen." }),
+  menge: z.coerce.number().gt(0, "Menge muss grösser als null sein."),
+});
+
+export async function positionAusArtikel(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = artikelSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const { data: a } = await supabase
+    .from("article")
+    .select(
+      "id, sku, name, unit, purchase_price, sale_price, vat_rate, description, image_url, kalk_stunden_pro_einheit, ist_material",
+    )
+    .eq("id", d.articleId)
+    .maybeSingle();
+
+  if (!a) return { error: "Artikel nicht gefunden.", ok: null };
+
+  const { data: letzte } = await supabase
+    .from("vorgang_position")
+    .select("sort")
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null)
+    .order("sort", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await supabase.from("vorgang_position").insert({
+    company_id: z1.me.companyId,
+    vorgang_id: d.vorgangId,
+    sort: Number(letzte?.sort ?? 0) + 10,
+    article_id: a.id,
+    /*
+     * Preise, Kalkulation, Bild und Text werden kopiert, nicht verknüpft.
+     * Ein Angebot von heute darf sich nicht ändern, weil jemand nächstes
+     * Jahr den Artikelpreis anhebt.
+     */
+    bezeichnung: a.name as string,
+    menge: d.menge,
+    einheit: (a.unit as string) ?? "Stk",
+    ep_netto: a.sale_price,
+    ust_satz: a.vat_rate,
+    kalk_ek: a.purchase_price,
+    kalk_stunden: a.kalk_stunden_pro_einheit,
+    ist_material: (a.ist_material as boolean | null) ?? true,
+    bild_url: a.image_url,
+    beschreibung: a.description,
+  });
+
+  if (error) return { error: `Übernehmen fehlgeschlagen: ${error.message}`, ok: null };
+
+  await summeSchreiben(supabase, d.vorgangId);
+  frisch(d.vorgangId);
+  return { error: null, ok: `${a.name as string} übernommen.` };
+}
+
+/* ------------------------------------------------------ FREIE POSITION */
+
+const freiSchema = z.object({
+  vorgangId: z.string().uuid(),
+  bezeichnung: z.string().trim().min(2, "Bezeichnung fehlt.").max(200),
+  menge: z.coerce.number().gt(0, "Menge muss grösser als null sein."),
+  einheit: z.string().trim().max(20).optional().default("Stk"),
+  epNetto: z.coerce.number().min(0),
+  kalkEk: z.coerce.number().min(0).optional(),
+  kalkStunden: z.coerce.number().min(0).optional(),
+  ustSatz: z.coerce.number().min(0).max(30).optional(),
+  istMaterial: z.enum(["ja", "nein"]).optional().default("nein"),
+});
+
+export async function positionFrei(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = freiSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const { data: letzte } = await supabase
+    .from("vorgang_position")
+    .select("sort")
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null)
+    .order("sort", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await supabase.from("vorgang_position").insert({
+    company_id: z1.me.companyId,
+    vorgang_id: d.vorgangId,
+    sort: Number(letzte?.sort ?? 0) + 10,
+    bezeichnung: d.bezeichnung,
+    menge: d.menge,
+    einheit: d.einheit || "Stk",
+    ep_netto: d.epNetto,
+    ust_satz: d.ustSatz ?? 20,
+    kalk_ek: d.kalkEk ?? null,
+    kalk_stunden: d.kalkStunden ?? null,
+    ist_material: d.istMaterial === "ja",
+  });
+
+  if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
+
+  await summeSchreiben(supabase, d.vorgangId);
+  frisch(d.vorgangId);
+  return { error: null, ok: "Position angelegt." };
+}
+
+/* ---------------------------------------------------------- BEARBEITEN */
+
+const aendernSchema = z.object({
+  vorgangId: z.string().uuid(),
+  positionId: z.string().uuid(),
+  bezeichnung: z.string().trim().min(1).max(200),
+  menge: z.coerce.number().gt(0),
+  einheit: z.string().trim().max(20),
+  epNetto: z.coerce.number().min(0),
+  kalkEk: z.coerce.number().min(0).optional(),
+  kalkStunden: z.coerce.number().min(0).optional(),
+  ustSatz: z.coerce.number().min(0).max(30),
+  istMaterial: z.enum(["ja", "nein"]).optional().default("nein"),
+});
+
+export async function positionAendern(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = aendernSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const { data: geschrieben, error } = await supabase
+    .from("vorgang_position")
+    .update({
+      bezeichnung: d.bezeichnung,
+      menge: d.menge,
+      einheit: d.einheit,
+      ep_netto: d.epNetto,
+      ust_satz: d.ustSatz,
+      kalk_ek: d.kalkEk ?? null,
+      kalk_stunden: d.kalkStunden ?? null,
+      ist_material: d.istMaterial === "ja",
+    })
+    .eq("id", d.positionId)
+    .eq("vorgang_id", d.vorgangId)
+    /* Nur den Entwurf: eine eingefrorene Version bleibt, wie sie war. */
+    .is("dokument_id", null)
+    .select("id");
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+  if (!geschrieben || geschrieben.length === 0) {
+    return { error: "Diese Position gehört zu einer festgeschriebenen Version.", ok: null };
+  }
+
+  await summeSchreiben(supabase, d.vorgangId);
+  frisch(d.vorgangId);
+  return { error: null, ok: "Gespeichert." };
+}
+
+const loeschSchema = z.object({
+  vorgangId: z.string().uuid(),
+  positionId: z.string().uuid(),
+});
+
+export async function positionLoeschen(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = loeschSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "Eingabe fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, parsed.data.vorgangId);
+  if (sperre) return sperre;
+
+  const { error } = await supabase
+    .from("vorgang_position")
+    .delete()
+    .eq("id", parsed.data.positionId)
+    .eq("vorgang_id", parsed.data.vorgangId)
+    .is("dokument_id", null);
+
+  if (error) return { error: `Löschen fehlgeschlagen: ${error.message}`, ok: null };
+
+  await summeSchreiben(supabase, parsed.data.vorgangId);
+  frisch(parsed.data.vorgangId);
+  return { error: null, ok: "Position entfernt." };
+}
