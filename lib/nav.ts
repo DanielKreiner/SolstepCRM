@@ -30,8 +30,6 @@ export const NAV: NavGroup[] = [
       { label: "Planung", href: "/planung", icon: "dispo", area: "pipelines" },
       { label: "Material", href: "/material", icon: "lager", area: "pipelines" },
       { label: "Offene Posten", href: "/offene-posten", icon: "rechnungen", area: "rechnungen" },
-      { label: "Pipelines (alt)", href: "/pipelines/projekte", icon: "pipelines", area: "pipelines" },
-      { label: "Angebote", href: "/angebote", icon: "angebote", area: "angebote" },
       { label: "CRM", href: "/crm", icon: "crm", area: "crm" },
       /*
        * Service steht in der Navigation, obwohl es die dritte Pipeline ist.
@@ -39,9 +37,7 @@ export const NAV: NavGroup[] = [
        * niemand aufruft — der Kunde schreibt und hört nie etwas.
        */
       { label: "Service", href: "/service", icon: "chat", area: "pipelines" },
-      { label: "Einsatzplanung", href: "/dispo", icon: "dispo", area: "pipelines" },
       { label: "Lager", href: "/lager", icon: "lager", area: "lager" },
-      { label: "Rechnungen", href: "/rechnungen", icon: "rechnungen", area: "rechnungen" },
     ],
   },
   {
@@ -74,6 +70,30 @@ export const NAV: NavGroup[] = [
       { label: "Dokumente", href: "/dokumente", icon: "dokumente", area: null },
       { label: "Chat", href: "/chat", icon: "chat", area: null },
       { label: "Bewerber", href: "/bewerber", icon: "bewerber", area: "mitarbeiter" },
+    ],
+  },
+  {
+    /*
+     * Der Altbestand.
+     *
+     * Diese Screens arbeiten auf quote, job und invoice — dem Modell vor
+     * dem Vorgang. Sie stehen hier unten und nicht mehr im Arbeitsbereich,
+     * damit es genau einen offensichtlichen Weg gibt.
+     *
+     * Entfernt sind sie noch nicht, weil an ihnen Dinge hängen, die der
+     * Vorgang noch nicht kann: das Kundenportal zeigt und nimmt Angebote
+     * über quote an, die Crons für Nachfassen, Mahnung und
+     * Buchhaltungsexport lesen quote und invoice, und die Berichte
+     * rechnen über job. Wer sie jetzt löscht, nimmt dem Betrieb diese
+     * Funktionen weg, ohne Ersatz.
+     */
+    title: "Altbestand",
+    items: [
+      { label: "Pipelines", href: "/pipelines/projekte", icon: "pipelines", area: "pipelines" },
+      { label: "Angebote", href: "/angebote", icon: "angebote", area: "angebote" },
+      { label: "Aufträge", href: "/auftraege", icon: "pipelines", area: "pipelines" },
+      { label: "Einsatzplanung", href: "/dispo", icon: "dispo", area: "pipelines" },
+      { label: "Rechnungen", href: "/rechnungen", icon: "rechnungen", area: "rechnungen" },
     ],
   },
   {
