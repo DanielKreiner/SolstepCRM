@@ -33,6 +33,8 @@ async function laeufeLoeschen() {
   await admin().from("job_run").delete().neq("kind", "");
 }
 
+test.describe.configure({ mode: "serial" });
+
 test("vercel.json und die Route Handler stimmen überein", async () => {
   const { readFileSync } = await import("node:fs");
   const vercel = JSON.parse(readFileSync("vercel.json", "utf8")) as {
@@ -54,7 +56,13 @@ test("kein Cron läuft ohne das Geheimnis", async ({ request }) => {
   }
 });
 
+/*
+ * Neun Cronläufe hintereinander gegen die echte Datenbank. Das dauert
+ * länger als ein Klicktest und ist kein Zeichen für ein Problem — der
+ * Standardrahmen von 45 Sekunden reicht dafür nicht.
+ */
 test("jeder Cron läuft durch und meldet ein Ergebnis", async ({ request }) => {
+  test.setTimeout(240_000);
   await laeufeLoeschen();
 
   for (const pfad of CRONS) {
@@ -69,6 +77,7 @@ test("jeder Cron läuft durch und meldet ein Ergebnis", async ({ request }) => {
 });
 
 test("ein zweiter Lauf im selben Fenster tut nichts", async ({ request }) => {
+  test.setTimeout(240_000);
   for (const pfad of CRONS) {
     const zweiter = await request.get(pfad, {
       headers: { authorization: `Bearer ${geheimnis()}` },

@@ -89,6 +89,13 @@ const eslintConfig = [
        * sondern in der Route: auslösen darf ihn nur die Geschäftsführung.
        */
       "lib/export/**",
+      /*
+       * Mitarbeiter anlegen. Ein Konto entsteht in auth.users, und
+       * company_id und role müssen in app_metadata landen — beides geht
+       * ausschliesslich über die Admin-API. Die Rechteprüfung sitzt in
+       * der aufrufenden Server Action, die Mandantenzuordnung hier.
+       */
+      "lib/onboarding/**",
       "lib/supabase/admin.ts",
       "scripts/**",
       "tests/**",

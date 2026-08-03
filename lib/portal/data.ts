@@ -186,9 +186,203 @@ export async function portalTickets(session: PortalSession) {
   const admin = createAdminClient();
   const { data } = await admin
     .from("service_ticket")
-    .select("id, number, category, severity, body, response, created_at, status")
+    .select("id, number, category, severity, body, created_at, status")
     .eq("customer_id", session.customerId)
     .eq("company_id", session.companyId)
     .order("created_at", { ascending: false });
-  return data ?? [];
+
+  const tickets = data ?? [];
+  if (tickets.length === 0) return [];
+
+  /*
+   * Der Verlauf gehört zum Ticket. Interne Notizen bleiben draussen —
+   * das wird hier gefiltert und nicht erst in der Anzeige, damit sie gar
+   * nicht erst über die Leitung gehen.
+   */
+  const { data: verlauf } = await admin
+    .from("service_message")
+    .select("id, ticket_id, author, author_name, body, created_at")
+    .in("ticket_id", tickets.map((t) => t.id as string))
+    .eq("internal", false)
+    .order("created_at");
+
+  const nachMap = new Map<string, unknown[]>();
+  for (const m of verlauf ?? []) {
+    const key = m.ticket_id as string;
+    nachMap.set(key, [...(nachMap.get(key) ?? []), m]);
+  }
+
+  return tickets.map((t) => ({
+    ...t,
+    verlauf: nachMap.get(t.id as string) ?? [],
+  }));
+}
+
+/**
+ * Nachfrage des Kunden an ein bestehendes Anliegen.
+ *
+ * Der Kunde darf nur an seine eigenen Tickets schreiben — geprüft wird
+ * über customer_id und company_id, nicht über die ticket_id allein.
+ */
+export async function portalTicketAntwort(
+  session: PortalSession,
+  ticketId: string,
+  body: string,
+): Promise<{ ok: boolean; grund?: string }> {
+  const admin = createAdminClient();
+
+  const { data: ticket } = await admin
+    .from("service_ticket")
+    .select("id, status")
+    .eq("id", ticketId)
+    .eq("customer_id", session.customerId)
+    .eq("company_id", session.companyId)
+    .maybeSingle();
+
+  if (!ticket) return { ok: false, grund: "Anliegen nicht gefunden." };
+
+  const { error } = await admin.from("service_message").insert({
+    company_id: session.companyId,
+    ticket_id: ticket.id,
+    author: "kunde",
+    author_name: session.customerName,
+    body,
+    internal: false,
+  });
+
+  if (error) return { ok: false, grund: "Das hat nicht geklappt." };
+
+  /*
+   * Ein erledigtes Anliegen, zu dem der Kunde nachfragt, ist wieder
+   * offen. Sonst schreibt er in etwas hinein, das im Büro als abgehakt
+   * gilt und niemand mehr ansieht.
+   */
+  if (ticket.status === "behoben") {
+    await admin
+      .from("service_ticket")
+      .update({ status: "offen" })
+      .eq("id", ticket.id);
+  }
+
+  await admin.from("notification").insert({
+    company_id: session.companyId,
+    kind: "ticket_reply",
+    title: `Nachfrage von ${session.customerName}`,
+    body,
+    link: `/service/${ticket.id}`,
+  });
+
+  return { ok: true };
+}
+
+/**
+ * Ein einzelnes Angebot mit allem, was die Angebotsseite zeigt.
+ *
+ * Gibt null zurück, wenn das Angebot nicht diesem Kunden gehört — die
+ * Prüfung liegt hier und nicht im Aufrufer, weil der Portalpfad keine
+ * Session hat, an der RLS greifen könnte (CLAUDE.md 4.3).
+ */
+export async function portalQuote(session: PortalSession, quoteId: string) {
+  const admin = createAdminClient();
+
+  const { data: quote } = await admin
+    .from("quote")
+    .select(
+      `id, number, status, net_total, cost_total, valid_until, intro_text,
+       price_display, delivery_net, sent_at, accepted_at, accepted_name,
+       customer:customer_id ( id, name, contact_person, address, zip, city )`,
+    )
+    .eq("id", quoteId)
+    .eq("customer_id", session.customerId)
+    .eq("company_id", session.companyId)
+    .maybeSingle();
+
+  if (!quote) return null;
+
+  const [{ data: positionen }, { data: firma }, { data: anlage }] =
+    await Promise.all([
+      admin
+        .from("quote_item")
+        .select(
+          `id, pos, kind, group_key, category, manufacturer, text, description,
+           tech_specs, datasheet_url, image_url, qty, unit, sale_price,
+           vat_rate, optional_selected`,
+        )
+        .eq("quote_id", quoteId)
+        .order("pos"),
+      admin
+        .from("company")
+        .select("name, address, zip, city, pdf_settings")
+        .eq("id", session.companyId)
+        .maybeSingle(),
+      admin
+        .from("plant")
+        .select("kwp, storage_kwh, modules, inverter")
+        .eq("customer_id", session.customerId)
+        .eq("company_id", session.companyId)
+        .order("kwp", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  return { quote, positionen: positionen ?? [], firma, anlage };
+}
+
+/**
+ * Häkchen an einer optionalen Erweiterung setzen oder entfernen.
+ *
+ * Das einzige Feld, das der Kunde an einem Angebot ändern darf. Die
+ * Position muss zu SEINEM Angebot gehören und vom Typ 'option' sein —
+ * beides wird hier geprüft, nicht im Aufrufer.
+ *
+ * Ein angenommenes Angebot ist zu. Danach wäre eine nachträglich
+ * angehakte Erweiterung eine stille Vertragsänderung.
+ */
+export async function portalToggleOption(
+  session: PortalSession,
+  itemId: string,
+  gewaehlt: boolean,
+): Promise<{ ok: boolean; grund?: string }> {
+  const admin = createAdminClient();
+
+  const { data: position } = await admin
+    .from("quote_item")
+    .select("id, kind, quote:quote_id ( id, customer_id, company_id, accepted_at )")
+    .eq("id", itemId)
+    .maybeSingle();
+
+  const quote = position?.quote as unknown as {
+    id: string;
+    customer_id: string;
+    company_id: string;
+    accepted_at: string | null;
+  } | null;
+
+  if (
+    !position ||
+    !quote ||
+    quote.customer_id !== session.customerId ||
+    quote.company_id !== session.companyId
+  ) {
+    return { ok: false, grund: "Position nicht gefunden." };
+  }
+
+  if (position.kind !== "option") {
+    return { ok: false, grund: "Diese Position ist nicht wählbar." };
+  }
+
+  if (quote.accepted_at) {
+    return {
+      ok: false,
+      grund: "Das Angebot ist bereits angenommen und lässt sich nicht mehr ändern.",
+    };
+  }
+
+  const { error } = await admin
+    .from("quote_item")
+    .update({ optional_selected: gewaehlt })
+    .eq("id", itemId);
+
+  if (error) return { ok: false, grund: error.message };
+  return { ok: true };
 }

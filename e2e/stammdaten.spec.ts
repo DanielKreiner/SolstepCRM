@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, login } from "./helpers";
+import { COMPANY_A, DEMO, admin, login, suchwahl } from "./helpers";
 
 /*
  * Anlegen, Ändern, Löschen der Stammdaten.
@@ -176,7 +176,7 @@ test("Auftrag anlegen — Nummer kommt aus der Datenbank", async ({ page }) => {
 
   const { data: kunde } = await db
     .from("customer")
-    .select("id")
+    .select("id, name")
     .eq("company_id", COMPANY_A)
     .is("deleted_at", null)
     .limit(1)
@@ -184,7 +184,7 @@ test("Auftrag anlegen — Nummer kommt aus der Datenbank", async ({ page }) => {
 
   await page.getByRole("button", { name: "Auftrag anlegen" }).click();
 
-  await page.getByLabel("Kunde").selectOption(kunde!.id as string);
+  await suchwahl(page, "Kunde", kunde!.name as string);
   // Erste echte Phase der Projektpipeline.
   await page
     .getByLabel("Phase")

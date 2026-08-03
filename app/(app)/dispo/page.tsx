@@ -4,10 +4,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import { KpiKarte } from "@/components/ui/KpiKarte";
 import { dateShort, initials, time, viennaDay } from "@/lib/format";
+import { ROLE_LABEL } from "@/lib/nav";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { addDays, isoWeek, startOfViennaWeek } from "@/lib/time";
 import { loadConflicts } from "./actions";
+import { EinsatzAnlegen } from "./EinsatzForm";
 import { PublishForm } from "./PublishForm";
 
 export const metadata: Metadata = { title: "Einsatzplanung" };
@@ -29,6 +31,7 @@ export default async function DispoPage({
   const me = await requireMe();
   const supabase = await createClient();
 
+  const darfPlanen = me.perms.pipelines === "write";
   const { woche } = await searchParams;
   const montag = startOfViennaWeek(
     woche && /^\d{4}-\d{2}-\d{2}$/.test(woche) ? woche : viennaDay(),
@@ -81,6 +84,31 @@ export default async function DispoPage({
       .order("number", { ascending: false })
       .limit(30),
   ]);
+
+  /*
+   * Für das Eintragen zählen alle laufenden Aufträge, nicht nur die aus
+   * dem Pool: ein mehrtägiger Auftrag bekommt mehrere Einsätze, und nach
+   * dem ersten wäre er sonst nicht mehr wählbar.
+   */
+  const { data: waehlbar } = await supabase
+    .from("job")
+    .select("id, number, city, phase:phase_id ( system_key ), customer:customer_id ( name )")
+    .order("number", { ascending: false })
+    .limit(300);
+
+  const auftragsListe = ((waehlbar ?? []) as unknown as {
+    id: string;
+    number: string;
+    city: string | null;
+    phase: { system_key: string | null } | null;
+    customer: { name: string } | null;
+  }[])
+    .filter((j) => j.phase?.system_key !== "closed")
+    .map((j) => ({
+      wert: j.id,
+      text: `${j.number} · ${j.customer?.name ?? "—"}`,
+      ...(j.city ? { zusatz: j.city } : {}),
+    }));
 
   type Termin = {
     id: string;
@@ -174,6 +202,22 @@ export default async function DispoPage({
         title="Einsatzplanung"
         subtitle={`${isoWeek(montag)} · ${dateShort(montag)} – ${dateShort(addDays(montag, 6))}`}
         actions={
+          <>
+            {darfPlanen ? (
+              <EinsatzAnlegen
+                auftraege={auftragsListe}
+                vorschlagDatum={montag}
+                team={((users ?? []) as unknown as {
+                  id: string;
+                  name: string;
+                  role: string;
+                }[]).map((u) => ({
+                  wert: u.id,
+                  text: u.name,
+                  zusatz: ROLE_LABEL[u.role] ?? u.role,
+                }))}
+              />
+            ) : null}
           <div className="flex items-center gap-1 rounded-pill bg-surface p-1 shadow-soft">
             <Link
               href={`/dispo?woche=${addDays(montag, -7)}`}
@@ -194,6 +238,7 @@ export default async function DispoPage({
               ›
             </Link>
           </div>
+          </>
         }
       />
 
@@ -298,6 +343,17 @@ export default async function DispoPage({
                           <span className="block truncate font-medium">
                             {t.job?.customer?.name ?? t.title ?? "Einsatz"}
                           </span>
+                          {/*
+                            Die Bezeichnung stand bisher nur da, wenn kein
+                            Kunde am Auftrag hing — also praktisch nie. Sie
+                            ist aber genau das, was den zweiten Einsatz beim
+                            selben Kunden vom ersten unterscheidet.
+                          */}
+                          {t.title && t.job?.customer?.name ? (
+                            <span className="block truncate text-[10.5px] text-faint">
+                              {t.title}
+                            </span>
+                          ) : null}
                         </Link>
                       );
                     })}

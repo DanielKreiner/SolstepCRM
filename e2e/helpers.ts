@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export const DEMO = {
@@ -75,4 +75,61 @@ export async function jobHours(number: string): Promise<number> {
     .single();
   if (error) throw error;
   return Number(data.hours_actual);
+}
+
+/**
+ * Portalzugang über die Oberfläche erzeugen und den Token zurückgeben.
+ *
+ * Hat der Kunde schon einen Zugang, steht im Linkkasten zunächst der alte
+ * Link — der beim Erzeugen des neuen widerrufen wird. Deshalb wird auf
+ * einen tatsächlich geänderten Wert gewartet und nicht nur darauf, dass
+ * das Feld sichtbar ist.
+ */
+export async function portalToken(page: Page, kundeId: string): Promise<string> {
+  await page.goto(`/crm?kunde=${kundeId}&bearbeiten=portal`);
+
+  const feld = page.getByLabel("Portallink").first();
+  const vorher = (await feld.count()) > 0 ? await feld.inputValue() : "";
+
+  await page
+    .getByRole("button", { name: /Zugang erzeugen|Neuen Link erzeugen/ })
+    .click();
+
+  await expect
+    .poll(
+      async () => {
+        if ((await feld.count()) === 0) return vorher;
+        return feld.inputValue();
+      },
+      { timeout: 20_000 },
+    )
+    .not.toBe(vorher);
+
+  const link = await feld.inputValue();
+  const token = link.split("/portal/")[1];
+  if (!token) throw new Error(`Kein Token im Link: ${link}`);
+  return token;
+}
+
+/**
+ * Eine Suchauswahl bedienen: tippen und den Treffer anklicken.
+ *
+ * Die Klapplisten für Kunden, Artikel und Aufträge sind Suchfelder
+ * geworden — ein <select> mit 3000 Artikeln ist nicht bedienbar.
+ * `selectOption` greift dort nicht mehr, deshalb dieser Weg.
+ *
+ * `wurzel` grenzt auf ein Formular ein, wenn mehrere gleich benannte
+ * Felder auf der Seite stehen.
+ */
+export async function suchwahl(
+  wurzel: Page | Locator,
+  label: string,
+  text: string,
+): Promise<void> {
+  const feld = wurzel.getByRole("combobox", { name: label, exact: true });
+  await feld.click();
+  await feld.fill(text.slice(0, 30));
+
+  const liste = wurzel.getByRole("listbox", { name: label });
+  await liste.getByRole("option").filter({ hasText: text }).first().click();
 }

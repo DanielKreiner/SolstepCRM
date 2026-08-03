@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { MitarbeiterAnlegen } from "./PersonalForms";
 import { Pill } from "@/components/ui/Pill";
 import { KpiKarte } from "@/components/ui/KpiKarte";
 import { date, hhmm, initials, viennaDay } from "@/lib/format";
@@ -26,10 +27,10 @@ type Row = {
 };
 
 export default async function MitarbeiterPage() {
-  await requireMe();
+  const me = await requireMe();
   const supabase = await createClient();
 
-  const [{ data: users }, { data: qualifikationen }, { data: salden }] =
+  const [{ data: users }, { data: qualifikationen }, { data: salden }, { data: standorte }] =
     await Promise.all([
       supabase
         .from("app_user")
@@ -40,6 +41,7 @@ export default async function MitarbeiterPage() {
         .order("name"),
       supabase.from("qualification").select("user_id, name, valid_until"),
       supabase.from("v_time_balance").select("user_id, actual_min, adjust_min"),
+      supabase.from("location").select("id, name, city").order("name"),
     ]);
 
   const rows = (users ?? []) as unknown as Row[];
@@ -152,6 +154,17 @@ export default async function MitarbeiterPage() {
       <PageHeader
         title="Mitarbeiter"
         subtitle={`${rows.filter((u) => u.active).length} aktiv · Nachweise mit ${VORWARNUNG_TAGE} Tagen Vorwarnung`}
+        actions={
+          me.role === "gf" ? (
+            <MitarbeiterAnlegen
+              standorte={(standorte ?? []).map((l) => ({
+                wert: l.id as string,
+                text: l.name as string,
+                ...(l.city ? { zusatz: l.city as string } : {}),
+              }))}
+            />
+          ) : null
+        }
       />
 
       <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">

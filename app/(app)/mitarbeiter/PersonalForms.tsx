@@ -1,13 +1,23 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   addQualification,
   markSigned,
   uploadDocument,
   type PersonalState,
+  mitarbeiterAktivSetzen,
+  mitarbeiterEinladen,
+  mitarbeiterSpeichern,
 } from "./actions";
+import {
+  AktionsKnopf,
+  Auswahl,
+  Eingabe,
+  Formular,
+} from "@/components/ui/Formular";
+import { Suchauswahl } from "@/components/ui/Suchauswahl";
 
 const INITIAL: PersonalState = { error: null, ok: null };
 
@@ -162,3 +172,213 @@ export function SignForm({
 
 const feld =
   "rounded-input border border-transparent bg-sunk px-[11px] py-[7px] text-[13px] text-ink outline-0 focus:border-accent focus:bg-surface";
+
+const ROLLEN = [
+  { wert: "monteur", text: "Montage" },
+  { wert: "bauleitung", text: "Bauleitung" },
+  { wert: "buero", text: "Büro" },
+  { wert: "lager", text: "Lager" },
+  { wert: "gf", text: "Geschäftsführung" },
+];
+
+const BESCHAEFTIGUNG = [
+  { wert: "vollzeit", text: "Vollzeit" },
+  { wert: "teilzeit", text: "Teilzeit" },
+  { wert: "geringfuegig", text: "geringfügig" },
+  { wert: "lehrling", text: "Lehrling" },
+];
+
+export type Standort = { wert: string; text: string; zusatz?: string };
+
+/**
+ * Mitarbeiter anlegen. Der Zugang entsteht dabei mit — ein Mitarbeiter
+ * ohne Konto könnte weder stempeln noch seinen Dienstplan sehen.
+ */
+export function MitarbeiterAnlegen({ standorte }: { standorte: Standort[] }) {
+  const [offen, setOffen] = useState(false);
+
+  if (!offen) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOffen(true)}
+        className="rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-5 py-[13px] text-sm font-semibold text-white"
+      >
+        Mitarbeiter anlegen
+      </button>
+    );
+  }
+
+  return (
+    <div className="w-full">
+      <Formular
+        aktion={mitarbeiterEinladen}
+        titel="Mitarbeiter anlegen"
+        hinweis="Der Zugang wird per Mail eingeladen — kein Passwort geht durch das Büro."
+        knopf="Anlegen und einladen"
+        leerenNachErfolg
+      >
+        <Eingabe id="m-name" name="name" label="Name" pflicht />
+        <Eingabe id="m-mail" name="email" label="E-Mail" typ="email" pflicht />
+        <Auswahl id="m-rolle" name="role" label="Rolle" wert="monteur" optionen={ROLLEN} />
+        <Suchauswahl
+          name="locationId"
+          label="Standort"
+          platzhalter="Standort suchen"
+          optionen={standorte}
+        />
+        <Eingabe id="m-tel" name="phone" label="Telefon" typ="tel" />
+        <Auswahl
+          id="m-beschaeftigung"
+          name="employmentType"
+          label="Beschäftigung"
+          wert="vollzeit"
+          optionen={BESCHAEFTIGUNG}
+        />
+        <Eingabe
+          id="m-stunden"
+          name="weeklyHours"
+          label="Wochenstunden"
+          typ="number"
+          schritt="0.5"
+          wert="38.5"
+        />
+        <Eingabe
+          id="m-urlaub"
+          name="vacationDaysYear"
+          label="Urlaubstage pro Jahr"
+          typ="number"
+          schritt="0.5"
+          wert="25"
+        />
+        <Eingabe
+          id="m-kosten"
+          name="hourlyCost"
+          label="Stundenkosten"
+          hinweis="Interner Kostensatz für die Nachkalkulation, nicht der Lohn."
+          typ="number"
+          schritt="0.01"
+        />
+      </Formular>
+    </div>
+  );
+}
+
+/** Stammdaten eines bestehenden Mitarbeiters. */
+export function MitarbeiterBearbeiten({
+  werte,
+  standorte,
+  darfRolle,
+}: {
+  werte: {
+    userId: string;
+    name: string;
+    role: string;
+    locationId: string;
+    phone: string;
+    weeklyHours: number;
+    employmentType: string;
+    hourlyCost: number;
+    vacationDaysYear: number;
+    vacationCarry: number;
+  };
+  standorte: Standort[];
+  /** Nur die Geschäftsführung darf die Rolle ändern. */
+  darfRolle: boolean;
+}) {
+  return (
+    <Formular
+      aktion={mitarbeiterSpeichern}
+      titel="Stammdaten"
+      knopf="Speichern"
+      versteckt={{ userId: werte.userId }}
+    >
+      <Eingabe id="e-name" name="name" label="Name" pflicht wert={werte.name} />
+      <Auswahl
+        id="e-rolle"
+        name="role"
+        label="Rolle"
+        wert={werte.role}
+        optionen={ROLLEN}
+        gesperrt={!darfRolle}
+        {...(darfRolle
+          ? {}
+          : { hinweis: "Die Rolle ändert nur die Geschäftsführung." })}
+      />
+      <Suchauswahl
+        name="locationId"
+        label="Standort"
+        platzhalter="Standort suchen"
+        wert={werte.locationId}
+        optionen={standorte}
+      />
+      <Eingabe id="e-tel" name="phone" label="Telefon" typ="tel" wert={werte.phone} />
+      <Auswahl
+        id="e-beschaeftigung"
+        name="employmentType"
+        label="Beschäftigung"
+        wert={werte.employmentType}
+        optionen={BESCHAEFTIGUNG}
+      />
+      <Eingabe
+        id="e-stunden"
+        name="weeklyHours"
+        label="Wochenstunden"
+        typ="number"
+        schritt="0.5"
+        wert={werte.weeklyHours}
+      />
+      <Eingabe
+        id="e-urlaub"
+        name="vacationDaysYear"
+        label="Urlaubstage pro Jahr"
+        typ="number"
+        schritt="0.5"
+        wert={werte.vacationDaysYear}
+      />
+      <Eingabe
+        id="e-uebertrag"
+        name="vacationCarry"
+        label="Resturlaub aus Vorjahr"
+        typ="number"
+        schritt="0.5"
+        wert={werte.vacationCarry}
+      />
+      <Eingabe
+        id="e-kosten"
+        name="hourlyCost"
+        label="Stundenkosten"
+        typ="number"
+        schritt="0.01"
+        wert={werte.hourlyCost}
+      />
+    </Formular>
+  );
+}
+
+/**
+ * Austritt. Kein Löschen — Zeiten, Dokumente und Belege bleiben, der
+ * Mitarbeiter verschwindet nur aus Dispo und Zuweisungen.
+ */
+export function AustrittKnopf({
+  userId,
+  aktiv,
+}: {
+  userId: string;
+  aktiv: boolean;
+}) {
+  return (
+    <AktionsKnopf
+      aktion={mitarbeiterAktivSetzen}
+      label={aktiv ? "Als ausgetreten vermerken" : "Wieder aktivieren"}
+      variante={aktiv ? "gefahr" : "quiet"}
+      versteckt={{ userId, aktiv: aktiv ? "nein" : "ja" }}
+      {...(aktiv
+        ? {
+            bestaetigung:
+              "Als ausgetreten vermerken? Der Zugang bleibt bestehen, der Mitarbeiter verschwindet aus Planung und Zuweisungen.",
+          }
+        : {})}
+    />
+  );
+}

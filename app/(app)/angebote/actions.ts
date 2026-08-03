@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireMe } from "@/lib/session";
+import { angebotAnnehmen } from "@/lib/quote-accept";
 
 export type QuoteState = { error: string | null; ok: string | null };
 
@@ -131,125 +132,33 @@ export async function acceptQuote(
   }
 
   const supabase = await createClient();
+  const ergebnis = await angebotAnnehmen(supabase, {
+    quoteId: parsed.data.quoteId,
+    companyId: me.companyId,
+    name: parsed.data.name,
+    via: "backoffice",
+    userId: me.id,
+  });
 
-  const { data: quote } = await supabase
-    .from("quote")
-    .select(
-      "id, number, net_total, cost_total, customer_id, accepted_at, customer:customer_id ( name, address, zip, city )",
-    )
-    .eq("id", parsed.data.quoteId)
-    .maybeSingle();
+  if (!ergebnis.ok) return { error: ergebnis.grund, ok: null };
 
-  if (!quote) return { error: "Angebot nicht gefunden.", ok: null };
-
-  // Zweimal annehmen darf keinen zweiten Auftrag erzeugen.
-  const { data: bestehend } = await supabase
-    .from("job")
-    .select("id, number")
-    .eq("quote_id", quote.id)
-    .maybeSingle();
-
-  if (bestehend) {
+  if (!ergebnis.neu) {
     return {
       error: null,
-      ok: `War bereits angenommen. Auftrag ${bestehend.number as string}.`,
+      ok: `War bereits angenommen. Auftrag ${ergebnis.jobNumber}.`,
     };
   }
-
-  const [{ data: phase }, { data: nummer }, { data: location }] =
-    await Promise.all([
-      supabase
-        .from("pipeline_phase")
-        .select("id, pipeline:pipeline_id ( kind )")
-        .eq("key", "beauftragt"),
-      supabase.rpc("next_number", {
-        p_company: me.companyId,
-        p_kind: "job",
-      }),
-      supabase.from("location").select("id").limit(1).maybeSingle(),
-    ]);
-
-  const zielPhase = (phase ?? []).find(
-    (p) => (p.pipeline as unknown as { kind: string } | null)?.kind === "projekte",
-  );
-  if (!zielPhase) {
-    return { error: "Die Projekte-Pipeline hat keine Startphase.", ok: null };
-  }
-
-  const customer = quote.customer as unknown as {
-    address: string | null;
-    zip: string | null;
-    city: string | null;
-  } | null;
-
-  const { data: job, error: jobErr } = await supabase
-    .from("job")
-    .insert({
-      company_id: me.companyId,
-      customer_id: quote.customer_id,
-      quote_id: quote.id,
-      location_id: location?.id ?? null,
-      number: nummer as string,
-      phase_id: zielPhase.id,
-      value_net: quote.net_total,
-      material_planned: quote.cost_total,
-      address: customer?.address ?? null,
-      zip: customer?.zip ?? null,
-      city: customer?.city ?? null,
-      next_step: "Termin fixieren",
-      created_by: me.id,
-    })
-    .select("id, number")
-    .single();
-
-  if (jobErr) {
-    return { error: `Auftrag konnte nicht angelegt werden: ${jobErr.message}`, ok: null };
-  }
-
-  // Die Aufgabe hängt am Auftrag, nicht an einer Notiz — sie muss abhakbar sein.
-  await supabase.from("job_checklist_item").insert({
-    company_id: me.companyId,
-    job_id: job.id,
-    sort: 1,
-    label: "Termin fixieren",
-  });
-
-  // Angebot in die Gewonnen-Phase; der Trigger aus 0006 setzt den Status.
-  const { data: wonPhase } = await supabase
-    .from("pipeline_phase")
-    .select("id, system_key, pipeline:pipeline_id ( kind )")
-    .eq("system_key", "won");
-
-  const won = (wonPhase ?? []).find(
-    (p) => (p.pipeline as unknown as { kind: string } | null)?.kind === "vertrieb",
-  );
-
-  await supabase
-    .from("quote")
-    .update({
-      ...(won ? { phase_id: won.id } : {}),
-      accepted_name: parsed.data.name,
-      accepted_at: new Date().toISOString(),
-    })
-    .eq("id", quote.id);
-
-  await supabase.from("quote_event").insert({
-    company_id: me.companyId,
-    quote_id: quote.id,
-    kind: "accepted",
-    meta_json: { by: parsed.data.name, job: job.number },
-  });
 
   await supabase.from("notification").insert({
     company_id: me.companyId,
     user_id: me.id,
     kind: "quote_accepted",
-    title: `Angebot ${quote.number as string} angenommen`,
-    body: `Auftrag ${job.number as string} angelegt. Nächster Schritt: Termin fixieren.`,
-    link: `/auftraege/${job.id}`,
+    title: `Angebot ${ergebnis.quoteNumber} angenommen`,
+    body: `Auftrag ${ergebnis.jobNumber} angelegt. Nächster Schritt: Termin fixieren.`,
+    link: `/auftraege/${ergebnis.jobId}`,
   });
 
-  revalidatePath(`/angebote/${quote.id}`);
+  revalidatePath(`/angebote/${parsed.data.quoteId}`);
   revalidatePath("/angebote");
   revalidatePath("/auftraege");
   revalidatePath("/pipelines/vertrieb");
@@ -257,6 +166,6 @@ export async function acceptQuote(
 
   return {
     error: null,
-    ok: `Angenommen. Auftrag ${job.number as string} angelegt, Aufgabe „Termin fixieren“ gesetzt.`,
+    ok: `Angenommen. Auftrag ${ergebnis.jobNumber} angelegt, Aufgabe „Termin fixieren“ gesetzt.`,
   };
 }

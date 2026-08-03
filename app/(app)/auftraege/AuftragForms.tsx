@@ -8,6 +8,7 @@ import {
   Formular,
   Textfeld,
 } from "@/components/ui/Formular";
+import { Suchauswahl } from "@/components/ui/Suchauswahl";
 import { createJob, deleteJob, updateJob } from "./actions";
 
 export type Option = { wert: string; text: string };
@@ -53,13 +54,12 @@ function Felder({
   const p = werte ? "e" : "n";
   return (
     <>
-      <Auswahl
-        id={`${p}-kunde`}
+      <Suchauswahl
         name="customerId"
         label="Kunde"
         pflicht
+        platzhalter="Kunde suchen — Name oder Ort"
         wert={werte?.customerId ?? null}
-        leerText="— wählen —"
         optionen={listen.kunden}
       />
       <Auswahl
@@ -71,29 +71,29 @@ function Felder({
         leerText="— wählen —"
         optionen={listen.phasen}
       />
-      <Auswahl
-        id={`${p}-anlage`}
+      <Suchauswahl
         name="plantId"
         label="Anlage"
         hinweis="optional — verbindet den Auftrag mit der Anlage des Kunden"
+        platzhalter="Anlage suchen"
+        leerLabel="— keine —"
         wert={werte?.plantId ?? null}
-        leerText="— keine —"
         optionen={listen.anlagen}
       />
-      <Auswahl
-        id={`${p}-standort`}
+      <Suchauswahl
         name="locationId"
         label="Standort"
+        platzhalter="Standort suchen"
+        leerLabel="— keiner —"
         wert={werte?.locationId ?? null}
-        leerText="— keiner —"
         optionen={listen.standorte}
       />
-      <Auswahl
-        id={`${p}-bauleiter`}
+      <Suchauswahl
         name="siteManagerId"
         label="Bauleitung"
+        platzhalter="Mitarbeiter suchen"
+        leerLabel="— offen —"
         wert={werte?.siteManagerId ?? null}
-        leerText="— offen —"
         optionen={listen.bauleiter}
       />
       <Eingabe

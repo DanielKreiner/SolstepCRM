@@ -91,6 +91,9 @@ const angebotSchema = z.object({
   customerId: z.string().uuid("Kunde fehlt."),
   validUntil: z.string().trim().optional().or(z.literal("")),
   ownerId: z.string().uuid().optional().or(z.literal("")),
+  introText: z.string().trim().max(1200).optional().or(z.literal("")),
+  priceDisplay: z.enum(["positionen", "gesamt"]).default("positionen"),
+  deliveryNet: z.coerce.number().min(0).max(1000000).default(0),
 });
 
 export async function createQuote(
@@ -171,6 +174,9 @@ export async function updateQuote(
       customer_id: parsed.data.customerId,
       valid_until: leerZuNull(parsed.data.validUntil),
       owner_id: leerZuNull(parsed.data.ownerId),
+      intro_text: leerZuNull(parsed.data.introText),
+      price_display: parsed.data.priceDisplay,
+      delivery_net: parsed.data.deliveryNet,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id.data);
@@ -236,6 +242,14 @@ const positionSchema = z.object({
   purchasePrice: z.coerce.number().min(0).max(10000000).default(0),
   salePrice: z.coerce.number().min(0).max(10000000).default(0),
   vatRate: z.coerce.number().min(0).max(30).default(20),
+  /* Rolle auf der Angebotsseite — siehe Migration 0018. */
+  kind: z
+    .enum(["position", "paket", "paket_inhalt", "option", "leistung"])
+    .default("position"),
+  groupKey: z.string().trim().max(60).optional().or(z.literal("")),
+  category: z.string().trim().max(60).optional().or(z.literal("")),
+  manufacturer: z.string().trim().max(80).optional().or(z.literal("")),
+  description: z.string().trim().max(2000).optional().or(z.literal("")),
 });
 
 /** Prüft, ob das Angebot bereits angenommen ist — dann ist es eingefroren. */
@@ -295,6 +309,11 @@ export async function addQuoteItem(
     purchase_price: d.purchasePrice,
     sale_price: d.salePrice,
     vat_rate: d.vatRate,
+    kind: d.kind,
+    group_key: leerZuNull(d.groupKey),
+    category: leerZuNull(d.category),
+    manufacturer: leerZuNull(d.manufacturer),
+    description: leerZuNull(d.description),
   });
 
   if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
@@ -335,6 +354,11 @@ export async function updateQuoteItem(
       purchase_price: d.purchasePrice,
       sale_price: d.salePrice,
       vat_rate: d.vatRate,
+      kind: d.kind,
+      group_key: leerZuNull(d.groupKey),
+      category: leerZuNull(d.category),
+      manufacturer: leerZuNull(d.manufacturer),
+      description: leerZuNull(d.description),
     })
     .eq("id", itemId.data);
 
@@ -409,7 +433,9 @@ export async function addQuoteItemFromArticle(
 
   const { data: artikel } = await supabase
     .from("article")
-    .select("id, sku, name, unit, purchase_price, sale_price, vat_rate")
+    .select(
+      "id, sku, name, unit, purchase_price, sale_price, vat_rate, manufacturer, category, description, tech_specs, datasheet_url, image_url",
+    )
     .eq("id", d.articleId)
     .maybeSingle();
 
@@ -428,12 +454,24 @@ export async function addQuoteItemFromArticle(
     quote_id: d.quoteId,
     pos: Number(letzte?.pos ?? 0) + 10,
     article_id: artikel.id,
-    text: `${artikel.name as string} (${artikel.sku as string})`,
+    text: artikel.name as string,
     qty: d.qty,
     unit: artikel.unit as string,
     purchase_price: artikel.purchase_price,
     sale_price: artikel.sale_price,
     vat_rate: artikel.vat_rate,
+    /*
+     * Beschreibung, Technik, Datenblatt und Bild werden mitkopiert. Der
+     * Kunde sieht sie auf der Angebotsseite — und ein Angebot von heute
+     * soll sich nicht ändern, weil jemand nächstes Jahr den Artikeltext
+     * umschreibt. Dieselbe Regel wie beim Preis.
+     */
+    manufacturer: artikel.manufacturer,
+    category: artikel.category,
+    description: artikel.description,
+    tech_specs: artikel.tech_specs,
+    datasheet_url: artikel.datasheet_url,
+    image_url: artikel.image_url,
   });
 
   if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };

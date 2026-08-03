@@ -5,7 +5,7 @@ import {
   type Schritt,
 } from "@/components/ui/Fortschrittsleiste";
 import { Pill } from "@/components/ui/Pill";
-import { date, dateShort, eur, num, time } from "@/lib/format";
+import { date, dateShort, dateTime, eur, num, time } from "@/lib/format";
 import {
   portalAppointments,
   portalJobs,
@@ -15,9 +15,18 @@ import {
   portalTickets,
   resolvePortal,
 } from "@/lib/portal/data";
-import { AcceptForm, ConfirmAppointmentForm, TicketForm } from "./PortalForms";
+import Link from "next/link";
+import { ConfirmAppointmentForm, NachfrageForm, TicketForm } from "./PortalForms";
 
 export const metadata: Metadata = { title: "Kundenportal" };
+
+type Nachricht = {
+  id: string;
+  author: string;
+  author_name: string | null;
+  body: string;
+  created_at: string;
+};
 
 const KATEGORIE: Record<string, string> = {
   stoerung: "Störung",
@@ -53,10 +62,6 @@ export default async function PortalPage({
     portalPlant(session),
     portalAppointments(session),
   ]);
-
-  const offeneAngebote = quotes.filter(
-    (q) => !q.accepted_at && q.status !== "lost" && q.status !== "expired",
-  );
 
   /*
    * Das laufende Projekt: der jüngste Auftrag, der noch nicht abgeschlossen
@@ -226,7 +231,6 @@ export default async function PortalPage({
         ) : (
           <ul className="flex flex-col gap-3">
             {quotes.map((q) => {
-              const offen = offeneAngebote.some((o) => o.id === q.id);
               return (
                 <li
                   key={q.id as string}
@@ -259,13 +263,19 @@ export default async function PortalPage({
                       Angenommen am {date(q.accepted_at as string)}
                       {q.accepted_name ? ` durch ${q.accepted_name as string}` : ""}
                     </p>
-                  ) : offen ? (
-                    <AcceptForm
-                      token={token}
-                      quoteId={q.id as string}
-                      quoteNumber={q.number as string}
-                    />
                   ) : null}
+
+                  {/*
+                    Das Angebot hat eine eigene Seite — mit Anlagendaten,
+                    Produktbeschreibungen und den optionalen Erweiterungen.
+                    Die Annahme passiert dort, nicht in dieser Kurzliste.
+                  */}
+                  <Link
+                    href={`/portal/${token}/angebot/${q.id as string}`}
+                    className="mt-3 inline-flex items-center justify-center rounded-pill bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-5 py-[11px] text-[13px] font-semibold text-white hover:text-white"
+                  >
+                    {q.accepted_at ? "Angebot ansehen" : "Angebot ansehen und annehmen"}
+                  </Link>
                 </li>
               );
             })}
@@ -273,7 +283,7 @@ export default async function PortalPage({
         )}
       </section>
 
-      <section className="mb-6 grid gap-4 md:grid-cols-2 md:items-start">
+      <section id="anliegen" className="mb-6 grid gap-4 md:grid-cols-2 md:items-start">
         <TicketForm token={token} />
 
         <div>
@@ -300,12 +310,53 @@ export default async function PortalPage({
                       {KATEGORIE[t.category as string] ?? (t.category as string)}
                     </span>
                   </div>
-                  <p className="mt-2 text-[13px]">{t.body as string}</p>
-                  {t.response ? (
-                    <p className="mt-2 rounded-input bg-panel px-3 py-2 text-[13px]">
-                      {t.response as string}
+                  {/*
+                    Der Verlauf statt einer einzelnen Antwort: der Kunde
+                    sieht, was er geschrieben hat und was zurückkam, und
+                    kann nachfragen. Interne Notizen des Betriebs sind
+                    schon beim Laden aussortiert.
+                  */}
+                  {(t.verlauf as unknown as Nachricht[]).length === 0 ? (
+                    <p className="mt-2 text-[13px] leading-[1.5]">
+                      {t.body as string}
                     </p>
                   ) : null}
+
+                  <ul className="mt-3 flex flex-col gap-2">
+                    {(t.verlauf as unknown as Nachricht[]).map((m) => (
+                      <li
+                        key={m.id}
+                        className={[
+                          "rounded-input px-3 py-2",
+                          m.author === "kunde"
+                            ? "bg-panel"
+                            : "bg-s-done/10",
+                        ].join(" ")}
+                      >
+                        <div className="mb-[2px] flex items-baseline gap-2">
+                          <span className="text-[11.5px] font-semibold">
+                            {m.author === "kunde"
+                              ? "Sie"
+                              : (m.author_name ?? session.companyName)}
+                          </span>
+                          <span className="num ml-auto text-[10.5px] text-faint">
+                            {dateTime(m.created_at)}
+                          </span>
+                        </div>
+                        <p className="text-[13px] leading-[1.5] whitespace-pre-line">
+                          {m.body}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {t.status === "behoben" ? null : (
+                    <NachfrageForm
+                      token={token}
+                      ticketId={t.id as string}
+                      nummer={t.number as string}
+                    />
+                  )}
                 </li>
               ))}
             </ul>

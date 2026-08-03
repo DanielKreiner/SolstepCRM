@@ -3,9 +3,9 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
-  acceptFromPortal,
   confirmAppointmentFromPortal,
   createTicketFromPortal,
+  nachfrageSenden,
   type PortalState,
 } from "./actions";
 
@@ -39,46 +39,6 @@ function Submit({ label, busy }: { label: string; busy: string }) {
     >
       {pending ? busy : label}
     </button>
-  );
-}
-
-export function AcceptForm({
-  token,
-  quoteId,
-  quoteNumber,
-}: {
-  token: string;
-  quoteId: string;
-  quoteNumber: string;
-}) {
-  const [state, formAction] = useActionState(acceptFromPortal, INITIAL);
-
-  return (
-    <form action={formAction} className="mt-4 border-t border-line pt-4">
-      <input type="hidden" name="token" value={token} />
-      <input type="hidden" name="quoteId" value={quoteId} />
-
-      <label
-        htmlFor={`annahme-${quoteId}`}
-        className="text-[12.5px] font-semibold text-muted"
-      >
-        Angebot {quoteNumber} annehmen — bitte Ihren Namen eintragen
-      </label>
-      <input
-        id={`annahme-${quoteId}`}
-        name="name"
-        required
-        minLength={2}
-        placeholder="Vor- und Nachname"
-        className="mt-[6px] mb-3 w-full rounded-input border border-transparent bg-sunk px-[13px] py-[11px] text-sm outline-0 focus:border-accent focus:bg-surface"
-      />
-
-      <Submit label="Angebot verbindlich annehmen" busy="Wird erfasst …" />
-      <p className="mt-2 text-[11.5px] text-faint">
-        Name, Zeitpunkt und IP-Adresse werden zum Nachweis gespeichert.
-      </p>
-      <Meldung state={state} />
-    </form>
   );
 }
 
@@ -158,6 +118,58 @@ export function ConfirmAppointmentForm({
       <input type="hidden" name="appointmentId" value={appointmentId} />
       <Submit label="Termin bestätigen" busy="Wird bestätigt …" />
       <Meldung state={state} />
+    </form>
+  );
+}
+
+/**
+ * Nachfrage zu einem laufenden Anliegen. Bewusst schmal gehalten — ein
+ * Feld und ein Knopf, direkt unter dem Verlauf.
+ */
+export function NachfrageForm({
+  token,
+  ticketId,
+  nummer,
+}: {
+  token: string;
+  ticketId: string;
+  /* Die Nummer steht im Label: der Kunde hat oft mehrere Anliegen offen,
+     und "Nachricht zu diesem Anliegen" sagt vorgelesen nicht, zu welchem. */
+  nummer: string;
+}) {
+  const [status, formAction] = useActionState(nachfrageSenden, INITIAL);
+
+  return (
+    <form action={formAction} key={status.ok ?? "leer"} className="mt-3">
+      <input type="hidden" name="token" value={token} />
+      <input type="hidden" name="ticketId" value={ticketId} />
+
+      <label htmlFor={`nachfrage-${ticketId}`} className="sr-only">
+        Nachricht zu Anliegen {nummer}
+      </label>
+      <textarea
+        id={`nachfrage-${ticketId}`}
+        name="body"
+        rows={2}
+        placeholder="Etwas nachfragen oder ergänzen …"
+        className="w-full resize-y rounded-input border border-transparent bg-panel px-[13px] py-[10px] text-[13px] outline-0 focus:border-accent focus:bg-surface"
+      />
+
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <span className="w-[180px]">
+          <Submit label="Senden" busy="Wird gesendet …" />
+        </span>
+        {status.error ? (
+          <span role="alert" className="text-[12px] font-medium text-s-crit">
+            {status.error}
+          </span>
+        ) : null}
+        {status.ok ? (
+          <span role="status" className="text-[12px] font-medium text-s-done">
+            {status.ok}
+          </span>
+        ) : null}
+      </div>
     </form>
   );
 }

@@ -136,7 +136,7 @@ type EingabeProps = {
   hinweis?: string;
   pflicht?: boolean;
   breit?: boolean;
-  typ?: "text" | "email" | "tel" | "number" | "date" | "datetime-local";
+  typ?: "text" | "email" | "tel" | "number" | "date" | "time" | "datetime-local";
   wert?: string | number | null;
   platzhalter?: string;
   schritt?: string;

@@ -12,6 +12,8 @@ import {
   DocumentForm,
   QualificationForm,
   SignForm,
+  AustrittKnopf,
+  MitarbeiterBearbeiten,
 } from "../PersonalForms";
 
 export const metadata: Metadata = { title: "Mitarbeiter" };
@@ -35,7 +37,14 @@ export default async function MitarbeiterDetail({
   const { data: person } = await supabase
     .from("app_user")
     .select(
-      "id, name, email, phone, role, weekly_hours, employment_type, vacation_days_year, vacation_carry, active, created_at, location:location_id ( name )",
+      /*
+       * hourly_cost steht hier bewusst NICHT: die Spalte hat seit 0009
+       * kein Leserecht für authenticated, und eine Abfrage, die sie
+       * mitnimmt, schlägt komplett fehl — die Seite wäre für jede Rolle
+       * eine 404. Der Kostensatz kommt weiter unten über
+       * hourly_cost_of(), das can(mitarbeiter) prüft.
+       */
+      "id, name, email, phone, role, weekly_hours, employment_type, vacation_days_year, vacation_carry, active, created_at, location_id, location:location_id ( name )",
     )
     .eq("id", id)
     .maybeSingle();
@@ -64,6 +73,11 @@ export default async function MitarbeiterDetail({
         .maybeSingle(),
       supabase.rpc("hourly_cost_of", { p_user: id }),
     ]);
+
+  const { data: standorte } = await supabase
+    .from("location")
+    .select("id, name, city")
+    .order("name");
 
   const heute = new Date().toISOString().slice(0, 10);
   const istStunden =
@@ -248,6 +262,43 @@ export default async function MitarbeiterDetail({
           </section>
         </div>
       </div>
+
+      {darfPflegen ? (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr] xl:items-start">
+          <MitarbeiterBearbeiten
+            darfRolle={me.role === "gf"}
+            werte={{
+              userId: id,
+              name: person.name as string,
+              role: person.role as string,
+              locationId: (person.location_id as string | null) ?? "",
+              phone: (person.phone as string | null) ?? "",
+              weeklyHours: Number(person.weekly_hours),
+              employmentType: (person.employment_type as string) ?? "vollzeit",
+              hourlyCost: Number(satz ?? 0),
+              vacationDaysYear: Number(person.vacation_days_year),
+              vacationCarry: Number(person.vacation_carry),
+            }}
+            standorte={(standorte ?? []).map((l) => ({
+              wert: l.id as string,
+              text: l.name as string,
+              ...(l.city ? { zusatz: l.city as string } : {}),
+            }))}
+          />
+
+          {me.role === "gf" && !eigenesProfil ? (
+            <section className="rounded-[20px] bg-surface p-5 shadow-soft">
+              <h2 className="text-[15px] font-semibold">Beschäftigung</h2>
+              <p className="mt-1 mb-4 text-[12.5px] text-muted">
+                {person.active
+                  ? "Beim Austritt bleiben Zeiten, Dokumente und Belege erhalten — der Mitarbeiter verschwindet nur aus Planung und Zuweisungen."
+                  : "Als ausgetreten vermerkt. Alle Daten sind erhalten."}
+              </p>
+              <AustrittKnopf userId={id} aktiv={Boolean(person.active)} />
+            </section>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }

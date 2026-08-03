@@ -3,7 +3,8 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { resolvePortal } from "@/lib/portal/data";
+import { angebotAnnehmen } from "@/lib/quote-accept";
+import { portalTicketAntwort, resolvePortal } from "@/lib/portal/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type PortalState = { error: string | null; ok: string | null };
@@ -40,19 +41,21 @@ export async function acceptFromPortal(
 
   const admin = createAdminClient();
 
-  // Das Angebot muss diesem Kunden gehören — der Token allein reicht nicht.
-  const { data: quote } = await admin
+  /*
+   * Das Angebot muss diesem Kunden gehören — der Token allein reicht
+   * nicht. Diese Prüfung bleibt hier: sie ist die Mandanten- und
+   * Kundentrennung des Portalpfads und darf nicht in die gemeinsame
+   * Annahmefunktion wandern, die auch das Backoffice benutzt.
+   */
+  const { data: eigen } = await admin
     .from("quote")
-    .select("id, number, accepted_at, customer_id, company_id")
+    .select("id")
     .eq("id", parsed.data.quoteId)
     .eq("customer_id", session.customerId)
     .eq("company_id", session.companyId)
     .maybeSingle();
 
-  if (!quote) return { error: "Angebot nicht gefunden.", ok: null };
-  if (quote.accepted_at) {
-    return { error: null, ok: "Dieses Angebot ist bereits angenommen." };
-  }
+  if (!eigen) return { error: "Angebot nicht gefunden.", ok: null };
 
   const kopf = await headers();
   const ip =
@@ -60,47 +63,32 @@ export async function acceptFromPortal(
     kopf.get("x-real-ip") ??
     null;
 
-  const { data: won } = await admin
-    .from("pipeline_phase")
-    .select("id, system_key, pipeline:pipeline_id ( kind )")
-    .eq("company_id", session.companyId)
-    .eq("system_key", "won");
-
-  const zielPhase = (won ?? []).find(
-    (p) => (p.pipeline as unknown as { kind: string } | null)?.kind === "vertrieb",
-  );
-
-  const { error } = await admin
-    .from("quote")
-    .update({
-      ...(zielPhase ? { phase_id: zielPhase.id } : {}),
-      accepted_at: new Date().toISOString(),
-      accepted_name: parsed.data.name,
-      accepted_ip: ip,
-    })
-    .eq("id", quote.id);
-
-  if (error) return { error: `Annahme fehlgeschlagen: ${error.message}`, ok: null };
-
-  await admin.from("quote_event").insert({
-    company_id: session.companyId,
-    quote_id: quote.id,
-    kind: "accepted",
-    meta_json: { by: parsed.data.name, ip, via: "portal" },
+  const ergebnis = await angebotAnnehmen(admin, {
+    quoteId: parsed.data.quoteId,
+    companyId: session.companyId,
+    name: parsed.data.name,
+    ip,
+    via: "portal",
   });
+
+  if (!ergebnis.ok) return { error: ergebnis.grund, ok: null };
+
+  if (!ergebnis.neu) {
+    return { error: null, ok: "Dieses Angebot ist bereits angenommen." };
+  }
 
   await admin.from("notification").insert({
     company_id: session.companyId,
     kind: "quote_accepted_portal",
-    title: `Angebot ${quote.number as string} im Portal angenommen`,
-    body: `Angenommen durch ${parsed.data.name}.`,
-    link: `/angebote/${quote.id}`,
+    title: `Angebot ${ergebnis.quoteNumber} im Portal angenommen`,
+    body: `Angenommen durch ${parsed.data.name}. Auftrag ${ergebnis.jobNumber} angelegt.`,
+    link: `/auftraege/${ergebnis.jobId}`,
   });
 
-  revalidatePath(`/portal/${parsed.data.token}`);
+  revalidatePath(`/portal/${parsed.data.token}`, "layout");
   return {
     error: null,
-    ok: `Danke. Die Annahme von ${quote.number as string} ist erfasst.`,
+    ok: `Danke. Die Annahme von ${ergebnis.quoteNumber} ist erfasst — wir melden uns wegen des Termins.`,
   };
 }
 
@@ -161,6 +149,20 @@ export async function createTicketFromPortal(
     .single();
 
   if (error) return { error: `Meldung fehlgeschlagen: ${error.message}`, ok: null };
+
+  /*
+   * Die Meldung ist die erste Nachricht im Verlauf. Ohne sie beginnt der
+   * Thread mit der Antwort des Betriebs, und der Kunde sieht nicht mehr,
+   * was er selbst geschrieben hat.
+   */
+  await admin.from("service_message").insert({
+    company_id: session.companyId,
+    ticket_id: ticket.id,
+    author: "kunde",
+    author_name: session.customerName,
+    body: parsed.data.body,
+    internal: false,
+  });
 
   await admin.from("notification").insert({
     company_id: session.companyId,
@@ -255,4 +257,43 @@ export async function confirmAppointmentFromPortal(
 
   revalidatePath(`/portal/${parsed.data.token}`);
   return { error: null, ok: "Danke, der Termin ist bestätigt." };
+}
+
+const nachfrageSchema = z.object({
+  token: z.string().min(10),
+  ticketId: z.string().uuid(),
+  body: z.string().trim().min(2, "Bitte etwas schreiben."),
+});
+
+/**
+ * Nachfrage des Kunden zu einem bestehenden Anliegen.
+ *
+ * Damit wird aus der Einbahnstrasse ein Gespräch: bisher konnte der Kunde
+ * ein Anliegen melden und danach nichts mehr sagen.
+ */
+export async function nachfrageSenden(
+  _prev: PortalState,
+  formData: FormData,
+): Promise<PortalState> {
+  const parsed = nachfrageSchema.safeParse({
+    token: formData.get("token"),
+    ticketId: formData.get("ticketId"),
+    body: formData.get("body"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+
+  const session = await resolvePortal(parsed.data.token);
+  if (!session) return { error: "Der Zugang ist abgelaufen.", ok: null };
+
+  const ergebnis = await portalTicketAntwort(
+    session,
+    parsed.data.ticketId,
+    parsed.data.body,
+  );
+  if (!ergebnis.ok) return { error: ergebnis.grund ?? "Fehlgeschlagen.", ok: null };
+
+  revalidatePath(`/portal/${parsed.data.token}`, "layout");
+  return { error: null, ok: "Ihre Nachricht ist angekommen." };
 }

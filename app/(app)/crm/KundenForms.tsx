@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 import {
   Absenden,
   AktionsKnopf,
@@ -279,35 +280,28 @@ export function PortalZugang({
         </p>
       )}
 
-      {link ? (
-        <div className="mb-3 rounded-input bg-s-done/10 p-4">
-          <p className="mb-2 text-[12.5px] font-semibold text-s-done">
-            Portallink
-          </p>
-          <input
-            readOnly
-            value={link}
-            aria-label="Portallink"
-            onFocus={(e) => e.currentTarget.select()}
-            className="num w-full rounded-input border border-transparent bg-surface px-[11px] py-[9px] text-[11.5px] outline-0"
-          />
-          <p className="mt-2 text-[11px] text-faint">
-            Verschlüsselt gespeichert, geprüft wird gegen den Hash. Ein Leck
-            der Datenbank allein gibt ihn nicht preis.
-          </p>
-        </div>
-      ) : null}
+      {/*
+        Linkkasten und Erzeugen-Knopf liegen in EINEM form: nur so weiss
+        der Kasten, dass gerade ein neuer Link entsteht, und blendet den
+        alten aus — der ist in dem Moment schon widerrufen, und wer ihn
+        kopiert, schickt dem Kunden einen toten Link.
 
-      <div className="flex flex-wrap gap-2">
-        <form action={formAction}>
-          <input type="hidden" name="customerId" value={customerId} />
-          <Absenden
-            label={bestehend ? "Neuen Link erzeugen" : "Zugang erzeugen"}
-            busy="Wird erzeugt …"
-          />
-        </form>
+        Der Widerrufen-Knopf bringt sein eigenes form mit und steht
+        deshalb daneben, nicht darin: verschachtelte Formulare wirft der
+        Browser weg, und der innere Knopf löst dann den äusseren Vorgang
+        aus — im Klartext: „Widerrufen" hätte einen neuen Link erzeugt.
+      */}
+      <form action={formAction}>
+        <input type="hidden" name="customerId" value={customerId} />
+        <Linkkasten link={link} />
+        <Absenden
+          label={bestehend ? "Neuen Link erzeugen" : "Zugang erzeugen"}
+          busy="Wird erzeugt …"
+        />
+      </form>
 
-        {bestehend ? (
+      {bestehend ? (
+        <div className="mt-2">
           <AktionsKnopf
             aktion={revokePortalAccess}
             label="Widerrufen"
@@ -315,8 +309,8 @@ export function PortalZugang({
             versteckt={{ customerId }}
             bestaetigung="Zugang widerrufen? Der Link öffnet danach nichts mehr."
           />
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {status.error ? (
         <p role="alert" className="mt-3 text-[12.5px] font-medium text-s-crit">
@@ -330,6 +324,42 @@ export function PortalZugang({
           Jahre gültige Zugänge an, die niemand mehr kennt.
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Der Linkkasten. Während ein neuer Link erzeugt wird, verschwindet der
+ * alte: er ist in dem Moment schon widerrufen, und ein kopierter toter
+ * Link fällt erst beim Kunden auf.
+ */
+function Linkkasten({ link }: { link: string | null }) {
+  const { pending } = useFormStatus();
+
+  if (pending) {
+    return (
+      <p className="mb-3 rounded-input bg-panel px-4 py-3 text-[12px] text-muted">
+        Neuer Link wird erzeugt — der alte gilt ab jetzt nicht mehr.
+      </p>
+    );
+  }
+
+  if (!link) return null;
+
+  return (
+    <div className="mb-3 rounded-input bg-s-done/10 p-4">
+      <p className="mb-2 text-[12.5px] font-semibold text-s-done">Portallink</p>
+      <input
+        readOnly
+        value={link}
+        aria-label="Portallink"
+        onFocus={(e) => e.currentTarget.select()}
+        className="num w-full rounded-input border border-transparent bg-surface px-[11px] py-[9px] text-[11.5px] outline-0"
+      />
+      <p className="mt-2 text-[11px] text-faint">
+        Verschlüsselt gespeichert, geprüft wird gegen den Hash. Ein Leck der
+        Datenbank allein gibt ihn nicht preis.
+      </p>
     </div>
   );
 }

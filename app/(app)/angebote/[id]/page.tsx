@@ -35,6 +35,7 @@ export default async function AngebotPage({
     .from("quote")
     .select(
       `id, number, status, net_total, cost_total, margin_pct, valid_until,
+       intro_text, price_display, delivery_net,
        sent_at, opened_at, accepted_at, accepted_name, reminder_enabled, created_at,
        phase:phase_id ( label, system_key ),
        customer:customer_id ( id, name, contact_person, email, phone, zip, city ),
@@ -50,7 +51,7 @@ export default async function AngebotPage({
       supabase
         .from("quote_item")
         .select(
-          "id, pos, text, qty, unit, purchase_price, sale_price, vat_rate, article:article_id ( sku )",
+          "id, pos, text, qty, unit, purchase_price, sale_price, vat_rate, kind, group_key, category, manufacturer, description, article:article_id ( sku )",
         )
         .eq("quote_id", id)
         .order("pos"),
@@ -156,6 +157,13 @@ export default async function AngebotPage({
             purchasePrice: Number(it.purchase_price),
             salePrice: Number(it.sale_price),
             vatRate: Number(it.vat_rate),
+            kind: (it.kind as string) ?? "position",
+            groupKey: (it.group_key as string | null) ?? null,
+            category: (it.category as string | null) ?? null,
+            manufacturer: (it.manufacturer as string | null) ?? null,
+            description: (it.description as string | null) ?? null,
+            sku:
+              ((it.article as unknown as { sku: string } | null)?.sku ?? null),
           }))}
           artikel={(artikel ?? []).map((a) => ({
             wert: a.id as string,
@@ -170,6 +178,9 @@ export default async function AngebotPage({
               nummer={quote.number as string}
               customerId={(customer?.id as string) ?? ""}
               validUntil={(quote.valid_until as string | null) ?? null}
+              introText={(quote.intro_text as string | null) ?? null}
+              priceDisplay={(quote.price_display as string) ?? "positionen"}
+              deliveryNet={Number(quote.delivery_net ?? 0)}
               gesperrt={Boolean(quote.accepted_at)}
               kunden={(kunden ?? []).map((k) => ({
                 wert: k.id as string,

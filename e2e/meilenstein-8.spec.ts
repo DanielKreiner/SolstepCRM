@@ -156,19 +156,34 @@ test("Angebotsannahme hält Name, Zeitpunkt und IP fest", async ({ page }) => {
     .update({ accepted_at: null, accepted_name: null, accepted_ip: null })
     .eq("id", quote!.id);
 
-  await page.goto(`/portal/${token}`);
-
-  const form = page.locator("form", { hasText: "AN-2026-0107 annehmen" });
-  await form.getByRole("textbox").fill("Josef Grubmüller");
-  await form.getByRole("button", { name: /verbindlich annehmen/ }).click();
+  /*
+   * Auch den Auftrag eines früheren Laufs entfernen. Die Annahme prüft
+   * zuerst, ob zum Angebot schon ein Auftrag existiert — bleibt er
+   * stehen, meldet sie beim zweiten Lauf nur "war bereits angenommen"
+   * und erfasst weder Name noch Zeitpunkt.
+   */
+  const { data: alteAuftraege } = await db
+    .from("job")
+    .select("id")
+    .eq("quote_id", quote!.id);
+  for (const j of alteAuftraege ?? []) {
+    await db.from("job_checklist_item").delete().eq("job_id", j.id);
+    await db.from("job").delete().eq("id", j.id);
+  }
 
   /*
-   * Nicht auf die Erfolgsmeldung warten: nach der Annahme rendert die Seite
-   * neu, das Formular verschwindet und die Meldung mit ihm. Geprüft wird die
-   * Wirkung — und die Seite zeigt das Angebot danach als angenommen.
+   * Angenommen wird auf der Angebotsseite, nicht in der Kurzliste der
+   * Übersicht: dort sieht der Kunde Positionen, Technik und optionale
+   * Erweiterungen — die Zusage soll er treffen, wenn er das gelesen hat.
    */
-  await expect(page.getByText("Angenommen am").first()).toBeVisible({
-    timeout: 15_000,
+  await page.goto(`/portal/${token}/angebot/${quote!.id as string}`);
+
+  await page.getByRole("button", { name: "Angebot annehmen" }).click();
+  await page.getByLabel(/Ihr Name/).fill("Josef Grubmüller");
+  await page.getByRole("button", { name: "Verbindlich annehmen" }).click();
+
+  await expect(page.getByText(/Angenommen von Josef Grubmüller/)).toBeVisible({
+    timeout: 20_000,
   });
 
   const { data: nachher } = await db
@@ -196,6 +211,19 @@ test("Angebotsannahme hält Name, Zeitpunkt und IP fest", async ({ page }) => {
       (e) => (e.meta_json as { via?: string }).via === "portal",
     ),
   ).toBe(true);
+
+  /*
+   * Meilenstein 3: die Annahme legt den Auftrag an. Das galt lange nur für
+   * den Weg über das Backoffice — der Portalweg hatte eine eigene, kürzere
+   * Fassung und liess das Angebot ohne Folgearbeit stehen.
+   */
+  const { data: auftrag } = await db
+    .from("job")
+    .select("id, next_step")
+    .eq("quote_id", quote!.id)
+    .maybeSingle();
+  expect(auftrag).not.toBeNull();
+  expect(auftrag!.next_step).toBe("Termin fixieren");
 });
 
 test("Ein fremdes Angebot lässt sich über den eigenen Token nicht annehmen", async ({

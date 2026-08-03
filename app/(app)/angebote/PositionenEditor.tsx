@@ -6,7 +6,9 @@ import {
   Auswahl,
   Eingabe,
   Formular,
+  Textfeld,
 } from "@/components/ui/Formular";
+import { Suchauswahl } from "@/components/ui/Suchauswahl";
 import { eur, num } from "@/lib/format";
 import {
   addQuoteItem,
@@ -27,6 +29,18 @@ export type Position = {
   purchasePrice: number;
   salePrice: number;
   vatRate: number;
+  kind: string;
+  groupKey: string | null;
+  category: string | null;
+  manufacturer: string | null;
+  description: string | null;
+  /*
+   * Artikelnummer der verknüpften Ware. Sie steht bewusst nicht im
+   * Positionstext: der Kunde liest auf der Angebotsseite „Fronius Symo
+   * GEN24" und nicht „WR-FRO-10 · Fronius Symo GEN24". Intern braucht man
+   * sie trotzdem, deshalb steht sie hier neben der Bezeichnung.
+   */
+  sku: string | null;
 };
 
 export type Option = { wert: string; text: string };
@@ -45,6 +59,31 @@ const STEUER = [
   { wert: "10", text: "10 %" },
   { wert: "0", text: "0 %" },
 ];
+
+/* Die fünf Rollen, die eine Position auf der Angebotsseite spielen kann. */
+const ARTEN = [
+  { wert: "position", text: "Normale Position" },
+  { wert: "paket", text: "Komplettpaket (mit Paketpreis)" },
+  { wert: "paket_inhalt", text: "Im Paket enthalten (ohne Preis)" },
+  { wert: "option", text: "Optional — Kunde kann ankreuzen" },
+  { wert: "leistung", text: "Inklusive, kostenlos" },
+];
+
+const ART_LABEL: Record<string, string> = {
+  position: "Position",
+  paket: "Paket",
+  paket_inhalt: "im Paket",
+  option: "optional",
+  leistung: "inklusive",
+};
+
+const ART_TON: Record<string, string> = {
+  position: "bg-sunk text-muted",
+  paket: "bg-accent/14 text-accent-ink",
+  paket_inhalt: "bg-panel text-faint",
+  option: "bg-s-doing/12 text-s-doing",
+  leistung: "bg-s-done/12 text-s-done",
+};
 
 /** Neues Angebot. Nur Kunde und Gültigkeit — Positionen kommen danach. */
 export function AngebotAnlegen({ kunden }: { kunden: Option[] }) {
@@ -176,8 +215,20 @@ export function PositionenEditor({
                       {(i + 1) * 10}
                     </span>
                     <span className="min-w-0 px-2 py-3">
-                      <span className="block truncate text-[13.5px] font-medium">
-                        {p.text}
+                      <span className="flex items-center gap-2">
+                        <span className="min-w-0 truncate text-[13.5px] font-medium">
+                          {p.text}
+                        </span>
+                        {p.sku ? (
+                          <span className="num shrink-0 rounded-pill bg-sunk px-[7px] py-[2px] text-[10px] text-muted">
+                            {p.sku}
+                          </span>
+                        ) : null}
+                        <span
+                          className={`shrink-0 rounded-pill px-[7px] py-[2px] text-[10px] font-medium ${ART_TON[p.kind] ?? "bg-sunk text-muted"}`}
+                        >
+                          {ART_LABEL[p.kind] ?? p.kind}
+                        </span>
                       </span>
                       <span
                         className={`num block text-[11px] ${zeilenMarge < 10 ? "text-s-crit" : "text-faint"}`}
@@ -256,6 +307,40 @@ export function PositionenEditor({
                           wert={String(p.vatRate)}
                           optionen={STEUER}
                         />
+                        <Auswahl
+                          id={`p-${p.id}-art`}
+                          name="kind"
+                          label="Art auf der Angebotsseite"
+                          wert={p.kind}
+                          optionen={ARTEN}
+                        />
+                        <Eingabe
+                          id={`p-${p.id}-gruppe`}
+                          name="groupKey"
+                          label="Paketschlüssel"
+                          hinweis="verbindet Inhalt mit seinem Paket"
+                          wert={p.groupKey ?? ""}
+                        />
+                        <Eingabe
+                          id={`p-${p.id}-kategorie`}
+                          name="category"
+                          label="Kategorie"
+                          hinweis="Beschriftung über dem Namen"
+                          wert={p.category ?? ""}
+                        />
+                        <Eingabe
+                          id={`p-${p.id}-hersteller`}
+                          name="manufacturer"
+                          label="Hersteller"
+                          wert={p.manufacturer ?? ""}
+                        />
+                        <Textfeld
+                          id={`p-${p.id}-beschreibung`}
+                          name="description"
+                          label="Beschreibung für den Kunden"
+                          zeilen={3}
+                          wert={p.description ?? ""}
+                        />
                       </Formular>
 
                       <div className="mt-2">
@@ -311,13 +396,12 @@ export function PositionenEditor({
             knopf="Übernehmen"
             versteckt={{ quoteId }}
           >
-            <Auswahl
-              id="pa-artikel"
+            <Suchauswahl
               name="articleId"
               label="Artikel"
               pflicht
               breit
-              leerText="— wählen —"
+              platzhalter="Artikel suchen — Bezeichnung oder Nummer"
               optionen={artikel}
             />
             <Eingabe
@@ -386,6 +470,25 @@ export function PositionenEditor({
               wert="20"
               optionen={STEUER}
             />
+            <Auswahl
+              id="pf-art"
+              name="kind"
+              label="Art auf der Angebotsseite"
+              wert="position"
+              optionen={ARTEN}
+            />
+            <Eingabe
+              id="pf-gruppe"
+              name="groupKey"
+              label="Paketschlüssel"
+              hinweis="nur bei Paketen und deren Inhalt"
+            />
+            <Textfeld
+              id="pf-beschreibung"
+              name="description"
+              label="Beschreibung für den Kunden"
+              zeilen={2}
+            />
           </Formular>
         </div>
       )}
@@ -399,6 +502,9 @@ export function AngebotKopf({
   nummer,
   customerId,
   validUntil,
+  introText,
+  priceDisplay,
+  deliveryNet,
   kunden,
   gesperrt,
 }: {
@@ -406,6 +512,9 @@ export function AngebotKopf({
   nummer: string;
   customerId: string;
   validUntil: string | null;
+  introText: string | null;
+  priceDisplay: string;
+  deliveryNet: number;
   kunden: Option[];
   gesperrt: boolean;
 }) {
@@ -419,11 +528,11 @@ export function AngebotKopf({
         knopf="Speichern"
         versteckt={{ quoteId }}
       >
-        <Auswahl
-          id="qk-kunde"
+        <Suchauswahl
           name="customerId"
           label="Kunde"
           pflicht
+          platzhalter="Kunde suchen — Name oder Ort"
           wert={customerId}
           optionen={kunden}
         />
@@ -433,6 +542,33 @@ export function AngebotKopf({
           label="Gültig bis"
           typ="date"
           wert={validUntil ?? ""}
+        />
+        <Auswahl
+          id="qk-darstellung"
+          name="priceDisplay"
+          label="Preise im Kundenportal"
+          hinweis="Einzelpreise je Position oder nur die Gesamtsumme"
+          wert={priceDisplay}
+          optionen={[
+            { wert: "positionen", text: "Einzelpreise zeigen" },
+            { wert: "gesamt", text: "Nur Gesamtpreis zeigen" },
+          ]}
+        />
+        <Eingabe
+          id="qk-lieferung"
+          name="deliveryNet"
+          label="Lieferung netto"
+          typ="number"
+          schritt="0.01"
+          wert={deliveryNet}
+        />
+        <Textfeld
+          id="qk-intro"
+          name="introText"
+          label="Einleitung für den Kunden"
+          hinweis="steht oben auf der Angebotsseite"
+          zeilen={3}
+          wert={introText ?? ""}
         />
       </Formular>
 

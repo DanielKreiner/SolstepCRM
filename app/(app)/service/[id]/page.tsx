@@ -6,8 +6,10 @@ import { PhasePill } from "@/components/ui/PhasePill";
 import { Pill } from "@/components/ui/Pill";
 import { Stat } from "@/components/ui/Stat";
 import { dateTime } from "@/lib/format";
+import { ROLE_LABEL } from "@/lib/nav";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { AntwortFeld, TicketBearbeiten } from "../ServiceForms";
 
 export const metadata: Metadata = { title: "Serviceticket" };
 
@@ -29,14 +31,14 @@ export default async function TicketPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireMe();
+  const me = await requireMe();
   const { id } = await params;
   const supabase = await createClient();
 
   const { data: ticket } = await supabase
     .from("service_ticket")
     .select(
-      `id, number, source, category, severity, status, body, response, responded_at, created_at,
+      `id, number, source, category, severity, status, body, created_at, assignee_id,
        phase:phase_id ( label, system_key ),
        customer:customer_id ( id, name, contact_person, email, phone, zip, city ),
        assignee:assignee_id ( name ),
@@ -46,6 +48,36 @@ export default async function TicketPage({
     .maybeSingle();
 
   if (!ticket) notFound();
+
+  const darfSchreiben = me.perms.pipelines === "write";
+
+  const [{ data: verlauf }, { data: team }, { data: auftraege }] =
+    await Promise.all([
+      supabase
+        .from("service_message")
+        .select("id, author, author_name, body, internal, created_at")
+        .eq("ticket_id", id)
+        .order("created_at"),
+      supabase
+        .from("app_user")
+        .select("id, name, role")
+        .eq("active", true)
+        .order("name"),
+      supabase
+        .from("job")
+        .select("id, number, city")
+        .order("created_at", { ascending: false })
+        .limit(200),
+    ]);
+
+  const nachrichten = (verlauf ?? []) as unknown as {
+    id: string;
+    author: string;
+    author_name: string | null;
+    body: string;
+    internal: boolean;
+    created_at: string;
+  }[];
 
   const phase = ticket.phase as unknown as {
     label: string;
@@ -104,26 +136,54 @@ export default async function TicketPage({
 
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr] xl:items-start">
         <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-          <h2 className="mb-3 text-[15px] font-semibold">Meldung</h2>
-          <p className="text-[13.5px] leading-[1.55] whitespace-pre-line">
-            {ticket.body as string}
-          </p>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-[15px] font-semibold">Verlauf</h2>
+            <span className="text-[11.5px] text-faint">
+              {nachrichten.length}{" "}
+              {nachrichten.length === 1 ? "Eintrag" : "Einträge"}
+            </span>
+          </div>
 
-          {ticket.response ? (
-            <>
-              <h3 className="mt-5 mb-2 text-[13px] font-semibold">Antwort</h3>
-              <p className="rounded-input bg-panel px-4 py-3 text-[13px] leading-[1.55] whitespace-pre-line">
-                {ticket.response as string}
-              </p>
-              <p className="mt-2 text-[11.5px] text-faint">
-                {dateTime(ticket.responded_at as string)}
-              </p>
-            </>
-          ) : (
-            <p className="mt-5 text-[13px] text-muted">
-              Noch keine Antwort erfasst.
+          {nachrichten.length === 0 ? (
+            <p className="text-[13.5px] leading-[1.55] whitespace-pre-line">
+              {ticket.body as string}
             </p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {nachrichten.map((m) => (
+                <li
+                  key={m.id}
+                  className={[
+                    "rounded-card px-4 py-3",
+                    m.internal
+                      ? "border border-s-warn/30 bg-s-warn/8"
+                      : m.author === "kunde"
+                        ? "bg-panel"
+                        : "bg-accent-sunk",
+                  ].join(" ")}
+                >
+                  <div className="mb-1 flex flex-wrap items-baseline gap-2">
+                    <span className="text-[12px] font-semibold">
+                      {m.author === "kunde"
+                        ? (customer?.contact_person ?? customer?.name ?? "Kunde")
+                        : (m.author_name ?? "Betrieb")}
+                    </span>
+                    {m.internal ? (
+                      <Pill tone="warn">intern</Pill>
+                    ) : null}
+                    <span className="num ml-auto text-[11px] text-faint">
+                      {dateTime(m.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-[13.5px] leading-[1.55] whitespace-pre-line">
+                    {m.body}
+                  </p>
+                </li>
+              ))}
+            </ul>
           )}
+
+          {darfSchreiben ? <AntwortFeld ticketId={ticket.id as string} /> : null}
         </section>
 
         <section className="rounded-[20px] bg-surface p-5 shadow-soft">
@@ -163,6 +223,36 @@ export default async function TicketPage({
           </dl>
         </section>
       </div>
+
+      {darfSchreiben ? (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr] xl:items-start">
+          <TicketBearbeiten
+            ticketId={ticket.id as string}
+            status={ticket.status as string}
+            severity={severity}
+            assigneeId={(ticket.assignee_id as string | null) ?? ""}
+            jobId={job?.id ?? ""}
+            mitarbeiter={((team ?? []) as unknown as {
+              id: string;
+              name: string;
+              role: string;
+            }[]).map((u) => ({
+              wert: u.id,
+              text: u.name,
+              zusatz: ROLE_LABEL[u.role] ?? u.role,
+            }))}
+            auftraege={((auftraege ?? []) as unknown as {
+              id: string;
+              number: string;
+              city: string | null;
+            }[]).map((j) => ({
+              wert: j.id,
+              text: j.number,
+              ...(j.city ? { zusatz: j.city } : {}),
+            }))}
+          />
+        </div>
+      ) : null}
     </>
   );
 }

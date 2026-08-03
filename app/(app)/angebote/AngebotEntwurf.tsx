@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
+import { Suchauswahl } from "@/components/ui/Suchauswahl";
 import { eur } from "@/lib/format";
 import { angebotAusEntwurf } from "./positionen-actions";
 
@@ -370,24 +371,23 @@ export function AngebotEntwurf({
       {/* ---------- Kunde und Aktionen ---------- */}
       <div className="flex flex-col gap-4">
         <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-          <h2 className="mb-3 text-[15px] font-semibold">Kunde</h2>
-
-          <label htmlFor="entwurf-kunde" className="sr-only">
-            Kunde
-          </label>
-          <select
-            id="entwurf-kunde"
-            value={kundeId}
-            onChange={(e) => setKundeId(e.target.value)}
-            className="w-full cursor-pointer rounded-input border border-transparent bg-sunk px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent focus:bg-surface"
-          >
-            <option value="">— Kunde wählen —</option>
-            {kunden.map((k) => (
-              <option key={k.id} value={k.id}>
-                {[k.name, k.ort].filter(Boolean).join(" · ")}
-              </option>
-            ))}
-          </select>
+                    {/*
+            Suche statt Klappliste: ein Betrieb mit 400 Kunden scrollt
+            sonst, statt zu tippen.
+          */}
+          <Suchauswahl
+            name="kundeId"
+            label="Kunde"
+            pflicht
+            platzhalter="Kunde suchen — Name oder Ort"
+            wert={kundeId}
+            onAuswahl={setKundeId}
+            optionen={kunden.map((k) => ({
+              wert: k.id,
+              text: k.name,
+              ...(k.ort ? { zusatz: k.ort } : {}),
+            }))}
+          />
 
           {kunde ? (
             <p className="num mt-2 text-[11.5px] text-faint">

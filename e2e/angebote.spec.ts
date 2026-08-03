@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, login } from "./helpers";
+import { COMPANY_A, DEMO, admin, login, suchwahl } from "./helpers";
 
 /*
  * Angebote von Hand erstellen.
@@ -61,7 +61,7 @@ test("Angebot anlegen, Positionen erfassen, Summe stimmt", async ({ page }) => {
   await page.getByRole("link", { name: "Angebot erstellen" }).click();
   await page.waitForURL("**/angebote/neu");
 
-  await page.getByLabel("Kunde", { exact: true }).selectOption(kunde!.id as string);
+  await suchwahl(page, "Kunde", kunde!.name as string);
 
   await page.getByRole("button", { name: "Freie Position" }).click();
   await page.getByLabel("Bezeichnung Position 1").fill(`${MARKE} Montage`);
@@ -138,7 +138,7 @@ test("Artikel übernehmen kopiert Preise, statt sie zu verknüpfen", async ({
   await login(page, DEMO.gf);
   await page.goto(`/angebote/${angebot!.id}`);
 
-  await page.getByLabel("Artikel").selectOption(artikel!.id as string);
+  await suchwahl(page, "Artikel", artikel!.name as string);
   await page.getByLabel("Menge").first().fill("4");
   await page.getByRole("button", { name: "Übernehmen" }).click();
 
@@ -154,7 +154,15 @@ test("Artikel übernehmen kopiert Preise, statt sie zu verknüpfen", async ({
   expect(Number(position!.qty)).toBe(4);
   expect(Number(position!.sale_price)).toBe(Number(artikel!.sale_price));
   expect(Number(position!.purchase_price)).toBe(Number(artikel!.purchase_price));
-  expect(String(position!.text)).toContain(artikel!.sku as string);
+  /*
+   * Der Positionstext trägt den reinen Artikelnamen. Die Artikelnummer
+   * steht daneben in der Zeile, aber nicht im Text — der Kunde liest auf
+   * der Angebotsseite "Fronius Symo GEN24" und nicht "WR-FRO-10 · Fronius
+   * Symo GEN24". Verknüpft ist die Position über article_id.
+   */
+  expect(String(position!.text)).toBe(artikel!.name as string);
+  expect(position!.article_id).toBe(artikel!.id);
+  await expect(page.getByText(artikel!.sku as string).first()).toBeVisible();
 
   /*
    * Der spätere Artikelpreis darf das Angebot nicht rückwirkend ändern.

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/Button";
+import { Suchauswahl } from "@/components/ui/Suchauswahl";
 import { createTimeEntry, type ActionState } from "./actions";
 
 const INITIAL: ActionState = { error: null, ok: null };
@@ -112,25 +113,20 @@ export function BookingForm({
           />
         </FieldWrap>
 
-        <FieldWrap
+        {/*
+          Suche statt Klappliste: wer eine Woche nachträgt, sucht den
+          Auftrag nach Nummer oder Kundenname und scrollt nicht durch
+          zweihundert Zeilen.
+        */}
+        <Suchauswahl
+          name="jobId"
           label="Auftrag"
-          htmlFor="te-job"
-          hint={kind === "work" ? "Pflicht bei Arbeit" : "optional"}
-        >
-          <select
-            id="te-job"
-            name="jobId"
-            className={selectClass}
-            required={kind === "work"}
-          >
-            <option value="">— ohne Auftrag —</option>
-            {jobs.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.label}
-              </option>
-            ))}
-          </select>
-        </FieldWrap>
+          pflicht={kind === "work"}
+          platzhalter="Auftrag suchen — Nummer oder Kunde"
+          leerLabel="— ohne Auftrag —"
+          hinweis={kind === "work" ? "Pflicht bei Arbeit" : "optional"}
+          optionen={jobs.map((j) => ({ wert: j.id, text: j.label }))}
+        />
 
         <FieldWrap label="Notiz" htmlFor="te-note">
           <input

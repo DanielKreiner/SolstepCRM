@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { Suchauswahl } from "@/components/ui/Suchauswahl";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { bookStockMove, type StockState } from "./actions";
@@ -54,21 +55,18 @@ export function StockMoveForm({
         {fixedArticleId ? (
           <input type="hidden" name="articleId" value={fixedArticleId} />
         ) : (
-          <Wrap label="Artikel" htmlFor="sm-article">
-            <select
-              id="sm-article"
-              name="articleId"
-              required
-              className={selectClass}
-            >
-              <option value="">— wählen —</option>
-              {articles.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </Wrap>
+          /*
+            Suche statt Klappliste. Ein Lager mit 3000 Artikeln ist in
+            einem <select> nicht bedienbar — schon gar nicht am Telefon
+            oder mit dem Handschuh am Tablet.
+          */
+          <Suchauswahl
+            name="articleId"
+            label="Artikel"
+            pflicht
+            platzhalter="Artikel suchen — Bezeichnung oder Nummer"
+            optionen={articles.map((a) => ({ wert: a.id, text: a.label }))}
+          />
         )}
 
         <Wrap label="Art" htmlFor="sm-kind">
@@ -102,16 +100,13 @@ export function StockMoveForm({
         {fixedJobId ? (
           <input type="hidden" name="jobId" value={fixedJobId} />
         ) : (
-          <Wrap label="Auftrag" htmlFor="sm-job">
-            <select id="sm-job" name="jobId" className={selectClass}>
-              <option value="">— ohne Auftrag —</option>
-              {jobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.label}
-                </option>
-              ))}
-            </select>
-          </Wrap>
+          <Suchauswahl
+            name="jobId"
+            label="Auftrag"
+            platzhalter="Auftrag suchen — Nummer oder Kunde"
+            leerLabel="— ohne Auftrag —"
+            optionen={jobs.map((j) => ({ wert: j.id, text: j.label }))}
+          />
         )}
 
         <Wrap label="Notiz" htmlFor="sm-note">

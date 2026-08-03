@@ -24,6 +24,12 @@ export const NAV: NavGroup[] = [
       { label: "Pipelines", href: "/pipelines/projekte", icon: "pipelines", area: "pipelines" },
       { label: "Angebote", href: "/angebote", icon: "angebote", area: "angebote" },
       { label: "CRM", href: "/crm", icon: "crm", area: "crm" },
+      /*
+       * Service steht in der Navigation, obwohl es die dritte Pipeline ist.
+       * Anliegen aus dem Kundenportal landeten sonst in einer Ansicht, die
+       * niemand aufruft — der Kunde schreibt und hört nie etwas.
+       */
+      { label: "Service", href: "/service", icon: "chat", area: "pipelines" },
       { label: "Einsatzplanung", href: "/dispo", icon: "dispo", area: "pipelines" },
       { label: "Lager", href: "/lager", icon: "lager", area: "lager" },
       { label: "Rechnungen", href: "/rechnungen", icon: "rechnungen", area: "rechnungen" },
