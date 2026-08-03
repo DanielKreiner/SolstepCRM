@@ -6,6 +6,9 @@ import { resolvePortal } from "@/lib/portal/data";
 import { portalVorgangDetail } from "@/lib/portal/vorgang";
 import { PHASEN, phaseIndex, summen } from "@/lib/vorgang/modell";
 import { AngebotAktionen, PositionListe } from "./VorgangClient";
+import { OffeneAnfragen, PortalChat } from "./PortalChat";
+import { chatLesen } from "@/lib/vorgang/chat";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = { title: "Ihr Projekt" };
 
@@ -46,6 +49,13 @@ export default async function PortalVorgangPage({
     })),
   );
 
+  /*
+   * Gespräch und Rückfragen, nur die Kundensicht — interne Notizen
+   * bleiben im Betrieb. Gefiltert wird in der Abfrage, nicht in der
+   * Anzeige: was nicht geladen wird, kann auch nicht durchrutschen.
+   */
+  const chat = await chatLesen(createAdminClient(), id, { nurKundensicht: true });
+
   const jetzt = new Date();
   const naechster = termine.find((t) => new Date(t.bis) >= jetzt);
   const aktuell = phaseIndex(v.phase);
@@ -83,6 +93,12 @@ export default async function PortalVorgangPage({
               : ""}
           </p>
         </header>
+
+        <OffeneAnfragen
+          token={token}
+          vorgangId={v.id}
+          anfragen={chat.anfragen}
+        />
 
         {/* -------------------------------------------------- ANLAGE */}
         {v.kwp ? (
@@ -312,6 +328,13 @@ export default async function PortalVorgangPage({
             </ul>
           </section>
         ) : null}
+
+        <PortalChat
+          token={token}
+          vorgangId={v.id}
+          firmaName={firma?.name ?? "Ihr Betrieb"}
+          nachrichten={chat.nachrichten}
+        />
 
         {/* ----------------------------------------------------- VERLAUF */}
         <section className="mb-4 rounded-panel bg-surface p-6 shadow-soft sm:p-8">

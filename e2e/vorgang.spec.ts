@@ -857,3 +857,174 @@ test("16 — Ein fremder Token öffnet den Vorgang nicht", async ({ page }) => {
 
   await db.from("portal_access").delete().eq("customer_id", fremd!.id);
 });
+
+test("17 — Rückfrage mit Foto: der Techniker fragt, der Kunde antwortet", async ({
+  page,
+}) => {
+  const db = admin();
+
+  await login(page, DEMO.gf);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+
+  /* ---- Der Betrieb stellt die Rückfrage ---- */
+  await page.getByRole("button", { name: "Rückfrage an den Kunden stellen" }).click();
+  await page.getByLabel("Worum geht es?").fill("Foto vom Zählerkasten");
+  await page
+    .getByLabel("Erklärung")
+    .fill("Bitte mit geöffneter Tür, damit wir den Platz sehen.");
+  await page.getByLabel(/Foto ist Pflicht/).check();
+  await page.getByRole("button", { name: "Rückfrage stellen" }).click();
+
+  await expect(page.getByText(/Rückfrage gestellt/)).toBeVisible({
+    timeout: 20_000,
+  });
+
+  const { data: anfrage } = await db
+    .from("vorgang_anfrage")
+    .select("id, foto_noetig, status")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .single();
+  expect(anfrage!.foto_noetig).toBe(true);
+  expect(anfrage!.status).toBe("offen");
+
+  /* ---- Der Kunde sieht sie im Portal ---- */
+  const token = await portalToken(page, zustand.kundeId!);
+  await page.context().clearCookies();
+  await page.goto(`/portal/${token}/vorgang/${zustand.vorgangId}`);
+
+  await expect(page.getByText("Wir brauchen etwas von Ihnen")).toBeVisible({
+    timeout: 15_000,
+  });
+  /* Die Frage steht als Karte oben und zusätzlich im Verlauf. */
+  await expect(
+    page.getByRole("heading", { name: "Foto vom Zählerkasten" }),
+  ).toBeVisible();
+
+  /* ---- Ohne Foto geht es nicht ---- */
+  await page.getByLabel("Ihre Antwort").fill("Passt schon.");
+  await page.getByRole("button", { name: "Antwort senden" }).click();
+
+  /*
+   * Der Browser hält das Formular selbst an, weil das Feld required ist.
+   * Die Serveraktion prüft es zusätzlich — ein required-Attribut ist eine
+   * Bequemlichkeit, keine Absicherung.
+   */
+  const { data: nochOffen } = await db
+    .from("vorgang_anfrage")
+    .select("status")
+    .eq("id", anfrage!.id)
+    .single();
+  expect(nochOffen!.status).toBe("offen");
+
+  /* ---- Mit Foto schon ---- */
+  await page.getByLabel(/Foto \(nötig\)/).setInputFiles({
+    name: "zaehlerkasten.jpg",
+    mimeType: "image/jpeg",
+    /* Ein winziges, gültiges JPEG mit EXIF-Segment. */
+    buffer: Buffer.from([
+      0xff, 0xd8, 0xff, 0xe1, 0x00, 0x10, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
+      0x49, 0x49, 0x2a, 0x00, 0x88, 0x25, 0x00, 0x00, 0xff, 0xda, 0x00, 0x03,
+      0x01, 0x22, 0x33,
+    ]),
+  });
+  await page.getByRole("button", { name: "Antwort senden" }).click();
+
+  /*
+   * Nicht auf die Dankesmeldung warten: mit der Antwort fällt die Frage
+   * aus der Liste der offenen, das Formular wird nicht mehr gerendert und
+   * die Meldung verschwindet mit ihm. Geprüft wird die Wirkung.
+   */
+  await expect
+    .poll(async () => {
+      const { data } = await db
+        .from("vorgang_anfrage")
+        .select("status")
+        .eq("id", anfrage!.id)
+        .single();
+      return data?.status;
+    }, { timeout: 25_000 })
+    .toBe("beantwortet");
+
+  const { data: beantwortet } = await db
+    .from("vorgang_anfrage")
+    .select("status, antwort_text, beantwortet_am")
+    .eq("id", anfrage!.id)
+    .single();
+  expect(beantwortet!.status).toBe("beantwortet");
+  expect(beantwortet!.beantwortet_am).not.toBeNull();
+
+  const { data: anhang } = await db
+    .from("vorgang_anhang")
+    .select("id, dateiname, mime, groesse_bytes, storage_path, hochgeladen_von")
+    .eq("anfrage_id", anfrage!.id)
+    .single();
+
+  expect(anhang!.hochgeladen_von).toBe("kunde");
+  expect(anhang!.mime).toBe("image/jpeg");
+  expect(String(anhang!.storage_path)).toContain(`/vorgang/${zustand.vorgangId}/`);
+
+  /*
+   * Das EXIF-Segment ist raus — ein Handyfoto vom Zählerkasten trägt die
+   * Koordinaten des Wohnhauses (CLAUDE.md 11).
+   */
+  const { data: datei } = await db.storage
+    .from("job-photos")
+    .download(anhang!.storage_path as string);
+  const bytes = new Uint8Array(await datei!.arrayBuffer());
+  const text = Buffer.from(bytes).toString("latin1");
+  expect(text).not.toContain("Exif");
+  expect(bytes.length).toBeLessThan(27);
+
+  /* ---- Der Betrieb sieht die Antwort samt Bild ---- */
+  await page.context().clearCookies();
+  await login(page, DEMO.gf);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+  await expect(page.getByText("beantwortet").first()).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.locator('img[alt="zaehlerkasten.jpg"]')).toBeVisible();
+});
+
+test("18 — Der Kunde schreibt, interne Notizen bleiben im Betrieb", async ({
+  page,
+}) => {
+  const db = admin();
+
+  await login(page, DEMO.gf);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+
+  /* Interne Notiz im Chat. */
+  await page.getByRole("switch", { name: "Interne Notiz" }).click();
+  await page
+    .getByLabel(/Interne Notiz/)
+    .fill("GEHEIM-CHAT Nachbar meldet sich ständig.");
+  await page.getByRole("button", { name: "Notiz speichern" }).click();
+  await expect(page.getByText(/Interne Notiz gespeichert/)).toBeVisible({
+    timeout: 20_000,
+  });
+
+  const token = await portalToken(page, zustand.kundeId!);
+  await page.context().clearCookies();
+  await page.goto(`/portal/${token}/vorgang/${zustand.vorgangId}`);
+
+  /* Die interne Notiz kommt gar nicht erst an — gefiltert in der Abfrage. */
+  await expect(page.locator("body")).not.toContainText("GEHEIM-CHAT");
+
+  /* Der Kunde schreibt zurück. */
+  await page.getByRole("button", { name: "Nachricht schreiben" }).click();
+  await page.getByLabel("Ihre Nachricht").fill("Wann kommen Sie ungefähr?");
+  await page.getByRole("button", { name: "Senden" }).click();
+
+  await expect(page.getByText("Ihre Nachricht ist angekommen.")).toBeVisible({
+    timeout: 20_000,
+  });
+
+  const { data: n } = await db
+    .from("vorgang_nachricht")
+    .select("autor, body, intern")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .eq("autor", "kunde")
+    .single();
+  expect(n!.body).toBe("Wann kommen Sie ungefähr?");
+  expect(n!.intern).toBe(false);
+});

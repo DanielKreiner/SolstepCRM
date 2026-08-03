@@ -6,12 +6,14 @@ import { GateAmpel } from "@/components/vorgang/GateAmpel";
 import { Stepper } from "@/components/vorgang/Stepper";
 import { Positionen } from "@/components/vorgang/Positionen";
 import { Rechnungen } from "@/components/vorgang/Rechnungen";
+import { Chat } from "@/components/vorgang/Chat";
 import { Strom } from "@/components/vorgang/Strom";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import { date, eur, num } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { chatLesen } from "@/lib/vorgang/chat";
 import { vorgangDetail } from "@/lib/vorgang/daten";
 import {
   PHASE_LABEL,
@@ -80,6 +82,9 @@ export default async function VorgangPage({
   const editorGesperrt = ["beauftragt", "montage", "abschluss", "verloren"].includes(
     kopf.phase,
   );
+
+  /* Gespräch und Rückfragen — im Betrieb inklusive der internen Notizen. */
+  const chat = await chatLesen(supabase, id, { nurKundensicht: false });
 
   const naechsterTermin = termine.find((t) => new Date(t.bis) >= new Date());
 
@@ -215,6 +220,21 @@ export default async function VorgangPage({
               }))}
             />
           ) : null}
+
+          <Chat
+            vorgangId={kopf.id}
+            nachrichten={chat.nachrichten.map((n) => ({
+              id: n.id,
+              autor: n.autor,
+              autorName: n.autorName,
+              body: n.body,
+              intern: n.intern,
+              createdAt: n.createdAt,
+              anhaenge: n.anhaenge,
+            }))}
+            anfragen={chat.anfragen}
+            darfSchreiben={darfSchreiben}
+          />
 
           <Strom
           vorgangId={kopf.id}
