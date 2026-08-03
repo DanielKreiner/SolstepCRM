@@ -53,14 +53,27 @@ test("Angebot anlegen, Positionen erfassen, Summe stimmt", async ({ page }) => {
     .limit(1)
     .single();
 
-  // --- Anlegen ---
-  await page.getByRole("button", { name: "Angebot erstellen" }).click();
-  await page.getByLabel("Kunde").selectOption(kunde!.id as string);
-  await page.getByRole("button", { name: "Angebot anlegen" }).last().click();
+  /*
+   * Der Entwurf entsteht auf einer eigenen Seite und liegt bis zum
+   * Abschicken nur im Browser. Erst "Angebot anlegen" erzeugt den
+   * Datensatz — deshalb wird hier zuerst zusammengestellt.
+   */
+  await page.getByRole("link", { name: "Angebot erstellen" }).click();
+  await page.waitForURL("**/angebote/neu");
 
-  await expect(page.getByText(/Angebot AN-\d{4}-\d{4} angelegt/)).toBeVisible({
-    timeout: 15_000,
-  });
+  await page.getByLabel("Kunde", { exact: true }).selectOption(kunde!.id as string);
+
+  await page.getByRole("button", { name: "Freie Position" }).click();
+  await page.getByLabel("Bezeichnung Position 1").fill(`${MARKE} Montage`);
+  await page.getByLabel("Menge Position 1").fill("16");
+  await page.getByLabel("Einkauf Position 1").fill("38");
+  await page.getByLabel("Verkauf Position 1").fill("72.50");
+
+  // Die Summe läuft live mit, bevor irgendetwas gespeichert ist.
+  await expect(page.getByText("€ 1.160,00").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Angebot anlegen" }).click();
+  await page.waitForURL(/\/angebote\/[0-9a-f-]{36}$/, { timeout: 20_000 });
 
   const { data: angebot } = await db
     .from("quote")
@@ -73,17 +86,6 @@ test("Angebot anlegen, Positionen erfassen, Summe stimmt", async ({ page }) => {
 
   expect(angebot!.number).toMatch(/^AN-\d{4}-\d{4}$/);
   expect(angebot!.status).toBe("draft");
-  expect(Number(angebot!.net_total)).toBe(0);
-
-  // --- Freie Position ---
-  await page.goto(`/angebote/${angebot!.id}`);
-  await page.getByLabel("Bezeichnung").fill(`${MARKE} Montage`);
-  await page.getByLabel("Menge").last().fill("16");
-  await page.getByLabel("Einkauf netto").last().fill("38");
-  await page.getByLabel("Verkauf netto").last().fill("72.50");
-  await page.getByRole("button", { name: "Hinzufügen" }).click();
-
-  await expect(page.getByText(/hinzugefügt/)).toBeVisible({ timeout: 15_000 });
 
   /*
    * 16 × 72,50 = 1160,00 netto; Kosten 16 × 38 = 608,00.

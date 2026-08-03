@@ -262,7 +262,12 @@ test("Portalzugang erzeugen, benutzen und widerrufen", async ({ page }) => {
 
   await page.getByRole("button", { name: "Zugang erzeugen" }).click();
 
-  const linkFeld = page.getByLabel("Portallink");
+  /*
+   * Der Link steht an zwei Stellen: im Portal-Panel und in der
+   * Kundenübersicht. Das ist gewollt — man soll ihn sehen, ohne den Reiter
+   * zu wechseln. Der Test nimmt den ersten.
+   */
+  const linkFeld = page.getByLabel("Portallink").first();
   await expect(linkFeld).toBeVisible({ timeout: 15_000 });
 
   const link = await linkFeld.inputValue();

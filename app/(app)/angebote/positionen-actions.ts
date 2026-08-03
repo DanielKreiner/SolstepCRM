@@ -443,3 +443,127 @@ export async function addQuoteItemFromArticle(
   revalidatePath("/angebote");
   return { error: null, ok: `${artikel.name as string} übernommen.` };
 }
+
+/**
+ * Angebot samt Positionen in einem Zug anlegen.
+ *
+ * Der Entwurf entsteht im Browser; hier landet er als Ganzes. Das ist der
+ * Unterschied zum zeilenweisen Anlegen: wer ein Angebot zusammenstellt und
+ * es sich anders überlegt, hinterlässt keine halbe Leiche in der Datenbank.
+ *
+ * Keine Server Action mit FormData, sondern ein normaler Aufruf mit einem
+ * Objekt — die Positionsliste ist verschachtelt, und sie durch FormData zu
+ * fädeln wäre nur Verpackung.
+ */
+export async function angebotAusEntwurf(entwurf: {
+  customerId: string;
+  validUntil: string | null;
+  positionen: {
+    articleId: string | null;
+    text: string;
+    qty: number;
+    unit: string;
+    purchasePrice: number;
+    salePrice: number;
+    vatRate: number;
+  }[];
+}): Promise<{ error: string | null; quoteId: string | null }> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return { error: zugang.status.error, quoteId: null };
+
+  const schema = z.object({
+    customerId: z.string().uuid("Kunde fehlt."),
+    validUntil: z.string().nullable(),
+    positionen: z
+      .array(
+        z.object({
+          articleId: z.string().uuid().nullable(),
+          text: z.string().trim().min(2, "Jede Position braucht eine Bezeichnung."),
+          qty: z.number().gt(0, "Menge muss größer als null sein."),
+          unit: z.string().trim().min(1).max(12),
+          purchasePrice: z.number().min(0),
+          salePrice: z.number().min(0),
+          vatRate: z.number().min(0).max(30),
+        }),
+      )
+      .min(1, "Ein Angebot ohne Positionen ist keins."),
+  });
+
+  const parsed = schema.safeParse(entwurf);
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.",
+      quoteId: null,
+    };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+
+  const { data: nummer, error: nummerFehler } = await supabase.rpc("next_number", {
+    p_company: zugang.me.companyId,
+    p_kind: "quote",
+  });
+  if (nummerFehler || !nummer) {
+    return {
+      error: `Nummernvergabe fehlgeschlagen: ${nummerFehler?.message ?? "keine Nummer"}`,
+      quoteId: null,
+    };
+  }
+
+  const standard = new Date();
+  standard.setDate(standard.getDate() + 30);
+
+  const { data: angebot, error } = await supabase
+    .from("quote")
+    .insert({
+      company_id: zugang.me.companyId,
+      customer_id: d.customerId,
+      number: nummer as string,
+      status: "draft",
+      valid_until: d.validUntil ?? standard.toISOString().slice(0, 10),
+      owner_id: zugang.me.id,
+      net_total: 0,
+      cost_total: 0,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    return { error: `Anlegen fehlgeschlagen: ${error.message}`, quoteId: null };
+  }
+
+  const { error: posFehler } = await supabase.from("quote_item").insert(
+    d.positionen.map((p, i) => ({
+      company_id: zugang.me.companyId,
+      quote_id: angebot.id as string,
+      pos: (i + 1) * 10,
+      article_id: p.articleId,
+      text: p.text,
+      qty: p.qty,
+      unit: p.unit,
+      purchase_price: p.purchasePrice,
+      sale_price: p.salePrice,
+      vat_rate: p.vatRate,
+    })),
+  );
+
+  if (posFehler) {
+    /*
+     * Die Positionen sind das Angebot. Scheitern sie, bleibt sonst ein
+     * leeres Angebot mit verbrauchter Nummer stehen — die Lücke im
+     * Nummernkreis ist erlaubt, der leere Beleg nicht.
+     */
+    await supabase.from("quote").delete().eq("id", angebot.id);
+    return {
+      error: `Positionen konnten nicht angelegt werden: ${posFehler.message}`,
+      quoteId: null,
+    };
+  }
+
+  await summenNachziehen(supabase, angebot.id as string);
+
+  revalidatePath("/angebote");
+  revalidatePath("/pipelines/vertrieb");
+  return { error: null, quoteId: angebot.id as string };
+}

@@ -248,10 +248,15 @@ export function PortalZugang({
 }: {
   customerId: string;
   kundenName: string;
-  bestehend: { gueltigBis: string; zuletztGesehen: string | null } | null;
+  bestehend: {
+    gueltigBis: string;
+    zuletztGesehen: string | null;
+    link: string | null;
+  } | null;
 }) {
   const [status, formAction] = useActionState(createPortalAccess, LEER);
-  const link = status.ok?.startsWith("http") ? status.ok : null;
+  /* Frisch erzeugter Link schlägt den gespeicherten — er ist der neue. */
+  const link = status.ok?.startsWith("http") ? status.ok : (bestehend?.link ?? null);
 
   return (
     <div className="rounded-[20px] bg-surface p-5 shadow-soft">
@@ -277,7 +282,7 @@ export function PortalZugang({
       {link ? (
         <div className="mb-3 rounded-input bg-s-done/10 p-4">
           <p className="mb-2 text-[12.5px] font-semibold text-s-done">
-            Jetzt kopieren — der Link erscheint kein zweites Mal.
+            Portallink
           </p>
           <input
             readOnly
@@ -287,8 +292,8 @@ export function PortalZugang({
             className="num w-full rounded-input border border-transparent bg-surface px-[11px] py-[9px] text-[11.5px] outline-0"
           />
           <p className="mt-2 text-[11px] text-faint">
-            Gespeichert ist nur der Hash. Ein verlorener Link lässt sich nicht
-            wiederherstellen, nur neu erzeugen.
+            Verschlüsselt gespeichert, geprüft wird gegen den Hash. Ein Leck
+            der Datenbank allein gibt ihn nicht preis.
           </p>
         </div>
       ) : null}

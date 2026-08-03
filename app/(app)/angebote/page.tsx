@@ -12,7 +12,6 @@ import {
   type QuoteEvent,
 } from "@/lib/quote-status";
 import { requireMe } from "@/lib/session";
-import { AngebotAnlegen } from "./PositionenEditor";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Angebote" };
@@ -57,8 +56,7 @@ export default async function AngebotePage({
   const heute = viennaDay();
   const { angebot: gewaehlt } = await searchParams;
 
-  const [{ data }, { data: events }, { data: anlagen }, { data: kunden }] =
-    await Promise.all([
+  const [{ data }, { data: events }, { data: anlagen }] = await Promise.all([
     supabase
       .from("quote")
       .select(
@@ -73,11 +71,6 @@ export default async function AngebotePage({
       .select("quote_id, kind, meta_json, created_at")
       .order("created_at", { ascending: false }),
     supabase.from("plant").select("customer_id, kwp, storage_kwh"),
-    supabase
-      .from("customer")
-      .select("id, name, city")
-      .is("deleted_at", null)
-      .order("name"),
   ]);
 
   const rows = (data ?? []) as unknown as Row[];
@@ -177,14 +170,7 @@ export default async function AngebotePage({
         actions={
           <>
             {darfSchreiben ? (
-              <AngebotAnlegen
-                kunden={(kunden ?? []).map((k) => ({
-                  wert: k.id as string,
-                  text: [k.name as string, k.city as string | null]
-                    .filter(Boolean)
-                    .join(" · "),
-                }))}
-              />
+              <LinkButton href="/angebote/neu">Angebot erstellen</LinkButton>
             ) : null}
             <LinkButton href="/pipelines/vertrieb" variant="ghost">
               Als Board

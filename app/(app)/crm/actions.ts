@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { AktionsStatus } from "@/components/ui/Formular";
 import { BRAND } from "@/lib/brand";
+import { verschluesseln } from "@/lib/mail/crypto";
 import { createToken, hashToken } from "@/lib/portal/token";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -354,6 +355,12 @@ export async function createPortalAccess(
     company_id: zugang.me.companyId,
     customer_id: id.data,
     token_hash: hashToken(token),
+    /*
+     * Zusätzlich verschlüsselt, damit das Backoffice den Link später noch
+     * einmal zeigen kann. Geprüft wird weiterhin gegen den Hash — der
+     * verschlüsselte Wert ist reine Anzeige.
+     */
+    token_enc: `\\x${verschluesseln(token).toString("hex")}`,
     expires_at: ablauf.toISOString(),
   });
 

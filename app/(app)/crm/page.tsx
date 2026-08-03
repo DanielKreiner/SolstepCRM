@@ -13,6 +13,8 @@ import {
   KundeBearbeiten,
   PortalZugang,
 } from "./KundenForms";
+import { BRAND } from "@/lib/brand";
+import { ausBytea, entschluesseln } from "@/lib/mail/crypto";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "CRM" };
@@ -105,7 +107,7 @@ export default async function CrmPage({
     supabase.from("quote").select("id, customer_id, net_total, status, accepted_at"),
     supabase
       .from("portal_access")
-      .select("customer_id, expires_at, last_seen_at")
+      .select("customer_id, expires_at, last_seen_at, token_enc")
       .is("revoked_at", null),
   ]);
 
@@ -222,6 +224,23 @@ export default async function CrmPage({
     ? (portalzugaenge ?? []).find((z) => z.customer_id === detail.id)
     : undefined;
 
+  /*
+   * Den Link entschlüsseln wir hier auf dem Server. Der Schlüssel liegt in
+   * der Umgebung; der Browser bekommt nur die fertige URL, nie den Blob.
+   * Ältere Zugänge ohne token_enc zeigen keinen Link — für sie muss einmal
+   * ein neuer erzeugt werden, den Klartext von damals gibt es nicht mehr.
+   */
+  let portalLink: string | null = null;
+  if (zugangRoh?.token_enc) {
+    try {
+      const roh = ausBytea(zugangRoh.token_enc);
+      if (roh) portalLink = `${BRAND.domain}/portal/${entschluesseln(roh)}`;
+    } catch {
+      // Falscher oder gewechselter Schlüssel: dann eben kein Link.
+      portalLink = null;
+    }
+  }
+
   const portalDetail = zugangRoh
     ? {
         gueltigBis: new Date(
@@ -232,6 +251,7 @@ export default async function CrmPage({
               "de-AT",
             )
           : null,
+        link: portalLink,
       }
     : null;
 
@@ -518,6 +538,35 @@ export default async function CrmPage({
                   wert={num(anlagenJe.get(detail.id) ?? 0)}
                 />
               </div>
+
+              {portalDetail ? (
+                <div className="mt-4 rounded-input bg-panel p-4">
+                  <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-[12px] font-medium text-muted">
+                      Kundenportal
+                    </span>
+                    <span className="num text-[11px] text-faint">
+                      bis {portalDetail.gueltigBis}
+                      {portalDetail.zuletztGesehen
+                        ? ` · zuletzt ${portalDetail.zuletztGesehen}`
+                        : " · noch nicht geöffnet"}
+                    </span>
+                  </div>
+                  {portalDetail.link ? (
+                    <input
+                      readOnly
+                      value={portalDetail.link}
+                      aria-label="Portallink"
+                      className="num w-full rounded-input border border-transparent bg-surface px-[11px] py-[8px] text-[11px] outline-0"
+                    />
+                  ) : (
+                    <p className="text-[11.5px] text-faint">
+                      Der Link dieses Zugangs liegt nur als Hash vor. Erzeuge
+                      unter „Kundenportal“ einen neuen, dann steht er hier.
+                    </p>
+                  )}
+                </div>
+              ) : null}
 
               <div className="mt-4 flex flex-wrap gap-2">
                 {detail.phone ? (
