@@ -66,3 +66,4 @@ design/support.js
 
 # Gerenderte Designvorlagen, nur zum Vergleich im Browser — nicht ins Repo
 public/_vorlagen/
+public/_vorgang-design/
