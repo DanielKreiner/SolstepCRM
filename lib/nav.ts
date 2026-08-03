@@ -21,7 +21,13 @@ export const NAV: NavGroup[] = [
     title: "Betrieb",
     items: [
       { label: "Cockpit", href: "/cockpit", icon: "cockpit", area: null },
-      { label: "Pipelines", href: "/pipelines/projekte", icon: "pipelines", area: "pipelines" },
+      /*
+       * Der Vorgang ist ab jetzt der Einstieg: ein Objekt von der Anfrage
+       * bis zur Schlussrechnung. Die alten Pipelines stehen daneben,
+       * solange der Umbau läuft.
+       */
+      { label: "Vorgänge", href: "/vorgaenge", icon: "pipelines", area: "pipelines" },
+      { label: "Pipelines (alt)", href: "/pipelines/projekte", icon: "pipelines", area: "pipelines" },
       { label: "Angebote", href: "/angebote", icon: "angebote", area: "angebote" },
       { label: "CRM", href: "/crm", icon: "crm", area: "crm" },
       /*
