@@ -7,6 +7,7 @@ import { KpiKarte } from "@/components/ui/KpiKarte";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { dateTime, eur, eurShort, num } from "@/lib/format";
 import { requireMe } from "@/lib/session";
+import { AnlageForm, KundeAnlegen, KundeBearbeiten } from "./KundenForms";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "CRM" };
@@ -24,6 +25,8 @@ type Kunde = {
   city: string | null;
   source: string | null;
   crm_stage: string | null;
+  notes: string | null;
+  deleted_at: string | null;
   created_at: string;
 };
 
@@ -50,10 +53,15 @@ const FILTER = [
 export default async function CrmPage({
   searchParams,
 }: {
-  searchParams: Promise<{ typ?: string; kunde?: string }>;
+  searchParams: Promise<{ typ?: string; kunde?: string; bearbeiten?: string }>;
 }) {
-  await requireMe();
-  const { typ: rohTyp, kunde: gewaehlt } = await searchParams;
+  const me = await requireMe();
+  const {
+    typ: rohTyp,
+    kunde: gewaehlt,
+    bearbeiten,
+  } = await searchParams;
+  const darfSchreiben = me.perms.crm === "write";
   const typ = FILTER.some(([k]) => k === rohTyp) ? rohTyp! : "alle";
   const supabase = await createClient();
 
@@ -68,7 +76,7 @@ export default async function CrmPage({
     supabase
       .from("customer")
       .select(
-        "id, type, number, name, contact_person, email, phone, address, zip, city, source, crm_stage, created_at",
+        "id, type, number, name, contact_person, email, phone, address, zip, city, source, crm_stage, notes, deleted_at, created_at",
       )
       .is("deleted_at", null)
       .order("name"),
@@ -77,7 +85,11 @@ export default async function CrmPage({
       .select("id, customer_id, kind, body, created_at")
       .order("created_at", { ascending: false })
       .limit(400),
-    supabase.from("plant").select("id, customer_id, kwp"),
+    supabase
+      .from("plant")
+      .select(
+        "id, customer_id, kwp, storage_kwh, modules, inverter, meter_point, commissioned_on",
+      ),
     supabase
       .from("job")
       .select("id, customer_id, value_net, phase:phase_id ( system_key )"),
@@ -106,10 +118,21 @@ export default async function CrmPage({
     });
   }
 
+  type AnlageZeile = {
+    id: string;
+    customer_id: string;
+    kwp: string | null;
+    storage_kwh: string | null;
+    modules: string | null;
+    inverter: string | null;
+    meter_point: string | null;
+    commissioned_on: string | null;
+  };
+  const anlageZeilen = (anlagen ?? []) as unknown as AnlageZeile[];
+
   const anlagenJe = new Map<string, number>();
-  for (const p of anlagen ?? []) {
-    const cid = p.customer_id as string;
-    anlagenJe.set(cid, (anlagenJe.get(cid) ?? 0) + 1);
+  for (const p of anlageZeilen) {
+    anlagenJe.set(p.customer_id, (anlagenJe.get(p.customer_id) ?? 0) + 1);
   }
 
   type JobZeile = {
@@ -176,6 +199,28 @@ export default async function CrmPage({
     ? (kunden.find((k) => k.id === gewaehlt) ?? null)
     : (gefiltert[0] ?? null);
 
+  /*
+   * Ein Kunde kann mehrere Anlagen haben; das Formular bearbeitet die erste.
+   * Mehrere Anlagen je Kunde sind selten und gehören auf einen eigenen
+   * Screen — hier würde eine Liste von Formularen die Seite sprengen.
+   */
+  const anlageRoh = detail
+    ? anlageZeilen.find((a) => a.customer_id === detail.id)
+    : undefined;
+
+  const anlageDetail = anlageRoh
+    ? {
+        id: anlageRoh.id,
+        kwp: anlageRoh.kwp === null ? null : Number(anlageRoh.kwp),
+        storageKwh:
+          anlageRoh.storage_kwh === null ? null : Number(anlageRoh.storage_kwh),
+        modules: anlageRoh.modules,
+        inverter: anlageRoh.inverter,
+        meterPoint: anlageRoh.meter_point,
+        commissionedOn: anlageRoh.commissioned_on,
+      }
+    : undefined;
+
   return (
     <>
       <PageHeader
@@ -183,9 +228,9 @@ export default async function CrmPage({
         subtitle="Leads, Kunden und Aktivitäten"
         actions={
           <>
-            <LinkButton href="/pipelines/vertrieb">Vertriebspipeline</LinkButton>
-            <LinkButton href="/angebote" variant="ghost">
-              Angebote
+            {darfSchreiben ? <KundeAnlegen /> : null}
+            <LinkButton href="/pipelines/vertrieb" variant="ghost">
+              Vertriebspipeline
             </LinkButton>
           </>
         }
@@ -330,6 +375,69 @@ export default async function CrmPage({
 
         {detail ? (
           <div className="flex flex-col gap-4">
+            {/*
+              Bearbeiten liegt hinter ?bearbeiten= und nicht hinter einem
+              Client-Umschalter: nach dem Speichern soll man dort landen, wo
+              man war, und ein Link auf "Kunde XY bearbeiten" soll ein Link
+              sein.
+            */}
+            {darfSchreiben ? (
+              <nav className="flex flex-wrap gap-[3px] rounded-pill bg-surface p-1 shadow-soft">
+                {[
+                  ["", "Übersicht"],
+                  ["stammdaten", "Stammdaten"],
+                  ["anlage", "Anlage"],
+                ].map(([key, label]) => {
+                  const an = (bearbeiten ?? "") === key;
+                  const p = new URLSearchParams();
+                  if (typ !== "alle") p.set("typ", typ);
+                  p.set("kunde", detail.id);
+                  if (key) p.set("bearbeiten", key);
+                  return (
+                    <Link
+                      key={label}
+                      href={`/crm?${p.toString()}`}
+                      scroll={false}
+                      className={[
+                        "rounded-pill px-[15px] py-[8px] text-[12.5px] transition-colors",
+                        an
+                          ? "bg-sunk font-semibold text-ink"
+                          : "text-muted hover:text-ink",
+                      ].join(" ")}
+                    >
+                      {label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            ) : null}
+
+            {darfSchreiben && bearbeiten === "stammdaten" ? (
+              <KundeBearbeiten
+                kunde={{
+                  id: detail.id,
+                  name: detail.name,
+                  type: detail.type,
+                  contactPerson: detail.contact_person,
+                  email: detail.email,
+                  phone: detail.phone,
+                  address: detail.address,
+                  zip: detail.zip,
+                  city: detail.city,
+                  source: detail.source,
+                  notes: detail.notes,
+                  archiviert: detail.deleted_at !== null,
+                }}
+              />
+            ) : null}
+
+            {darfSchreiben && bearbeiten === "anlage" ? (
+              <AnlageForm
+                customerId={detail.id}
+                anlage={anlageDetail}
+              />
+            ) : null}
+
             <Abschnitt
               titel={
                 <span className="flex min-w-0 items-center gap-3">

@@ -1,0 +1,299 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import type { AktionsStatus } from "@/components/ui/Formular";
+import { requireMe } from "@/lib/session";
+import { createClient } from "@/lib/supabase/server";
+
+/*
+ * Kunden, Leads und deren Anlagen.
+ *
+ * Der Kunde ist die Wurzel des Datenmodells — an ihm hängen Angebote,
+ * Aufträge, Rechnungen und der Portalzugang. Deshalb wird er nie gelöscht,
+ * sondern nur auf `deleted_at` gesetzt: eine Rechnung ohne Kunden wäre nicht
+ * mehr zuordenbar, und die Aufbewahrungspflicht gilt sieben Jahre
+ * (CLAUDE.md 11, Löschkonzept).
+ */
+
+const kundeSchema = z.object({
+  name: z.string().trim().min(2, "Name fehlt.").max(120),
+  type: z.enum(["lead", "customer"]),
+  contactPerson: z.string().trim().max(120).optional().or(z.literal("")),
+  email: z
+    .string()
+    .trim()
+    .max(160)
+    .refine((v) => v === "" || z.string().email().safeParse(v).success, {
+      message: "Das ist keine gültige Mailadresse.",
+    }),
+  phone: z.string().trim().max(60).optional().or(z.literal("")),
+  address: z.string().trim().max(160).optional().or(z.literal("")),
+  zip: z.string().trim().max(12).optional().or(z.literal("")),
+  city: z.string().trim().max(80).optional().or(z.literal("")),
+  source: z.string().trim().max(60).optional().or(z.literal("")),
+  notes: z.string().trim().max(2000).optional().or(z.literal("")),
+});
+
+/** Leerstring zu null — sonst steht in der Datenbank "" statt "nichts". */
+const leerZuNull = (v: string | undefined): string | null =>
+  v && v.trim() !== "" ? v.trim() : null;
+
+async function darfSchreiben(): Promise<
+  { ok: true; me: Awaited<ReturnType<typeof requireMe>> } | { ok: false; status: AktionsStatus }
+> {
+  const me = await requireMe();
+  if (me.perms.crm !== "write") {
+    return {
+      ok: false,
+      status: { error: "Für das CRM fehlt deiner Rolle das Schreibrecht.", ok: null },
+    };
+  }
+  return { ok: true, me };
+}
+
+export async function createCustomer(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const parsed = kundeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customer")
+    .insert({
+      company_id: zugang.me.companyId,
+      name: d.name,
+      type: d.type,
+      contact_person: leerZuNull(d.contactPerson),
+      email: leerZuNull(d.email),
+      phone: leerZuNull(d.phone),
+      address: leerZuNull(d.address),
+      zip: leerZuNull(d.zip),
+      city: leerZuNull(d.city),
+      source: leerZuNull(d.source),
+      notes: leerZuNull(d.notes),
+      created_by: zugang.me.id,
+    })
+    .select("id, name")
+    .single();
+
+  if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/crm");
+  revalidatePath("/pipelines/vertrieb");
+  return { error: null, ok: `${data.name as string} angelegt.` };
+}
+
+export async function updateCustomer(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const id = z.string().uuid().safeParse(formData.get("customerId"));
+  if (!id.success) return { error: "Kunde fehlt.", ok: null };
+
+  const parsed = kundeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("customer")
+    .update({
+      name: d.name,
+      type: d.type,
+      contact_person: leerZuNull(d.contactPerson),
+      email: leerZuNull(d.email),
+      phone: leerZuNull(d.phone),
+      address: leerZuNull(d.address),
+      zip: leerZuNull(d.zip),
+      city: leerZuNull(d.city),
+      source: leerZuNull(d.source),
+      notes: leerZuNull(d.notes),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id.data);
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/crm");
+  return { error: null, ok: "Gespeichert." };
+}
+
+/**
+ * Kunde archivieren.
+ *
+ * Kein DELETE: an einem Kunden hängen Rechnungen, die sieben Jahre bleiben
+ * müssen. `deleted_at` blendet ihn überall aus, die Belege bleiben zuordenbar.
+ *
+ * Offene Aufträge blockieren das Archivieren — sonst verschwindet ein Kunde,
+ * an dem noch gearbeitet wird, aus jeder Liste.
+ */
+export async function archiveCustomer(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const id = z.string().uuid().safeParse(formData.get("customerId"));
+  if (!id.success) return { error: "Kunde fehlt.", ok: null };
+
+  const supabase = await createClient();
+
+  const { data: offene } = await supabase
+    .from("job")
+    .select("number, phase:phase_id ( system_key )")
+    .eq("customer_id", id.data);
+
+  const laufend = (offene ?? []).filter(
+    (j) =>
+      (j.phase as unknown as { system_key: string | null } | null)
+        ?.system_key !== "closed",
+  );
+
+  if (laufend.length > 0) {
+    return {
+      error: `Es laufen noch ${laufend.length} Aufträge (${laufend
+        .map((j) => j.number as string)
+        .slice(0, 3)
+        .join(", ")}). Erst abschließen, dann archivieren.`,
+      ok: null,
+    };
+  }
+
+  const { error } = await supabase
+    .from("customer")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id.data);
+
+  if (error) return { error: `Archivieren fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/crm");
+  return { error: null, ok: "Kunde archiviert. Belege bleiben erhalten." };
+}
+
+export async function restoreCustomer(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const id = z.string().uuid().safeParse(formData.get("customerId"));
+  if (!id.success) return { error: "Kunde fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("customer")
+    .update({ deleted_at: null })
+    .eq("id", id.data);
+
+  if (error) return { error: `Fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/crm");
+  return { error: null, ok: "Kunde wieder aktiv." };
+}
+
+// --------------------------------------------------------------------------
+// Anlagen
+// --------------------------------------------------------------------------
+
+const anlageSchema = z.object({
+  customerId: z.string().uuid(),
+  kwp: z.coerce.number().min(0).max(10000).optional(),
+  storageKwh: z.coerce.number().min(0).max(10000).optional(),
+  modules: z.string().trim().max(120).optional().or(z.literal("")),
+  inverter: z.string().trim().max(120).optional().or(z.literal("")),
+  meterPoint: z.string().trim().max(60).optional().or(z.literal("")),
+  commissionedOn: z.string().trim().optional().or(z.literal("")),
+});
+
+/**
+ * Anlage anlegen oder ändern.
+ *
+ * Die Anlage hängt am Kunden, nicht am Auftrag: sie überlebt den Auftrag,
+ * der sie errichtet hat, und trägt später die Servicefälle. Kundenportal
+ * und Pipelinekarte lesen kWp von hier.
+ */
+export async function saveAnlage(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const parsed = anlageSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+  const anlageId = formData.get("plantId");
+
+  const supabase = await createClient();
+  const werte = {
+    company_id: zugang.me.companyId,
+    customer_id: d.customerId,
+    kwp: d.kwp ?? null,
+    storage_kwh: d.storageKwh ?? null,
+    modules: leerZuNull(d.modules),
+    inverter: leerZuNull(d.inverter),
+    meter_point: leerZuNull(d.meterPoint),
+    commissioned_on: leerZuNull(d.commissionedOn),
+  };
+
+  const { error } =
+    typeof anlageId === "string" && anlageId.length > 0
+      ? await supabase.from("plant").update(werte).eq("id", anlageId)
+      : await supabase.from("plant").insert(werte);
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/crm");
+  revalidatePath("/pipelines/projekte");
+  return { error: null, ok: "Anlage gespeichert." };
+}
+
+export async function deleteAnlage(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const id = z.string().uuid().safeParse(formData.get("plantId"));
+  if (!id.success) return { error: "Anlage fehlt.", ok: null };
+
+  const supabase = await createClient();
+
+  // job.plant_id steht auf restrict — die Meldung soll erklären statt zu scheitern.
+  const { count } = await supabase
+    .from("job")
+    .select("id", { count: "exact", head: true })
+    .eq("plant_id", id.data);
+
+  if ((count ?? 0) > 0) {
+    return {
+      error: `An dieser Anlage hängen ${count} Aufträge. Erst dort die Zuordnung lösen.`,
+      ok: null,
+    };
+  }
+
+  const { error } = await supabase.from("plant").delete().eq("id", id.data);
+  if (error) return { error: `Löschen fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/crm");
+  return { error: null, ok: "Anlage gelöscht." };
+}

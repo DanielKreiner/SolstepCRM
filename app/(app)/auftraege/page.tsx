@@ -7,6 +7,8 @@ import { KpiKarte } from "@/components/ui/KpiKarte";
 import { date, eurShort, hours, num } from "@/lib/format";
 import { jobKpis, listJobs, projectPhases, type JobRow } from "@/lib/queries/jobs";
 import { requireMe } from "@/lib/session";
+import { AuftragAnlegen } from "./AuftragForms";
+import { ladeAuftragsListen } from "./listen";
 
 export const metadata: Metadata = { title: "Aufträge" };
 
@@ -15,12 +17,14 @@ export default async function AuftraegePage({
 }: {
   searchParams: Promise<{ phase?: string; q?: string }>;
 }) {
-  await requireMe();
+  const me = await requireMe();
   const { phase, q } = await searchParams;
+  const darfSchreiben = me.perms.pipelines === "write";
 
-  const [jobs, phases] = await Promise.all([
+  const [jobs, phases, listen] = await Promise.all([
     listJobs({ phase, q }),
     projectPhases(),
+    ladeAuftragsListen(),
   ]);
   const kpis = await jobKpis(jobs.map((j) => j.id));
 
@@ -112,6 +116,7 @@ export default async function AuftraegePage({
       <PageHeader
         title="Aufträge"
         subtitle={`${jobs.length} ${jobs.length === 1 ? "Auftrag" : "Aufträge"}${phase ? " · gefiltert" : ""} · Beträge exkl. USt.`}
+        actions={darfSchreiben ? <AuftragAnlegen listen={listen} /> : null}
       />
 
       <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">

@@ -10,6 +10,8 @@ import { StockMoveForm } from "@/app/(app)/lager/StockMoveForm";
 import { date, dateTime, eur, hhmm, num, time } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { AuftragBearbeiten } from "../AuftragForms";
+import { ladeAuftragsListen } from "../listen";
 
 export const metadata: Metadata = { title: "Auftrag" };
 
@@ -52,11 +54,15 @@ const MOVE_LABEL: Record<string, string> = {
 
 export default async function AuftragPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ bearbeiten?: string }>;
 }) {
   const me = await requireMe();
   const { id } = await params;
+  const { bearbeiten } = await searchParams;
+  const darfSchreiben = me.perms.pipelines === "write";
   const supabase = await createClient();
 
   const { data: job } = await supabase
@@ -64,6 +70,7 @@ export default async function AuftragPage({
     .select(
       `id, number, address, zip, city, scheduled_from, scheduled_to, planned_hours,
        value_net, material_planned, next_step, closed_at,
+       plant_id, location_id, site_manager_id,
        phase:phase_id ( id, key, label, system_key ),
        customer:customer_id ( id, name, contact_person, email, phone ),
        site_manager:site_manager_id ( id, name ),
@@ -230,6 +237,18 @@ export default async function AuftragPage({
             {phase ? (
               <PhasePill label={phase.label} systemKey={phase.system_key} />
             ) : null}
+            {darfSchreiben ? (
+              <Link
+                href={
+                  bearbeiten
+                    ? `/auftraege/${id}`
+                    : `/auftraege/${id}?bearbeiten=1`
+                }
+                className="rounded-pill bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-5 py-[13px] text-sm font-semibold text-white shadow-[0_6px_18px_rgba(201,121,24,0.28)] hover:text-white"
+              >
+                {bearbeiten ? "Bearbeiten schließen" : "Bearbeiten"}
+              </Link>
+            ) : null}
             <Link
               href="/auftraege"
               className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
@@ -239,6 +258,32 @@ export default async function AuftragPage({
           </>
         }
       />
+
+      {darfSchreiben && bearbeiten ? (
+        <div className="mb-4">
+          <AuftragBearbeiten
+            nummer={job.number as string}
+            listen={await ladeAuftragsListen()}
+            auftrag={{
+              id: job.id as string,
+              customerId: (customer?.id as string) ?? "",
+              phaseId: (job.phase as unknown as { id: string } | null)?.id ?? "",
+              plantId: (job.plant_id as string | null) ?? null,
+              locationId: (job.location_id as string | null) ?? null,
+              siteManagerId: (job.site_manager_id as string | null) ?? null,
+              plannedHours: Number(job.planned_hours ?? 0),
+              valueNet: Number(job.value_net ?? 0),
+              materialPlanned: Number(job.material_planned ?? 0),
+              scheduledFrom: (job.scheduled_from as string | null) ?? null,
+              scheduledTo: (job.scheduled_to as string | null) ?? null,
+              address: (job.address as string | null) ?? null,
+              zip: (job.zip as string | null) ?? null,
+              city: (job.city as string | null) ?? null,
+              nextStep: (job.next_step as string | null) ?? null,
+            }}
+          />
+        </div>
+      ) : null}
 
       {/*
         Die drei Ringkennzahlen aus der Vorlage (SPEC 4.3). Sie stehen ganz

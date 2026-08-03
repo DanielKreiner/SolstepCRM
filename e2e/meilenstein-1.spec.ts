@@ -58,7 +58,13 @@ test("Zeitbuchung mit Auftragsbezug erhöht die Iststunden des Auftrags", async 
   const nachher = await jobHours(AUFTRAG);
   expect(nachher - vorher).toBeCloseTo(3.5, 2);
 
-  // Die Liste zeigt die Buchung mit korrekter Dauer.
+  /*
+   * Die Buchung mit ihrer Dauer steht am Auftrag, nicht in der
+   * Zeiterfassung: die Tagesansicht summiert seit dem Umbau je Person
+   * (Kommt, Pause, Ist, Soll, Diff) und zeigt keine Einzelbuchungen mehr.
+   * Wer eine einzelne Buchung sucht, sucht sie am Auftrag.
+   */
+  await page.goto(`/auftraege/${id}`);
   await expect(page.getByText("3:30").first()).toBeVisible();
 
   await admin().from("time_entry").delete().eq("note", "E2E Meilenstein 1");
@@ -174,8 +180,20 @@ test("Auftragsdetail zeigt Zeiten und Material des Auftrags", async ({ page }) =
   await expect(page.getByText("Stunden ist / soll")).toBeVisible();
   await expect(page.getByRole("heading", { name: /^Zeiten/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /^Material \(/ })).toBeVisible();
-  // 25,5 Iststunden aus dem Seed
-  await expect(page.getByText("25,5 von 64 h").first()).toBeVisible();
+
+  /*
+   * Iststunden aus der Datenbank lesen statt sie im Test einzufrieren: der
+   * Wert hängt am Seed, und ein neu aufgesetzter Demodatensatz hat andere
+   * Buchungen. Geprüft wird, dass die Kachel zeigt, was die View rechnet.
+   */
+  const ist = await jobHours("A-2026-0041");
+  const erwartet = new Intl.NumberFormat("de-AT", {
+    maximumFractionDigits: 1,
+  }).format(Math.round(ist * 10) / 10);
+
+  await expect(
+    page.getByText(new RegExp(`${erwartet.replace(".", "\\.")} von \\d+ h`)).first(),
+  ).toBeVisible();
 });
 
 test("Monteur sieht das Lager, darf aber nicht buchen", async ({ page }) => {

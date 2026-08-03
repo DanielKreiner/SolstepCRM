@@ -8,6 +8,7 @@ import { Stat } from "@/components/ui/Stat";
 import { dateTime, eur, num } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { ArtikelBearbeiten, LieferantenpreisForm } from "../ArtikelForms";
 import { StockMoveForm } from "../StockMoveForm";
 
 export const metadata: Metadata = { title: "Artikel" };
@@ -31,24 +32,29 @@ const MOVE_LABEL: Record<string, string> = {
 
 export default async function ArtikelPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ bearbeiten?: string }>;
 }) {
   const me = await requireMe();
   const { id } = await params;
+  const { bearbeiten } = await searchParams;
+  const darfSchreiben = me.perms.lager === "write";
   const supabase = await createClient();
 
   const { data: article } = await supabase
     .from("article")
     .select(
-      "id, sku, name, manufacturer, category, unit, stock, min_stock, location_code, purchase_price, sale_price, vat_rate",
+      "id, sku, name, manufacturer, category, unit, stock, min_stock, location_code, purchase_price, sale_price, vat_rate, active",
     )
     .eq("id", id)
     .maybeSingle();
 
   if (!article) notFound();
 
-  const [{ data: moves }, { data: jobs }] = await Promise.all([
+  const [{ data: moves }, { data: jobs }, { data: lieferanten }] =
+    await Promise.all([
     supabase
       .from("stock_move")
       .select(
@@ -64,9 +70,14 @@ export default async function ArtikelPage({
       .select("id, number, customer:customer_id ( name )")
       .order("number", { ascending: false })
       .limit(100),
+    supabase.from("supplier").select("id, name").order("name"),
   ]);
 
   const rows = (moves ?? []) as unknown as MoveRow[];
+  const lieferantenOptionen = (lieferanten ?? []).map((l) => ({
+    wert: l.id as string,
+    text: l.name as string,
+  }));
 
   const stock = Number(article.stock);
   const min = Number(article.min_stock);
@@ -139,14 +150,52 @@ export default async function ArtikelPage({
         title={article.name as string}
         subtitle={`${article.manufacturer ?? "—"} · ${article.category ?? "—"} · Preise exkl. USt.`}
         actions={
+          <>
+          {darfSchreiben ? (
+            <Link
+              href={
+                bearbeiten ? `/lager/${id}` : `/lager/${id}?bearbeiten=1`
+              }
+              className="rounded-pill bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-5 py-[13px] text-sm font-semibold text-white shadow-[0_6px_18px_rgba(201,121,24,0.28)] hover:text-white"
+            >
+              {bearbeiten ? "Bearbeiten schließen" : "Bearbeiten"}
+            </Link>
+          ) : null}
           <Link
             href="/lager"
             className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
           >
             Zum Lager
           </Link>
+          </>
         }
       />
+
+      {darfSchreiben && bearbeiten ? (
+        <div className="mb-4 grid gap-4 xl:grid-cols-2 xl:items-start">
+          <ArtikelBearbeiten
+            artikel={{
+              id: article.id as string,
+              sku: article.sku as string,
+              name: article.name as string,
+              manufacturer: (article.manufacturer as string | null) ?? null,
+              category: (article.category as string | null) ?? null,
+              unit: article.unit as string,
+              minStock: Number(article.min_stock ?? 0),
+              locationCode: (article.location_code as string | null) ?? null,
+              purchasePrice: Number(article.purchase_price ?? 0),
+              salePrice: Number(article.sale_price ?? 0),
+              vatRate: Number(article.vat_rate ?? 20),
+              active: Boolean(article.active),
+              stock: Number(article.stock ?? 0),
+            }}
+          />
+          <LieferantenpreisForm
+            articleId={article.id as string}
+            lieferanten={lieferantenOptionen}
+          />
+        </div>
+      ) : null}
 
       <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-5">
         <Stat

@@ -8,6 +8,7 @@ import { Reiter } from "@/components/ui/Reiter";
 import { dateTime, eur, eurShort, num } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { ArtikelAnlegen } from "./ArtikelForms";
 import { StockMoveForm } from "./StockMoveForm";
 
 export const metadata: Metadata = { title: "Lager" };
@@ -130,7 +131,10 @@ export default async function LagerPage({
         subtitle="Bestand, Artikel, Bewegungen, Bestellungen"
         actions={
           <>
-            <LinkButton href="/lager/bestellungen">Bestellvorschlag</LinkButton>
+            {me.perms.lager === "write" ? <ArtikelAnlegen /> : null}
+            <LinkButton href="/lager/bestellungen" variant="ghost">
+              Bestellvorschlag
+            </LinkButton>
             {unterMindest.length > 0 ? (
               <span className="flex items-center gap-[9px] rounded-pill bg-surface px-4 py-[11px] shadow-soft">
                 <span
