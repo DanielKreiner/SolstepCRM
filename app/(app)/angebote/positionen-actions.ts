@@ -295,7 +295,6 @@ export async function addQuoteItem(
     purchase_price: d.purchasePrice,
     sale_price: d.salePrice,
     vat_rate: d.vatRate,
-    unmatched: false,
   });
 
   if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
@@ -435,7 +434,6 @@ export async function addQuoteItemFromArticle(
     purchase_price: artikel.purchase_price,
     sale_price: artikel.sale_price,
     vat_rate: artikel.vat_rate,
-    unmatched: false,
   });
 
   if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
