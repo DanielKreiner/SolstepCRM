@@ -7,7 +7,12 @@ import { KpiKarte } from "@/components/ui/KpiKarte";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { dateTime, eur, eurShort, num } from "@/lib/format";
 import { requireMe } from "@/lib/session";
-import { AnlageForm, KundeAnlegen, KundeBearbeiten } from "./KundenForms";
+import {
+  AnlageForm,
+  KundeAnlegen,
+  KundeBearbeiten,
+  PortalZugang,
+} from "./KundenForms";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "CRM" };
@@ -72,6 +77,7 @@ export default async function CrmPage({
     { data: jobs },
     { data: rechnungen },
     { data: angebote },
+    { data: portalzugaenge },
   ] = await Promise.all([
     supabase
       .from("customer")
@@ -97,6 +103,10 @@ export default async function CrmPage({
       .from("invoice")
       .select("id, job_id, amount_net, paid_amount, status"),
     supabase.from("quote").select("id, customer_id, net_total, status, accepted_at"),
+    supabase
+      .from("portal_access")
+      .select("customer_id, expires_at, last_seen_at")
+      .is("revoked_at", null),
   ]);
 
   const kunden = (alleKunden ?? []) as unknown as Kunde[];
@@ -207,6 +217,23 @@ export default async function CrmPage({
   const anlageRoh = detail
     ? anlageZeilen.find((a) => a.customer_id === detail.id)
     : undefined;
+
+  const zugangRoh = detail
+    ? (portalzugaenge ?? []).find((z) => z.customer_id === detail.id)
+    : undefined;
+
+  const portalDetail = zugangRoh
+    ? {
+        gueltigBis: new Date(
+          zugangRoh.expires_at as string,
+        ).toLocaleDateString("de-AT"),
+        zuletztGesehen: zugangRoh.last_seen_at
+          ? new Date(zugangRoh.last_seen_at as string).toLocaleDateString(
+              "de-AT",
+            )
+          : null,
+      }
+    : null;
 
   const anlageDetail = anlageRoh
     ? {
@@ -387,6 +414,7 @@ export default async function CrmPage({
                   ["", "Übersicht"],
                   ["stammdaten", "Stammdaten"],
                   ["anlage", "Anlage"],
+                  ["portal", "Kundenportal"],
                 ].map(([key, label]) => {
                   const an = (bearbeiten ?? "") === key;
                   const p = new URLSearchParams();
@@ -435,6 +463,14 @@ export default async function CrmPage({
               <AnlageForm
                 customerId={detail.id}
                 anlage={anlageDetail}
+              />
+            ) : null}
+
+            {darfSchreiben && bearbeiten === "portal" ? (
+              <PortalZugang
+                customerId={detail.id}
+                kundenName={detail.name}
+                bestehend={portalDetail}
               />
             ) : null}
 

@@ -57,13 +57,21 @@ test("Der Vorschlag kennt Auftragsbedarf und Mindestbestand getrennt", async ({
   await expect(page.getByText("Auftrag + Mindest").first()).toBeVisible();
 
   /*
-   * Von Hand nachgerechnet: 420 reserviert, 330 auf Lager, 120 Mindest.
-   * Fehlmenge = 420 + 120 - 330 = 210. Ein Vorschlag, der nur die 90 für
-   * den Auftrag bestellt, räumt das Lager leer.
+   * Die Fehlmenge ist reserviert + Mindestbestand − Lagerbestand. Ein
+   * Vorschlag, der nur den Auftragsbedarf bestellt, räumt das Lager leer.
+   *
+   * Gerechnet wird gegen die Datenbank statt gegen feste Zahlen: die Werte
+   * hängen am Seed, und ein neu aufgesetzter Demodatensatz hat andere
+   * Bestände. Vorher stand hier "9" und der Seed lieferte 10 — der Test
+   * hat dann eine korrekte Rechnung als Fehler gemeldet.
    */
-  await expect(page.getByLabel("Bestellmenge MOD-JAS-440")).toHaveValue("210");
-  // 9 auf Lager, 12 reserviert, 6 Mindest -> 12 + 6 - 9 = 9
-  await expect(page.getByLabel("Bestellmenge WR-FRO-10")).toHaveValue("9");
+  for (const sku of ["MOD-JAS-440", "WR-FRO-10"]) {
+    const erwartet = await erwarteteFehlmenge(sku);
+    await expect(
+      page.getByLabel(`Bestellmenge ${sku}`),
+      sku,
+    ).toHaveValue(String(erwartet));
+  }
 
   // Der günstigere Lieferant gewinnt: 78,40 statt 82,50.
   await expect(page.getByText("Solarwerk Großhandel GmbH").first()).toBeVisible();
@@ -218,3 +226,34 @@ test("Ein Monteur sieht keinen Bestellvorschlag zum Anlegen", async ({ page }) =
     page.getByRole("button", { name: "Bestellung anlegen" }),
   ).toHaveCount(0);
 });
+
+/**
+ * Fehlmenge eines Artikels, so wie der Vorschlag sie rechnet:
+ * offene Reservierungen plus Mindestbestand minus Lagerbestand.
+ */
+async function erwarteteFehlmenge(sku: string): Promise<number> {
+  const db = admin();
+
+  const { data: artikel } = await db
+    .from("article")
+    .select("id, stock, min_stock")
+    .eq("company_id", COMPANY_A)
+    .eq("sku", sku)
+    .single();
+
+  const { data: reservierungen } = await db
+    .from("stock_reservation")
+    .select("qty")
+    .eq("article_id", artikel!.id)
+    .is("released_at", null);
+
+  const reserviert = (reservierungen ?? []).reduce(
+    (s, r) => s + Number(r.qty),
+    0,
+  );
+
+  return Math.max(
+    0,
+    Math.ceil(reserviert + Number(artikel!.min_stock) - Number(artikel!.stock)),
+  );
+}

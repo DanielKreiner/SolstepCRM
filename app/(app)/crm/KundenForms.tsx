@@ -1,16 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import {
+  Absenden,
   AktionsKnopf,
   Auswahl,
   Eingabe,
   Formular,
+  LEER,
   Textfeld,
 } from "@/components/ui/Formular";
 import {
   archiveCustomer,
   createCustomer,
+  createPortalAccess,
+  revokePortalAccess,
   deleteAnlage,
   restoreCustomer,
   saveAnlage,
@@ -225,6 +229,101 @@ export function AnlageForm({
           versteckt={{ plantId: anlage.id }}
           bestaetigung="Anlage wirklich löschen?"
         />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Portalzugang.
+ *
+ * Der erzeugte Link erscheint einmal in der Erfolgsmeldung und danach nie
+ * wieder — gespeichert ist nur sein Hash. Deshalb steht hier ausdrücklich,
+ * dass man ihn jetzt kopieren muss.
+ */
+export function PortalZugang({
+  customerId,
+  kundenName,
+  bestehend,
+}: {
+  customerId: string;
+  kundenName: string;
+  bestehend: { gueltigBis: string; zuletztGesehen: string | null } | null;
+}) {
+  const [status, formAction] = useActionState(createPortalAccess, LEER);
+  const link = status.ok?.startsWith("http") ? status.ok : null;
+
+  return (
+    <div className="rounded-[20px] bg-surface p-5 shadow-soft">
+      <h2 className="text-[15px] font-semibold">Kundenportal</h2>
+      <p className="mt-1 mb-3 text-[12.5px] text-muted">
+        Der Kunde sieht damit Fortschritt, Angebot und Dokumente und kann
+        Anliegen melden — ohne Konto, nur über den Link.
+      </p>
+
+      {bestehend ? (
+        <p className="num mb-3 rounded-input bg-panel px-4 py-3 text-[12px] text-muted">
+          Zugang aktiv bis {bestehend.gueltigBis}
+          {bestehend.zuletztGesehen
+            ? ` · zuletzt gesehen ${bestehend.zuletztGesehen}`
+            : " · noch nicht geöffnet"}
+        </p>
+      ) : (
+        <p className="mb-3 text-[12.5px] text-faint">
+          Für {kundenName} gibt es noch keinen Zugang.
+        </p>
+      )}
+
+      {link ? (
+        <div className="mb-3 rounded-input bg-s-done/10 p-4">
+          <p className="mb-2 text-[12.5px] font-semibold text-s-done">
+            Jetzt kopieren — der Link erscheint kein zweites Mal.
+          </p>
+          <input
+            readOnly
+            value={link}
+            aria-label="Portallink"
+            onFocus={(e) => e.currentTarget.select()}
+            className="num w-full rounded-input border border-transparent bg-surface px-[11px] py-[9px] text-[11.5px] outline-0"
+          />
+          <p className="mt-2 text-[11px] text-faint">
+            Gespeichert ist nur der Hash. Ein verlorener Link lässt sich nicht
+            wiederherstellen, nur neu erzeugen.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <form action={formAction}>
+          <input type="hidden" name="customerId" value={customerId} />
+          <Absenden
+            label={bestehend ? "Neuen Link erzeugen" : "Zugang erzeugen"}
+            busy="Wird erzeugt …"
+          />
+        </form>
+
+        {bestehend ? (
+          <AktionsKnopf
+            aktion={revokePortalAccess}
+            label="Widerrufen"
+            variante="gefahr"
+            versteckt={{ customerId }}
+            bestaetigung="Zugang widerrufen? Der Link öffnet danach nichts mehr."
+          />
+        ) : null}
+      </div>
+
+      {status.error ? (
+        <p role="alert" className="mt-3 text-[12.5px] font-medium text-s-crit">
+          {status.error}
+        </p>
+      ) : null}
+
+      {bestehend ? (
+        <p className="mt-3 text-[11px] text-faint">
+          Ein neuer Link widerruft den alten — sonst sammeln sich über die
+          Jahre gültige Zugänge an, die niemand mehr kennt.
+        </p>
       ) : null}
     </div>
   );

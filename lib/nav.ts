@@ -30,15 +30,27 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
+    /*
+     * "Mein Arbeitstag" steht vor dem Teambereich, weil er jeden angeht —
+     * auch die Rollen ohne Leserecht auf fremde Zeiten. Vorher gab es von
+     * hier aus keinen Weg zur Stempeluhr: /m war nur direkt aufrufbar, und
+     * wer im Büro sitzt, findet eine App-URL nicht von selbst.
+     */
+    title: "Mein Arbeitstag",
+    items: [
+      { label: "Stempeln", href: "/m/stempeln", icon: "zeit", area: null },
+      { label: "Meine Zeiten", href: "/meine-zeiten", icon: "konto", area: null },
+      { label: "Meine Dokumente", href: "/meine-dokumente", icon: "dokumente", area: null },
+      { label: "Abwesenheiten", href: "/abwesenheiten", icon: "abwesenheit", area: null },
+    ],
+  },
+  {
     title: "Team",
     items: [
       { label: "Zeiterfassung", href: "/zeiterfassung", icon: "zeit", area: "zeiterfassung" },
       { label: "Stundenkonto", href: "/stundenkonto", icon: "konto", area: "zeiterfassung" },
-      { label: "Abwesenheiten", href: "/abwesenheiten", icon: "abwesenheit", area: null },
       { label: "Mitarbeiter", href: "/mitarbeiter", icon: "mitarbeiter", area: "mitarbeiter" },
       { label: "Dokumente", href: "/dokumente", icon: "dokumente", area: null },
-      { label: "Meine Zeiten", href: "/meine-zeiten", icon: "konto", area: null },
-      { label: "Meine Dokumente", href: "/meine-dokumente", icon: "dokumente", area: null },
       { label: "Chat", href: "/chat", icon: "chat", area: null },
       { label: "Bewerber", href: "/bewerber", icon: "bewerber", area: "mitarbeiter" },
     ],

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { AktionsStatus } from "@/components/ui/Formular";
+import { BRAND } from "@/lib/brand";
+import { createToken, hashToken } from "@/lib/portal/token";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -296,4 +298,97 @@ export async function deleteAnlage(
 
   revalidatePath("/crm");
   return { error: null, ok: "Anlage gelöscht." };
+}
+
+// --------------------------------------------------------------------------
+// Kundenportal
+// --------------------------------------------------------------------------
+
+/**
+ * Portalzugang erzeugen.
+ *
+ * Das Portal ist der Kundenzugang: Fortschritt, Angebot annehmen, Dokumente,
+ * Anliegen. Es gab bisher keinen Weg, einen solchen Zugang aus der Anwendung
+ * heraus anzulegen — der einzige existierende Token stammte aus dem Seed.
+ * Damit war das Portal gebaut, aber unerreichbar.
+ *
+ * Der Token wird EINMAL im Klartext zurückgegeben und danach nie wieder:
+ * gespeichert ist nur sein Hash (CLAUDE.md 4.3). Wer den Link verliert,
+ * erzeugt einen neuen — das ist der Preis dafür, dass ein Datenbankleck
+ * keine Kundenzugänge preisgibt.
+ *
+ * Ein neuer Zugang widerruft den alten. Sonst sammeln sich über die Jahre
+ * gültige Links an, die niemand mehr kennt.
+ */
+export async function createPortalAccess(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const id = z.string().uuid().safeParse(formData.get("customerId"));
+  if (!id.success) return { error: "Kunde fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const { data: kunde } = await supabase
+    .from("customer")
+    .select("id, name")
+    .eq("id", id.data)
+    .maybeSingle();
+
+  if (!kunde) return { error: "Kunde nicht gefunden.", ok: null };
+
+  const token = createToken(id.data);
+  const ablauf = new Date();
+  ablauf.setDate(ablauf.getDate() + 90);
+
+  // Alte Zugänge desselben Kunden widerrufen.
+  await supabase
+    .from("portal_access")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("customer_id", id.data)
+    .is("revoked_at", null);
+
+  const { error } = await supabase.from("portal_access").insert({
+    company_id: zugang.me.companyId,
+    customer_id: id.data,
+    token_hash: hashToken(token),
+    expires_at: ablauf.toISOString(),
+  });
+
+  if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/crm");
+  return {
+    error: null,
+    /*
+     * Der Link steht in der Erfolgsmeldung, weil es die einzige Gelegenheit
+     * ist. Beim nächsten Laden der Seite ist er weg.
+     */
+    ok: `${BRAND.domain}/portal/${token}`,
+  };
+}
+
+export async function revokePortalAccess(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const id = z.string().uuid().safeParse(formData.get("customerId"));
+  if (!id.success) return { error: "Kunde fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("portal_access")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("customer_id", id.data)
+    .is("revoked_at", null);
+
+  if (error) return { error: `Widerrufen fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/crm");
+  return { error: null, ok: "Zugang widerrufen. Der Link öffnet nichts mehr." };
 }

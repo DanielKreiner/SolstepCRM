@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LieferantForm } from "../ArtikelForms";
 import { Pill } from "@/components/ui/Pill";
 import { Stat } from "@/components/ui/Stat";
 import { date, eur, num } from "@/lib/format";
@@ -24,9 +25,12 @@ export default async function BestellungenPage() {
   const me = await requireMe();
   const supabase = await createClient();
 
-  const [lines, { data: suppliers }, { data: orders }] = await Promise.all([
+  const [lines, { data: lieferanten }, { data: orders }] = await Promise.all([
     buildProposal(),
-    supabase.from("supplier").select("id, name, email").order("name"),
+    supabase
+      .from("supplier")
+      .select("id, name, email, phone, customer_number, framework_contract")
+      .order("name"),
     supabase
       .from("purchase_order")
       .select(
@@ -75,7 +79,7 @@ export default async function BestellungenPage() {
         {me.perms.lager === "write" ? (
           <ProposalTable
             lines={lines}
-            suppliers={(suppliers ?? []).map((s) => ({
+            suppliers={(lieferanten ?? []).map((s) => ({
               id: s.id as string,
               name: s.name as string,
             }))}
@@ -195,6 +199,57 @@ export default async function BestellungenPage() {
           </div>
         )}
       </section>
+
+      {/*
+        Lieferanten anlegen und pflegen. Das Formular gab es, es war nur
+        nirgends eingebunden — ohne Lieferant lässt sich keine Bestellung
+        senden, und ohne Weg zum Anlegen war der Bestellvorschlag eine
+        Sackgasse.
+      */}
+      {me.perms.lager === "write" ? (
+        <section className="mt-6 grid gap-4 xl:grid-cols-[1fr_1fr] xl:items-start">
+          <LieferantForm />
+
+          <div className="rounded-[20px] bg-surface p-5 shadow-soft">
+            <h2 className="mb-3 text-[15px] font-semibold">
+              Lieferanten
+              <span className="num ml-2 rounded-pill bg-sunk px-[8px] py-[2px] text-[11px] font-normal text-muted">
+                {(lieferanten ?? []).length}
+              </span>
+            </h2>
+            {(lieferanten ?? []).length === 0 ? (
+              <p className="text-[13px] text-muted">
+                Noch kein Lieferant angelegt. Ohne Lieferant lässt sich keine
+                Bestellung versenden.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {(lieferanten ?? []).map((l) => (
+                  <li
+                    key={l.id as string}
+                    className="flex flex-wrap items-center gap-3 rounded-input bg-panel px-4 py-3"
+                  >
+                    <span className="text-[13.5px] font-medium">
+                      {l.name as string}
+                    </span>
+                    <span className="num min-w-0 flex-1 truncate text-[12px] text-muted">
+                      {(l.email as string | null) ?? "keine Mailadresse"}
+                    </span>
+                    {l.framework_contract ? (
+                      <span className="rounded-pill bg-s-done/12 px-[9px] py-[3px] text-[11px] text-s-done">
+                        Rahmenvertrag
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-[11.5px] text-faint">
+              {"Artikelpreise je Lieferant pflegst du im Artikel unter „Bearbeiten“."}
+            </p>
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

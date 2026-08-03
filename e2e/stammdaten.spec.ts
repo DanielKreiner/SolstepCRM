@@ -242,3 +242,95 @@ test("Ohne Schreibrecht gibt es keine Anlegen-Knöpfe", async ({ page }) => {
     0,
   );
 });
+
+test("Portalzugang erzeugen, benutzen und widerrufen", async ({ page }) => {
+  const db = admin();
+
+  const { data: kunde } = await db
+    .from("customer")
+    .select("id, name")
+    .eq("company_id", COMPANY_A)
+    .is("deleted_at", null)
+    .limit(1)
+    .single();
+
+  // Vorherige Zugänge dieses Kunden aus dem Weg räumen.
+  await db.from("portal_access").delete().eq("customer_id", kunde!.id);
+
+  await login(page, DEMO.gf);
+  await page.goto(`/crm?kunde=${kunde!.id}&bearbeiten=portal`);
+
+  await page.getByRole("button", { name: "Zugang erzeugen" }).click();
+
+  const linkFeld = page.getByLabel("Portallink");
+  await expect(linkFeld).toBeVisible({ timeout: 15_000 });
+
+  const link = await linkFeld.inputValue();
+  const token = link.split("/portal/")[1]!;
+  expect(token.length).toBeGreaterThan(40);
+
+  /*
+   * Der Klartext-Token darf nirgends gespeichert sein — nur sein Hash.
+   * Ein Datenbankleck soll keine Kundenzugänge preisgeben.
+   */
+  const { data: zugang } = await db
+    .from("portal_access")
+    .select("token_hash, revoked_at")
+    .eq("customer_id", kunde!.id)
+    .is("revoked_at", null)
+    .single();
+  expect(zugang!.token_hash).not.toContain(token);
+
+  // Der Link öffnet das Portal ohne Anmeldung.
+  await page.context().clearCookies();
+  await page.goto(`/portal/${token}`);
+  await expect(
+    page.getByRole("heading", { name: kunde!.name as string }),
+  ).toBeVisible();
+
+  // --- Widerrufen ---
+  await login(page, DEMO.gf);
+  await page.goto(`/crm?kunde=${kunde!.id}&bearbeiten=portal`);
+  page.on("dialog", (d) => void d.accept());
+  await page.getByRole("button", { name: "Widerrufen" }).click();
+
+  await expect
+    .poll(
+      async () => {
+        const { data } = await db
+          .from("portal_access")
+          .select("revoked_at")
+          .eq("customer_id", kunde!.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+        return data?.revoked_at !== null;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+
+  // Danach öffnet der Link nichts mehr.
+  await page.context().clearCookies();
+  const antwort = await page.goto(`/portal/${token}`);
+  expect(antwort?.status()).toBe(404);
+});
+
+test("Ein Monteur kann keinen Portalzugang erzeugen", async ({ page }) => {
+  const db = admin();
+  const { data: kunde } = await db
+    .from("customer")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .is("deleted_at", null)
+    .limit(1)
+    .single();
+
+  await login(page, DEMO.monteur);
+  await page.goto(`/crm?kunde=${kunde!.id}&bearbeiten=portal`);
+
+  // Ohne CRM-Schreibrecht gibt es den Reiter gar nicht.
+  await expect(page.getByRole("button", { name: "Zugang erzeugen" })).toHaveCount(
+    0,
+  );
+});
