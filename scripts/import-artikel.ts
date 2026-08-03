@@ -14,6 +14,11 @@
  *
  * Die Zugangsdaten des Shops kommen aus dessen eigener .env.local und
  * werden nicht in dieses Repo übernommen.
+ *
+ * ACHTUNG: image_url zeigt nach diesem Lauf auf den Storage des Shops.
+ * Das ist eine Verbindung, die Abschnitt 0 ausschliesst — direkt danach
+ * muss scripts/import-artikelbilder.ts laufen, das die Bilder in den
+ * eigenen Bucket holt und die Adressen umschreibt.
  */
 
 import { readFileSync } from "node:fs";

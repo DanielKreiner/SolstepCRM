@@ -27,6 +27,12 @@ export type Option = {
   text: string;
   /** Zweite Zeile — Ort, Nummer, Rolle. Wird mitdurchsucht. */
   zusatz?: string;
+  /*
+   * Vorschaubild. Bei Artikeln erkennt man ein Modul oder einen
+   * Wechselrichter am Bild schneller als am Namen — vier Hersteller
+   * nennen ihr Gerät fast gleich.
+   */
+  bild?: string;
 };
 
 export function Suchauswahl({
@@ -103,6 +109,9 @@ export function Suchauswahl({
     // Mehr als 50 Zeilen liest niemand — wer so viel sieht, sucht weiter.
     return gefiltert.slice(0, 50);
   }, [optionen, suche]);
+
+  /* Hat überhaupt ein Eintrag ein Bild? Dann rücken alle gleich ein. */
+  const mitBildern = useMemo(() => optionen.some((o) => o.bild), [optionen]);
 
   function waehle(o: Option | null) {
     setGewaehlt(o);
@@ -231,7 +240,9 @@ export function Suchauswahl({
                     onWaehlen={() => waehle(o)}
                     onZeigen={() => setAktiv(i)}
                     label={o.text}
+                    platzFuerBild={mitBildern}
                     {...(o.zusatz ? { zusatz: o.zusatz } : {})}
+                    {...(o.bild ? { bild: o.bild } : {})}
                   />
                 </li>
               ))
@@ -247,6 +258,8 @@ function Zeile({
   id,
   label,
   zusatz,
+  bild,
+  platzFuerBild = false,
   aktiv,
   gewaehlt = false,
   leise = false,
@@ -256,6 +269,8 @@ function Zeile({
   id?: string;
   label: string;
   zusatz?: string;
+  bild?: string;
+  platzFuerBild?: boolean;
   aktiv: boolean;
   gewaehlt?: boolean;
   leise?: boolean;
@@ -271,17 +286,43 @@ function Zeile({
       onMouseEnter={onZeigen}
       onClick={onWaehlen}
       className={[
-        "block w-full cursor-pointer px-[13px] py-[9px] text-left text-[13px]",
+        "flex w-full cursor-pointer items-center gap-3 px-[13px] py-[8px] text-left text-[13px]",
         aktiv ? "bg-sunk" : "",
         leise ? "text-faint" : "",
       ].join(" ")}
     >
-      <span className={gewaehlt ? "font-semibold" : ""}>{label}</span>
-      {zusatz ? (
-        <span className="num mt-[1px] block text-[11.5px] text-faint">
-          {zusatz}
-        </span>
+      {/*
+        Der Platz bleibt reserviert, auch ohne Bild — sonst beginnt der
+        Text mal hier und mal dort, und eine Liste, die auf zwei
+        Einrückungen springt, liest sich schlechter als eine ohne Bilder.
+        Sobald ein Eintrag der Liste ein Bild hat, rücken alle ein.
+      */}
+      {platzFuerBild ? (
+        bild ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={bild}
+            alt=""
+            loading="lazy"
+            className="h-[34px] w-[34px] shrink-0 rounded-[8px] bg-panel object-contain"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="h-[34px] w-[34px] shrink-0 rounded-[8px] bg-sunk"
+          />
+        )
       ) : null}
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate ${gewaehlt ? "font-semibold" : ""}`}>
+          {label}
+        </span>
+        {zusatz ? (
+          <span className="num mt-[1px] block truncate text-[11.5px] text-faint">
+            {zusatz}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 }

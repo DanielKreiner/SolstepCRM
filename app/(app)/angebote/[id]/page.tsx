@@ -52,7 +52,7 @@ export default async function AngebotPage({
       supabase
         .from("quote_item")
         .select(
-          "id, pos, text, qty, unit, purchase_price, sale_price, vat_rate, kind, group_key, category, manufacturer, description, article:article_id ( sku )",
+          "id, pos, text, qty, unit, purchase_price, sale_price, vat_rate, kind, group_key, category, manufacturer, description, image_url, article:article_id ( sku )",
         )
         .eq("quote_id", id)
         .order("pos"),
@@ -63,7 +63,7 @@ export default async function AngebotPage({
         .order("name"),
       supabase
         .from("article")
-        .select("id, sku, name, sale_price")
+        .select("id, sku, name, sale_price, image_url")
         .eq("active", true)
         .order("name"),
     ]);
@@ -192,12 +192,19 @@ export default async function AngebotPage({
             category: (it.category as string | null) ?? null,
             manufacturer: (it.manufacturer as string | null) ?? null,
             description: (it.description as string | null) ?? null,
+            imageUrl: (it.image_url as string | null) ?? null,
             sku:
               ((it.article as unknown as { sku: string } | null)?.sku ?? null),
           }))}
           artikel={(artikel ?? []).map((a) => ({
             wert: a.id as string,
-            text: `${a.sku as string} · ${a.name as string}`,
+            /*
+             * Name voran, Nummer darunter: gesucht wird nach dem Namen,
+             * die Nummer ist die Bestätigung, dass es der richtige ist.
+             */
+            text: a.name as string,
+            zusatz: `${a.sku as string} · ${eur(a.sale_price)}`,
+            ...(a.image_url ? { bild: a.image_url as string } : {}),
           }))}
         />
 

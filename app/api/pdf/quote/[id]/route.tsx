@@ -40,7 +40,7 @@ export async function GET(
   const [{ data: items }, { data: anlage }] = await Promise.all([
     supabase
       .from("quote_item")
-      .select("pos, text, qty, unit, sale_price, vat_rate")
+      .select("pos, text, qty, unit, sale_price, vat_rate, image_url")
       .eq("quote_id", id)
       .order("pos"),
     /*
@@ -101,11 +101,34 @@ export async function GET(
       unit: it.unit as string,
       salePrice: Number(it.sale_price),
       vatRate: Number(it.vat_rate),
+      ...(bildQuelle(it.image_url) ? { imageUrl: bildQuelle(it.image_url)! } : {}),
     })),
     netTotal: Number(quote.net_total),
   };
 
-  const buffer = await renderToBuffer(<QuotePdf data={data} />);
+  /*
+   * Bilder werden beim Rendern nachgeladen. Ein toter Link — der
+   * Hersteller räumt seine Seite auf — würde sonst das ganze PDF
+   * scheitern lassen, und der Kunde bekäme statt eines Angebots einen
+   * Fehler. Deshalb ein zweiter Anlauf ohne Bilder.
+   */
+  let buffer: Buffer;
+  try {
+    buffer = await renderToBuffer(<QuotePdf data={data} />);
+  } catch {
+    buffer = await renderToBuffer(
+      <QuotePdf
+        data={{
+          ...data,
+          items: data.items.map((it) => {
+            const ohneBild = { ...it };
+            delete ohneBild.imageUrl;
+            return ohneBild;
+          }),
+        }}
+      />,
+    );
+  }
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
@@ -123,4 +146,22 @@ function numOrUndef(v: unknown): number | undefined {
 
 function strOrUndef(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() !== "" ? v : undefined;
+}
+
+/**
+ * Nur https-Adressen kommen ins PDF.
+ *
+ * @react-pdf lädt die Quelle serverseitig nach. Alles andere — data:,
+ * file:, ein interner Host — wäre entweder wirkungslos oder ein Weg, den
+ * PDF-Dienst Adressen abrufen zu lassen, die jemand in den Artikelstamm
+ * geschrieben hat.
+ */
+function bildQuelle(v: unknown): string | null {
+  if (typeof v !== "string" || v.length === 0) return null;
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
 }

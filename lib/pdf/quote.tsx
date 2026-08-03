@@ -1,5 +1,6 @@
 import {
   Document,
+  Image,
   Page,
   StyleSheet,
   Text,
@@ -48,6 +49,8 @@ export type QuotePdfData = {
     unit: string;
     salePrice: number;
     vatRate: number;
+    /* Nur im technischen Teil, und nur https — siehe Route. */
+    imageUrl?: string | undefined;
   }[];
   netTotal: number;
 };
@@ -80,6 +83,7 @@ const s = StyleSheet.create({
   trenner: { borderBottomWidth: 0.5, borderBottomColor: "#EAE4DC" },
   cPos: { width: 24, color: "#9C9289" },
   cText: { flex: 1, paddingRight: 8 },
+  cBild: { width: 34, height: 34, marginRight: 6, objectFit: "contain" },
   cMenge: { width: 62, textAlign: "right" },
   cPreis: { width: 66, textAlign: "right" },
   cSumme: { width: 74, textAlign: "right" },
@@ -209,9 +213,22 @@ export function QuotePdf({ data }: { data: QuotePdfData }) {
             <Text style={[s.cText, s.kopfzeile]}>Leistung</Text>
             <Text style={[s.cMenge, s.kopfzeile]}>Menge</Text>
           </View>
+          {/*
+            Bilder stehen im technischen Teil, nicht im Preisteil: dort
+            soll der Kunde sehen, was verbaut wird. Der Preisteil bleibt
+            eine Liste (CLAUDE.md 6.4).
+          */}
           {data.items.map((it) => (
-            <View key={it.pos} style={[s.zeile, s.trenner]}>
+            <View
+              key={it.pos}
+              style={[s.zeile, s.trenner, { alignItems: "center" }]}
+            >
               <Text style={s.cPos}>{it.pos}</Text>
+              {it.imageUrl ? (
+                /* eslint-disable-next-line jsx-a11y/alt-text --
+                   @react-pdf/Image ist kein <img>; alt gibt es dort nicht. */
+                <Image src={it.imageUrl} style={s.cBild} />
+              ) : null}
               <Text style={s.cText}>{it.text}</Text>
               <Text style={s.cMenge}>
                 {it.qty.toLocaleString("de-AT")} {it.unit}

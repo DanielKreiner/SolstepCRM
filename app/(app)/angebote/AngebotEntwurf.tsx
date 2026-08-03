@@ -28,6 +28,8 @@ export type Artikel = {
   ek: number;
   vk: number;
   ust: number;
+  /* Vorschaubild — vier Hersteller nennen ihr Modul fast gleich. */
+  bild: string | null;
 };
 
 export type Kunde = {
@@ -46,6 +48,8 @@ type Zeile = {
   ek: number;
   vk: number;
   ust: number;
+  /* Vorschaubild — vier Hersteller nennen ihr Modul fast gleich. */
+  bild: string | null;
 };
 
 let laufend = 0;
@@ -98,12 +102,18 @@ export function AngebotEntwurf({
       {
         key: neuerKey(),
         articleId: a.id,
-        text: `${a.name} (${a.sku})`,
+        /*
+         * Nur der Name: der Kunde liest auf der Angebotsseite „Fronius
+         * Symo GEN24" und nicht „Fronius Symo GEN24 (WR-FRO-10)". Die
+         * Nummer steht intern über article_id.
+         */
+        text: a.name,
         qty: 1,
         unit: a.unit,
         ek: a.ek,
         vk: a.vk,
         ust: a.ust,
+        bild: a.bild,
       },
     ]);
     setSuche("");
@@ -121,6 +131,8 @@ export function AngebotEntwurf({
         ek: 0,
         vk: 0,
         ust: 20,
+        // Freie Positionen sind Leistungen — Montage, Anfahrt, Gerüst.
+        bild: null,
       },
     ]);
   }
@@ -212,6 +224,15 @@ export function AngebotEntwurf({
                       onClick={() => artikelHinzu(a)}
                       className="flex w-full cursor-pointer items-center gap-3 border-0 bg-transparent px-4 py-3 text-left hover:bg-panel"
                     >
+                      {a.bild ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={a.bild}
+                          alt=""
+                          loading="lazy"
+                          className="h-[38px] w-[38px] shrink-0 rounded-[9px] bg-panel object-contain"
+                        />
+                      ) : null}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13.5px] font-medium">
                           {a.name}
@@ -243,6 +264,16 @@ export function AngebotEntwurf({
                     <span className="num w-[26px] shrink-0 pt-[10px] text-[11px] text-faint">
                       {(i + 1) * 10}
                     </span>
+
+                    {z.bild ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={z.bild}
+                        alt=""
+                        loading="lazy"
+                        className="mt-[4px] h-[36px] w-[36px] shrink-0 rounded-[9px] bg-surface object-contain"
+                      />
+                    ) : null}
 
                     <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[1fr_80px_90px_100px_100px_70px]">
                       <input

@@ -32,7 +32,7 @@ export default async function AngebotNeuPage() {
       .order("name"),
     supabase
       .from("article")
-      .select("id, sku, name, unit, purchase_price, sale_price, vat_rate")
+      .select("id, sku, name, unit, purchase_price, sale_price, vat_rate, image_url")
       .eq("active", true)
       .order("name"),
   ]);
@@ -59,6 +59,7 @@ export default async function AngebotNeuPage() {
           ek: Number(a.purchase_price),
           vk: Number(a.sale_price),
           ust: Number(a.vat_rate),
+          bild: (a.image_url as string | null) ?? null,
         }))}
       />
     </>

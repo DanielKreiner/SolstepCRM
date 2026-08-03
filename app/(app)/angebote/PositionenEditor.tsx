@@ -34,6 +34,8 @@ export type Position = {
   category: string | null;
   manufacturer: string | null;
   description: string | null;
+  /** Vorschaubild aus dem Artikelstamm, in die Position kopiert. */
+  imageUrl: string | null;
   /*
    * Artikelnummer der verknüpften Ware. Sie steht bewusst nicht im
    * Positionstext: der Kunde liest auf der Angebotsseite „Fronius Symo
@@ -43,7 +45,16 @@ export type Position = {
   sku: string | null;
 };
 
-export type Option = { wert: string; text: string };
+/*
+ * Für die Auswahllisten im Editor. Deckungsgleich mit der Suchauswahl,
+ * damit dieselbe Liste ohne Umformung in beide passt.
+ */
+export type Option = {
+  wert: string;
+  text: string;
+  zusatz?: string;
+  bild?: string;
+};
 
 const EINHEITEN = [
   { wert: "Stk", text: "Stück" },
@@ -214,7 +225,17 @@ export function PositionenEditor({
                     <span className="num px-2 py-3 text-[12px] text-faint">
                       {(i + 1) * 10}
                     </span>
-                    <span className="min-w-0 px-2 py-3">
+                    <span className="flex min-w-0 items-center gap-[10px] px-2 py-3">
+                      {p.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={p.imageUrl}
+                          alt=""
+                          loading="lazy"
+                          className="h-[32px] w-[32px] shrink-0 rounded-[8px] bg-panel object-contain"
+                        />
+                      ) : null}
+                      <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className="min-w-0 truncate text-[13.5px] font-medium">
                           {p.text}
@@ -234,6 +255,7 @@ export function PositionenEditor({
                         className={`num block text-[11px] ${zeilenMarge < 10 ? "text-s-crit" : "text-faint"}`}
                       >
                         DB {Math.round(zeilenMarge)} % · {p.vatRate} % USt.
+                      </span>
                       </span>
                     </span>
                     <span className="num px-2 py-3 text-right text-[12.5px]">

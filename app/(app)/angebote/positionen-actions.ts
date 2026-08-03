@@ -571,19 +571,74 @@ export async function angebotAusEntwurf(entwurf: {
     return { error: `Anlegen fehlgeschlagen: ${error.message}`, quoteId: null };
   }
 
+  /*
+   * Beschreibung, Technik, Datenblatt und Bild aus dem Artikelstamm
+   * mitkopieren — dieselbe Regel wie beim einzelnen Übernehmen: der Kunde
+   * sieht sie auf der Angebotsseite, und ein Angebot von heute soll sich
+   * nicht ändern, weil jemand nächstes Jahr den Artikeltext umschreibt.
+   */
+  const artikelIds = [
+    ...new Set(d.positionen.map((p) => p.articleId).filter(Boolean)),
+  ] as string[];
+
+  const stamm = new Map<
+    string,
+    {
+      category: string | null;
+      manufacturer: string | null;
+      description: string | null;
+      tech_specs: unknown;
+      datasheet_url: string | null;
+      image_url: string | null;
+    }
+  >();
+
+  if (artikelIds.length > 0) {
+    const { data: artikel } = await supabase
+      .from("article")
+      .select(
+        "id, category, manufacturer, description, tech_specs, datasheet_url, image_url",
+      )
+      .in("id", artikelIds);
+
+    for (const a of artikel ?? []) {
+      stamm.set(a.id as string, {
+        category: (a.category as string | null) ?? null,
+        manufacturer: (a.manufacturer as string | null) ?? null,
+        description: (a.description as string | null) ?? null,
+        tech_specs: a.tech_specs ?? null,
+        datasheet_url: (a.datasheet_url as string | null) ?? null,
+        image_url: (a.image_url as string | null) ?? null,
+      });
+    }
+  }
+
   const { error: posFehler } = await supabase.from("quote_item").insert(
-    d.positionen.map((p, i) => ({
-      company_id: zugang.me.companyId,
-      quote_id: angebot.id as string,
-      pos: (i + 1) * 10,
-      article_id: p.articleId,
-      text: p.text,
-      qty: p.qty,
-      unit: p.unit,
-      purchase_price: p.purchasePrice,
-      sale_price: p.salePrice,
-      vat_rate: p.vatRate,
-    })),
+    d.positionen.map((p, i) => {
+      const a = p.articleId ? stamm.get(p.articleId) : undefined;
+      return {
+        company_id: zugang.me.companyId,
+        quote_id: angebot.id as string,
+        pos: (i + 1) * 10,
+        article_id: p.articleId,
+        text: p.text,
+        qty: p.qty,
+        unit: p.unit,
+        purchase_price: p.purchasePrice,
+        sale_price: p.salePrice,
+        vat_rate: p.vatRate,
+        /*
+         * Alle Zeilen tragen dieselben Schlüssel: PostgREST macht aus
+         * einem fehlenden Feld im Stapel NULL statt Default.
+         */
+        category: a?.category ?? null,
+        manufacturer: a?.manufacturer ?? null,
+        description: a?.description ?? null,
+        tech_specs: a?.tech_specs ?? null,
+        datasheet_url: a?.datasheet_url ?? null,
+        image_url: a?.image_url ?? null,
+      };
+    }),
   );
 
   if (posFehler) {
