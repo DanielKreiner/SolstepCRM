@@ -180,6 +180,23 @@ export default async function VorgangPage({
       {/* ------------------------------------------- STROM UND AKTIONEN */}
       <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr] xl:items-start">
         <div className="flex min-w-0 flex-col gap-4">
+          {darfAngebote && positionen.length > 0 ? (
+            <p className="rounded-[20px] bg-surface px-5 py-4 text-[12.5px] shadow-soft">
+              <a
+                href={`/api/pdf/vorgang/${kopf.id}?art=angebot`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-accent-ink underline"
+              >
+                Angebot als PDF
+              </a>
+              <span className="text-muted">
+                {" "}
+                — technischer Teil ohne Preise, Preisteil als eigener Block.
+              </span>
+            </p>
+          ) : null}
+
           {darfAngebote ? (
             <Positionen
               vorgangId={kopf.id}
@@ -267,7 +284,25 @@ export default async function VorgangPage({
                     className="rounded-input bg-panel px-4 py-3 text-[12.5px]"
                   >
                     <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-semibold">{d.dateiname}</span>
+                      {/*
+                        Nur die Arten, für die es eine Vorlage gibt. Eine
+                        Materialliste als PDF wäre eine leere Seite mit
+                        Briefkopf.
+                      */}
+                      {["ab", "anzahlungsrechnung", "schlussrechnung"].includes(
+                        d.typ,
+                      ) ? (
+                        <a
+                          href={`/api/pdf/vorgang/${kopf.id}?art=${d.typ}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-semibold text-accent-ink underline"
+                        >
+                          {d.dateiname}
+                        </a>
+                      ) : (
+                        <span className="font-semibold">{d.dateiname}</span>
+                      )}
                       {d.status ? <Pill tone="neutral">{d.status}</Pill> : null}
                     </div>
                     <span className="num text-[11.5px] text-faint">

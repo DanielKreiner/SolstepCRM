@@ -634,3 +634,45 @@ test("12 — Die Bauleitung sieht den Auftragswert, aber keine Rechnungen", asyn
   await page.goto("/offene-posten");
   await expect(page.locator("body")).not.toContainText("Schlussrechnung");
 });
+
+test("13 — Die Belege gibt es als PDF", async ({ page }) => {
+  await login(page, DEMO.gf);
+
+  /*
+   * Vier Belegarten aus einer Route. Geprüft wird, dass jede ein echtes
+   * PDF liefert — ein Beleg, der beim Öffnen einen Fehler zeigt, ist
+   * schlimmer als keiner.
+   */
+  for (const art of ["angebot", "ab", "anzahlungsrechnung", "schlussrechnung"]) {
+    const antwort = await page.request.get(
+      `/api/pdf/vorgang/${zustand.vorgangId}?art=${art}`,
+    );
+    expect(antwort.status(), art).toBe(200);
+    expect(antwort.headers()["content-type"]).toContain("application/pdf");
+
+    const körper = await antwort.body();
+    expect(körper.subarray(0, 4).toString(), art).toBe("%PDF");
+    expect(körper.length, art).toBeGreaterThan(1000);
+  }
+});
+
+test("14 — Die Bauleitung bekommt kein Rechnungs-PDF", async ({ page }) => {
+  await login(page, DEMO.bauleitung);
+
+  /*
+   * Die Route liest mit dem RLS-Client des Anmelders. Ohne Recht auf
+   * Rechnungen liefert die Policy keine Zeile, und die Route antwortet
+   * wie bei „gibt es nicht" — aus dem Unterschied soll sich nichts
+   * ableiten lassen.
+   */
+  const rechnung = await page.request.get(
+    `/api/pdf/vorgang/${zustand.vorgangId}?art=schlussrechnung`,
+  );
+  expect(rechnung.status()).toBe(404);
+
+  // Die Auftragsbestätigung darf sie sehen.
+  const ab = await page.request.get(
+    `/api/pdf/vorgang/${zustand.vorgangId}?art=ab`,
+  );
+  expect(ab.status()).toBe(200);
+});
