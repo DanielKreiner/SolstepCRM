@@ -12,6 +12,7 @@ import {
   type QuoteEvent,
 } from "@/lib/quote-status";
 import { requireMe } from "@/lib/session";
+import { AngebotAnlegen } from "./PositionenEditor";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Angebote" };
@@ -27,7 +28,6 @@ type Row = {
   sent_at: string | null;
   accepted_at: string | null;
   accepted_name: string | null;
-  planner_ref: string | null;
   phase: { label: string; system_key: string | null } | null;
   customer: {
     id: string;
@@ -51,17 +51,19 @@ export default async function AngebotePage({
 }: {
   searchParams: Promise<{ angebot?: string }>;
 }) {
-  await requireMe();
+  const me = await requireMe();
+  const darfSchreiben = me.perms.angebote === "write";
   const supabase = await createClient();
   const heute = viennaDay();
   const { angebot: gewaehlt } = await searchParams;
 
-  const [{ data }, { data: events }, { data: anlagen }] = await Promise.all([
+  const [{ data }, { data: events }, { data: anlagen }, { data: kunden }] =
+    await Promise.all([
     supabase
       .from("quote")
       .select(
         `id, number, status, net_total, cost_total, margin_pct, valid_until,
-         sent_at, accepted_at, accepted_name, planner_ref,
+         sent_at, accepted_at, accepted_name,
          phase:phase_id ( label, system_key ),
          customer:customer_id ( id, name, city, email )`,
       )
@@ -71,6 +73,11 @@ export default async function AngebotePage({
       .select("quote_id, kind, meta_json, created_at")
       .order("created_at", { ascending: false }),
     supabase.from("plant").select("customer_id, kwp, storage_kwh"),
+    supabase
+      .from("customer")
+      .select("id, name, city")
+      .is("deleted_at", null)
+      .order("name"),
   ]);
 
   const rows = (data ?? []) as unknown as Row[];
@@ -169,9 +176,18 @@ export default async function AngebotePage({
         subtitle="Versand, Öffnungen und digitale Annahme"
         actions={
           <>
-            <LinkButton href="/pipelines/vertrieb">Als Board</LinkButton>
-            <LinkButton href="/crm" variant="ghost">
-              Kunden
+            {darfSchreiben ? (
+              <AngebotAnlegen
+                kunden={(kunden ?? []).map((k) => ({
+                  wert: k.id as string,
+                  text: [k.name as string, k.city as string | null]
+                    .filter(Boolean)
+                    .join(" · "),
+                }))}
+              />
+            ) : null}
+            <LinkButton href="/pipelines/vertrieb" variant="ghost">
+              Als Board
             </LinkButton>
           </>
         }

@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { COMPANY_A, DEMO, admin, login } from "./helpers";
 
@@ -7,13 +5,11 @@ import { COMPANY_A, DEMO, admin, login } from "./helpers";
  * Definition of Done Meilenstein 3 (CLAUDE.md Abschnitt 12):
  *   "Annahme legt Auftrag an und erzeugt Aufgabe 'Termin fixieren'"
  *
- * Dazu der Import mit Vorschau-Diff und das PDF, weil beides zum
- * Meilenstein gehört.
+ * Dazu das PDF und der Versand. Der Planungsimport ist entfallen —
+ * Angebote entstehen jetzt von Hand, siehe e2e/angebote.spec.ts.
  */
 
 test.describe.configure({ mode: "serial" });
-
-const FIXTURE = path.join(__dirname, "fixtures", "planung.json");
 
 async function quoteIdOf(number: string): Promise<string> {
   const { data, error } = await admin()
@@ -65,84 +61,9 @@ async function aufraeumen(quoteId: string) {
       sent_at: null,
       net_total: 0,
       cost_total: 0,
-      planner_ref: null,
-      planner_payload: null,
     })
     .eq("id", quoteId);
 }
-
-test("Planungsimport ordnet zu und markiert Unzuordenbares", async ({ page }) => {
-  const NUMMER = "AN-2026-0104";
-  const quoteId = await quoteIdOf(NUMMER);
-  await aufraeumen(quoteId);
-
-  await login(page, DEMO.gf);
-  await page.goto(`/angebote/${quoteId}`);
-
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles(FIXTURE);
-
-  const form = page.locator("form", { hasText: "Planung importieren" });
-  await form.getByRole("button", { name: "Importieren" }).click();
-
-  // 5 von 7 Positionen haben eine bekannte SKU, 2 nicht.
-  await expect(form.getByRole("status")).toContainText("5 Positionen erkannt");
-  await expect(form.getByRole("status")).toContainText("2 nicht zuordenbar");
-
-  const db = admin();
-  const { data: items } = await db
-    .from("quote_item")
-    .select("pos, text, qty, unmatched, article_id")
-    .eq("quote_id", quoteId)
-    .order("pos");
-
-  expect(items).toHaveLength(7);
-  expect((items ?? []).filter((i) => i.unmatched)).toHaveLength(2);
-  // Nicht zuordenbare Positionen gehen nicht verloren.
-  expect(
-    (items ?? []).some((i) => String(i.text).includes("Gerüst")),
-  ).toBe(true);
-
-  // Die Summen kommen aus den Positionen, nicht aus der Planungsdatei.
-  const { data: quote } = await db
-    .from("quote")
-    .select("net_total, cost_total, planner_ref")
-    .eq("id", quoteId)
-    .single();
-
-  /*
-   * Von Hand nachgerechnet, damit der Test die Zahl nicht aus derselben
-   * Quelle bezieht wie der Code:
-   *   68 x 119,00 + 3 x 2740,00 + 1 x 5490,00 + 96 x 29,50 + 420 x 1,85
-   *   + 4800,00 + 2350,00 (beide ohne Artikel, Preis aus der Planung)
-   */
-  expect(quote!.planner_ref).toBe("STEP-2026-88213");
-  expect(Number(quote!.net_total)).toBeCloseTo(32561, 2);
-  //   68 x 78,40 + 3 x 1980,00 + 1 x 4120,00 + 96 x 18,90 + 420 x 0,92
-  expect(Number(quote!.cost_total)).toBeCloseTo(17592, 2);
-
-  await expect(page.getByText("nicht zuordenbar").first()).toBeVisible();
-});
-
-test("Ein zweiter Import verdoppelt die Stückliste nicht", async ({ page }) => {
-  const quoteId = await quoteIdOf("AN-2026-0104");
-
-  await login(page, DEMO.gf);
-  await page.goto(`/angebote/${quoteId}`);
-  await page.locator('input[type="file"]').setInputFiles(FIXTURE);
-  await page
-    .locator("form", { hasText: "Planung importieren" })
-    .getByRole("button", { name: "Importieren" })
-    .click();
-  await expect(page.getByRole("status").first()).toContainText("erkannt");
-
-  const { count } = await admin()
-    .from("quote_item")
-    .select("id", { count: "exact", head: true })
-    .eq("quote_id", quoteId);
-  expect(count).toBe(7);
-});
 
 test("Das PDF wird erzeugt und ist ein PDF", async ({ page }) => {
   const quoteId = await quoteIdOf("AN-2026-0104");
@@ -162,6 +83,13 @@ test("Versand legt einen Ausgangseintrag an, statt direkt zu senden", async ({
 }) => {
   const quoteId = await quoteIdOf("AN-2026-0104");
   await admin().from("mail_outbox").delete().eq("quote_id", quoteId);
+
+  /*
+   * Ein leeres Angebot wird nicht versendet — die Aktion weist es ab. Früher
+   * füllte der Planungsimport die Positionen; seit er entfallen ist, legt
+   * der Test sie selbst an.
+   */
+  await positionAnlegen(quoteId);
 
   await login(page, DEMO.gf);
   await page.goto(`/angebote/${quoteId}`);
@@ -265,10 +193,34 @@ test("Ohne Schreibrecht auf Angebote gibt es keine Aktionen", async ({ page }) =
   ).toHaveCount(0);
 });
 
-// Die Fixture soll gültig bleiben, auch wenn niemand sie liest.
-test("Die Testplanung ist gültiges JSON", () => {
-  const raw = JSON.parse(readFileSync(FIXTURE, "utf8")) as {
-    positionen: unknown[];
-  };
-  expect(raw.positionen).toHaveLength(7);
-});
+/**
+ * Legt dem Angebot eine Position an und zieht die Summen nach — so wie es
+ * der Editor tut. Direkt über die Datenbank, weil dieser Test den Versand
+ * prüft und nicht die Eingabe.
+ */
+async function positionAnlegen(quoteId: string): Promise<void> {
+  const db = admin();
+
+  const { count } = await db
+    .from("quote_item")
+    .select("id", { count: "exact", head: true })
+    .eq("quote_id", quoteId);
+  if ((count ?? 0) > 0) return;
+
+  await db.from("quote_item").insert({
+    company_id: COMPANY_A,
+    quote_id: quoteId,
+    pos: 10,
+    text: "Montage Unterkonstruktion",
+    qty: 12,
+    unit: "h",
+    purchase_price: 42,
+    sale_price: 78,
+    vat_rate: 20,
+  });
+
+  await db
+    .from("quote")
+    .update({ net_total: 12 * 78, cost_total: 12 * 42 })
+    .eq("id", quoteId);
+}

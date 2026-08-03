@@ -22,7 +22,7 @@ export async function GET(
     supabase
       .from("quote")
       .select(
-        `id, number, net_total, valid_until, created_at, planner_payload,
+        `id, number, net_total, valid_until, created_at, customer_id,
          customer:customer_id ( name, contact_person, address, zip, city )`,
       )
       .eq("id", id)
@@ -37,11 +37,26 @@ export async function GET(
     return NextResponse.json({ error: "Nicht gefunden." }, { status: 404 });
   }
 
-  const { data: items } = await supabase
-    .from("quote_item")
-    .select("pos, text, qty, unit, sale_price, vat_rate")
-    .eq("quote_id", id)
-    .order("pos");
+  const [{ data: items }, { data: anlage }] = await Promise.all([
+    supabase
+      .from("quote_item")
+      .select("pos, text, qty, unit, sale_price, vat_rate")
+      .eq("quote_id", id)
+      .order("pos"),
+    /*
+     * Der technische Teil des Angebots kommt aus der Anlage am Kunden.
+     * Früher stand er im Planungs-JSON des Step-Planer-Imports; seit der
+     * entfallen ist, sind die Anlagendaten Stammdaten wie jede andere —
+     * gepflegt im CRM, sichtbar im Kundenportal, hier im PDF.
+     */
+    supabase
+      .from("plant")
+      .select("kwp, storage_kwh, modules, inverter")
+      .eq("customer_id", quote.customer_id as string)
+      .order("kwp", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const customer = quote.customer as unknown as {
     name: string;
@@ -51,10 +66,6 @@ export async function GET(
     city: string | null;
   } | null;
 
-  const planung = quote.planner_payload as
-    | { anlage?: Record<string, number | string | undefined> }
-    | null;
-  const a = planung?.anlage;
 
   const data: QuotePdfData = {
     number: quote.number as string,
@@ -75,14 +86,12 @@ export async function GET(
     },
     validUntil: (quote.valid_until as string | null) ?? null,
     createdAt: quote.created_at as string,
-    plant: a
+    plant: anlage
       ? {
-          kwp: numOrUndef(a.kwp),
-          speicher: numOrUndef(a.speicher_kwh),
-          module: strOrUndef(a.module),
-          wechselrichter: strOrUndef(a.wechselrichter),
-          ertrag: numOrUndef(a.ertrag_kwh_jahr),
-          co2: numOrUndef(a.co2_kg_jahr),
+          kwp: numOrUndef(anlage.kwp),
+          speicher: numOrUndef(anlage.storage_kwh),
+          module: strOrUndef(anlage.modules),
+          wechselrichter: strOrUndef(anlage.inverter),
         }
       : null,
     items: (items ?? []).map((it) => ({

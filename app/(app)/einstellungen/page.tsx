@@ -469,11 +469,6 @@ export default async function EinstellungenPage({
                   }
                 />
                 <IntegrationsZeile
-                  name="Step-Planer"
-                  zweck="Planung importieren und Angebotspositionen erzeugen"
-                  zustand={{ ton: "neutral", text: "Import über die Angebote" }}
-                />
-                <IntegrationsZeile
                   name="Outlook-Kalender"
                   zweck="Termine je Auftrag zweiseitig abgleichen"
                   zustand={{

@@ -2,134 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { matchPositions, plannerPayloadSchema } from "@/lib/planner";
 import { createClient } from "@/lib/supabase/server";
 import { requireMe } from "@/lib/session";
 
 export type QuoteState = { error: string | null; ok: string | null };
 
-/* ------------------------------------------------------------ IMPORT */
-
-const importSchema = z.object({
-  quoteId: z.string().uuid(),
-  payload: z.string().min(2),
-});
-
-export async function importPlanning(
-  _prev: QuoteState,
-  formData: FormData,
-): Promise<QuoteState> {
-  const me = await requireMe();
-  if (me.perms.angebote !== "write") {
-    return { error: "Keine Berechtigung für Angebote.", ok: null };
-  }
-
-  const parsed = importSchema.safeParse({
-    quoteId: formData.get("quoteId"),
-    payload: formData.get("payload"),
-  });
-  if (!parsed.success) return { error: "Eingabe unvollständig.", ok: null };
-
-  let json: unknown;
-  try {
-    json = JSON.parse(parsed.data.payload);
-  } catch {
-    return { error: "Die Datei ist kein gültiges JSON.", ok: null };
-  }
-
-  const payload = plannerPayloadSchema.safeParse(json);
-  if (!payload.success) {
-    const feld = payload.error.issues[0]?.path.join(".") ?? "?";
-    return {
-      error: `Planung passt nicht zum erwarteten Format (${feld}).`,
-      ok: null,
-    };
-  }
-
-  const supabase = await createClient();
-  const [{ data: articles }, { data: aliasRows }] = await Promise.all([
-    supabase
-      .from("article")
-      .select("id, sku, name, unit, purchase_price, sale_price")
-      .eq("active", true),
-    supabase.from("article_alias").select("alias, article_id"),
-  ]);
-
-  const aliases = new Map(
-    (aliasRows ?? []).map((a) => [
-      String(a.alias).trim().toLowerCase(),
-      a.article_id as string,
-    ]),
-  );
-
-  const preview = matchPositions(
-    payload.data,
-    (articles ?? []).map((a) => ({
-      id: a.id as string,
-      sku: a.sku as string,
-      name: a.name as string,
-      unit: a.unit as string,
-      purchase_price: Number(a.purchase_price),
-      sale_price: Number(a.sale_price),
-    })),
-    aliases,
-  );
-
-  // Bestehende Positionen ersetzen — ein zweiter Import derselben Planung
-  // soll nicht die doppelte Stückliste ergeben.
-  await supabase.from("quote_item").delete().eq("quote_id", parsed.data.quoteId);
-
-  const rows = preview.positionen.map((p) => ({
-    company_id: me.companyId,
-    quote_id: parsed.data.quoteId,
-    pos: p.pos,
-    article_id: p.articleId,
-    text: p.bezeichnung,
-    qty: p.menge,
-    unit: p.einheit,
-    purchase_price: p.einkauf,
-    sale_price: p.verkauf,
-    unmatched: p.unmatched,
-  }));
-
-  const { error: insErr } = await supabase.from("quote_item").insert(rows);
-  if (insErr) return { error: `Import fehlgeschlagen: ${insErr.message}`, ok: null };
-
-  const { error: updErr } = await supabase
-    .from("quote")
-    .update({
-      net_total: preview.summeVerkauf,
-      cost_total: preview.summeEinkauf,
-      planner_ref: preview.planungId,
-      planner_payload: payload.data,
-    })
-    .eq("id", parsed.data.quoteId);
-
-  if (updErr) return { error: `Import fehlgeschlagen: ${updErr.message}`, ok: null };
-
-  revalidatePath(`/angebote/${parsed.data.quoteId}`);
-  revalidatePath("/angebote");
-  revalidatePath("/pipelines/vertrieb");
-
-  return {
-    error: null,
-    ok:
-      `${preview.erkannt} Positionen erkannt` +
-      (preview.nichtZuordenbar > 0
-        ? `, ${preview.nichtZuordenbar} nicht zuordenbar (rot markiert)`
-        : ""),
-  };
-}
-
-/* -------------------------------------------------------------- SENDEN */
-
 const sendSchema = z.object({ quoteId: z.string().uuid() });
 
-/**
- * Versand: erzeugt den Ausgangseintrag, setzt Status und protokolliert.
- * Tatsächlich verschickt wird über den Cron `mail-send` aus dem Postfach des
- * Mandanten — hier wird nichts direkt zugestellt (CLAUDE.md 6.1).
- */
 export async function sendQuote(
   _prev: QuoteState,
   formData: FormData,

@@ -4,9 +4,10 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PhasePill } from "@/components/ui/PhasePill";
 import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
 import { date, dateTime, eur } from "@/lib/format";
 import { requireMe } from "@/lib/session";
+import { KpiKarte } from "@/components/ui/KpiKarte";
+import { AngebotKopf, PositionenEditor } from "../PositionenEditor";
 import { QuoteActions } from "./QuoteActions";
 import { createClient } from "@/lib/supabase/server";
 
@@ -44,13 +45,26 @@ export default async function AngebotPage({
 
   if (!quote) notFound();
 
-  const { data: items } = await supabase
-    .from("quote_item")
-    .select(
-      "id, pos, text, qty, unit, purchase_price, sale_price, vat_rate, unmatched, article:article_id ( sku )",
-    )
-    .eq("quote_id", id)
-    .order("pos");
+  const [{ data: items }, { data: kunden }, { data: artikel }] =
+    await Promise.all([
+      supabase
+        .from("quote_item")
+        .select(
+          "id, pos, text, qty, unit, purchase_price, sale_price, vat_rate, article:article_id ( sku )",
+        )
+        .eq("quote_id", id)
+        .order("pos"),
+      supabase
+        .from("customer")
+        .select("id, name, city")
+        .is("deleted_at", null)
+        .order("name"),
+      supabase
+        .from("article")
+        .select("id, sku, name, sale_price")
+        .eq("active", true)
+        .order("name"),
+    ]);
 
   const phase = quote.phase as unknown as {
     label: string;
@@ -97,70 +111,75 @@ export default async function AngebotPage({
       />
 
       <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Angebotssumme" value={eur(netto)} />
-        <Stat label="Kalkulierte Kosten" value={eur(kosten)} />
-        <Stat
-          label="Rohertrag"
-          value={eur(netto - kosten)}
-          tone={netto - kosten <= 0 ? "crit" : "done"}
-          hint={`${Number(quote.margin_pct ?? 0)} %`}
+        <KpiKarte
+          akzent
+          label="Angebotssumme"
+          wert={eur(netto)}
+          pille={`${(items ?? []).length} Positionen`}
+          notiz="netto, exkl. USt."
         />
-        <Stat
+        <KpiKarte
+          label="Kalkulierte Kosten"
+          wert={eur(kosten)}
+          notiz="Summe der Einkaufspreise"
+        />
+        <KpiKarte
+          label="Rohertrag"
+          wert={eur(netto - kosten)}
+          pille={`${Number(quote.margin_pct ?? 0)} %`}
+          ton={netto - kosten <= 0 ? "kritisch" : "gut"}
+          notiz="Verkauf minus Einkauf"
+        />
+        <KpiKarte
           label="Gültig bis"
-          value={date(quote.valid_until as string | null)}
-          tone={
+          wert={date(quote.valid_until as string | null)}
+          ton={
             quote.valid_until &&
             new Date(quote.valid_until as string) < new Date()
-              ? "crit"
-              : undefined
+              ? "kritisch"
+              : "neutral"
           }
+          notiz="danach nachfassen oder verlängern"
         />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr] xl:items-start">
-        <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-          <h2 className="mb-3 text-[15px] font-semibold">
-            Positionen{" "}
-            <span className="num font-normal text-muted">
-              ({(items ?? []).length})
-            </span>
-          </h2>
-          {(items ?? []).length === 0 ? (
-            <p className="text-[13px] text-muted">
-              Noch keine Positionen. Rechts eine Step-Planer-Planung
-              importieren.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {(items ?? []).map((it) => (
-                <li
-                  key={it.id as string}
-                  className="flex flex-wrap items-center gap-3 rounded-input bg-panel px-4 py-3"
-                >
-                  <span className="num w-[110px] shrink-0 text-[12px] text-muted">
-                    {(it.article as unknown as { sku: string } | null)?.sku ?? "—"}
-                  </span>
-                  <span className="min-w-0 flex-1 text-[13px]">
-                    {it.text as string}
-                    {it.unmatched ? (
-                      <Pill tone="crit" className="ml-2">
-                        nicht zuordenbar
-                      </Pill>
-                    ) : null}
-                  </span>
-                  <span className="num text-[12.5px] text-muted">
-                    {Number(it.qty)} {(it.unit as string) ?? ""}
-                  </span>
-                  <span className="num text-[13px] font-semibold">
-                    {eur(Number(it.qty) * Number(it.sale_price))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <PositionenEditor
+          quoteId={quote.id as string}
+          gesperrt={Boolean(quote.accepted_at)}
+          positionen={(items ?? []).map((it) => ({
+            id: it.id as string,
+            pos: it.pos as number,
+            text: it.text as string,
+            qty: Number(it.qty),
+            unit: (it.unit as string) ?? "Stk",
+            purchasePrice: Number(it.purchase_price),
+            salePrice: Number(it.sale_price),
+            vatRate: Number(it.vat_rate),
+          }))}
+          artikel={(artikel ?? []).map((a) => ({
+            wert: a.id as string,
+            text: `${a.sku as string} · ${a.name as string}`,
+          }))}
+        />
 
         <div className="flex flex-col gap-4">
+          {me.perms.angebote === "write" ? (
+            <AngebotKopf
+              quoteId={quote.id as string}
+              nummer={quote.number as string}
+              customerId={(customer?.id as string) ?? ""}
+              validUntil={(quote.valid_until as string | null) ?? null}
+              gesperrt={Boolean(quote.accepted_at)}
+              kunden={(kunden ?? []).map((k) => ({
+                wert: k.id as string,
+                text: [k.name as string, k.city as string | null]
+                  .filter(Boolean)
+                  .join(" · "),
+              }))}
+            />
+          ) : null}
+
           <QuoteActions
             quoteId={quote.id as string}
             accepted={Boolean(quote.accepted_at)}
