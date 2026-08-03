@@ -311,8 +311,38 @@ async function seedPipelines(admin: SupabaseClient, byMail: Map<string, string>)
         p.key === key,
     )?.id as string | undefined;
 
-  await admin.from("service_ticket").delete().eq("company_id", COMPANY_A);
-  await admin.from("quote").delete().eq("company_id", COMPANY_A);
+  await pruefe(
+    admin.from("service_ticket").delete().eq("company_id", COMPANY_A),
+    "service_ticket löschen",
+  );
+
+  /*
+   * Bevor die Angebote fallen, muss die Verknüpfung vom Auftrag gelöst
+   * werden: job.quote_id trägt keine Löschregel, ein aus einem Angebot
+   * entstandener Auftrag blockiert das DELETE also.
+   *
+   * Das ist kein theoretischer Fall — der E2E-Test zu Meilenstein 3 nimmt
+   * ein Angebot an und legt genau so einen Auftrag an. Danach war
+   * `pnpm seed:demo` nicht mehr wiederholbar und brach mit einer doppelten
+   * Angebotsnummer ab. Der Demomandant soll aber "per Klick zurücksetzbar"
+   * sein (CLAUDE.md 12.a).
+   *
+   * Die Aufträge selbst bleiben stehen — sie kommen aus seed.sql und sind
+   * nicht Sache dieses Skripts.
+   */
+  await pruefe(
+    admin
+      .from("job")
+      .update({ quote_id: null })
+      .eq("company_id", COMPANY_A)
+      .not("quote_id", "is", null),
+    "Angebotsverknüpfung der Aufträge lösen",
+  );
+
+  await pruefe(
+    admin.from("quote").delete().eq("company_id", COMPANY_A),
+    "quote löschen",
+  );
 
   const inDays = (n: number) => {
     const d = new Date();
@@ -610,6 +640,22 @@ async function seedPortal(admin: SupabaseClient) {
   if (error) throw error;
 
   console.log(`Portalzugang: /portal/${token}`);
+}
+
+/*
+ * Aufräumschritte dürfen nicht stillschweigend scheitern.
+ *
+ * Vorher wurden die Rückgabewerte der DELETEs verworfen. Ein durch einen
+ * Fremdschlüssel blockiertes Löschen fiel damit nicht auf — der Seed lief
+ * scheinbar durch und brach erst viel später an einer doppelten Nummer ab,
+ * mit einer Meldung, die auf die falsche Fährte führt.
+ */
+async function pruefe(
+  abfrage: PromiseLike<{ error: { message: string } | null }>,
+  was: string,
+): Promise<void> {
+  const { error } = await abfrage;
+  if (error) throw new Error(`${was}: ${error.message}`);
 }
 
 /*
