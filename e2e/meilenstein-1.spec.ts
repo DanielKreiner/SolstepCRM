@@ -24,16 +24,6 @@ async function jobId(number: string): Promise<string> {
   return data.id as string;
 }
 
-async function articleId(sku: string): Promise<string> {
-  const { data, error } = await admin()
-    .from("article")
-    .select("id")
-    .eq("company_id", COMPANY_A)
-    .eq("sku", sku)
-    .single();
-  if (error) throw error;
-  return data.id as string;
-}
 
 test("Zeitbuchung mit Auftragsbezug erhöht die Iststunden des Auftrags", async ({
   page,
@@ -74,7 +64,6 @@ test("Verdrehte Zeiten werden abgewiesen und nicht gespeichert", async ({
   page,
 }) => {
   const AUFTRAG = "A-2026-0042";
-  const id = await jobId(AUFTRAG);
 
   await login(page, DEMO.bauleitung);
   await page.goto("/zeiterfassung");
@@ -100,7 +89,6 @@ test("Materialentnahme senkt den Bestand, Rückgabe hebt sie auf", async ({
 }) => {
   const SKU = "KAB-SOL-6";
   const vorher = await stockOf(SKU);
-  const id = await articleId(SKU);
 
   await login(page, DEMO.lager);
   await page.goto("/lager");
@@ -134,7 +122,6 @@ test("Materialentnahme auf einen Auftrag erhöht dessen Materialkosten", async (
   const db = admin();
   const id = await jobId(AUFTRAG);
   const artSku = "MOD-JAS-440";
-  const artId = await articleId(artSku);
 
   const { data: vor } = await db
     .from("v_job_kpi")
