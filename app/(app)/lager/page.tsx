@@ -71,18 +71,18 @@ export default async function LagerPage({
       .eq("active", true)
       .order("name"),
     supabase
-      .from("job")
+      .from("vorgang")
       .select("id, number, customer:customer_id ( name )")
       .order("number", { ascending: false })
       .limit(100),
     supabase
       .from("stock_reservation")
-      .select("article_id, qty, job:job_id ( number )")
+      .select("article_id, qty, vorgang:vorgang_id ( number )")
       .is("released_at", null),
     supabase
       .from("stock_move")
       .select(
-        "id, qty, kind, note, created_at, article:article_id ( sku, name, unit ), job:job_id ( id, number ), user:user_id ( name )",
+        "id, qty, kind, note, created_at, article:article_id ( sku, name, unit ), vorgang:vorgang_id ( id, number ), user:user_id ( name )",
       )
       .order("created_at", { ascending: false })
       .limit(60),
@@ -418,7 +418,7 @@ type Bewegung = {
   note: string | null;
   created_at: string;
   article: { sku: string; name: string; unit: string } | null;
-  job: { id: string; number: string } | null;
+  vorgang: { id: string; number: string } | null;
   user: { name: string } | null;
 };
 
@@ -443,7 +443,7 @@ function BewegungenTabelle({ bewegungen }: { bewegungen: unknown[] }) {
           ["Artikel", false],
           ["Menge", true],
           ["Art", false],
-          ["Auftrag", false],
+          ["Vorgang", false],
           ["Person", false],
         ]}
       />
@@ -476,10 +476,10 @@ function BewegungenTabelle({ bewegungen }: { bewegungen: unknown[] }) {
             </Pill>
           </div>
           <div className="num px-2 py-3 text-[12.5px]">
-            {b.job ? (
-              <Link href={`/auftraege/${b.job.id}`}>{b.job.number}</Link>
+            {b.vorgang ? (
+              <Link href={`/vorgaenge/${b.vorgang.id}`}>{b.vorgang.number}</Link>
             ) : (
-              <span className="text-faint">ohne Auftrag</span>
+              <span className="text-faint">ohne Vorgang</span>
             )}
           </div>
           <div className="min-w-0 truncate px-2 py-3 text-[12.5px] text-muted">

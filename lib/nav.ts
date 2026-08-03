@@ -22,9 +22,8 @@ export const NAV: NavGroup[] = [
     items: [
       { label: "Cockpit", href: "/cockpit", icon: "cockpit", area: null },
       /*
-       * Der Vorgang ist ab jetzt der Einstieg: ein Objekt von der Anfrage
-       * bis zur Schlussrechnung. Die alten Pipelines stehen daneben,
-       * solange der Umbau läuft.
+       * Der Vorgang ist der Einstieg: ein Objekt von der Anfrage bis zur
+       * Schlussrechnung. Es gibt keinen zweiten Weg mehr daneben.
        */
       { label: "Vorgänge", href: "/vorgaenge", icon: "pipelines", area: "pipelines" },
       { label: "Planung", href: "/planung", icon: "dispo", area: "pipelines" },
@@ -73,30 +72,6 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    /*
-     * Der Altbestand.
-     *
-     * Diese Screens arbeiten auf quote, job und invoice — dem Modell vor
-     * dem Vorgang. Sie stehen hier unten und nicht mehr im Arbeitsbereich,
-     * damit es genau einen offensichtlichen Weg gibt.
-     *
-     * Entfernt sind sie noch nicht, weil an ihnen Dinge hängen, die der
-     * Vorgang noch nicht kann: das Kundenportal zeigt und nimmt Angebote
-     * über quote an, die Crons für Nachfassen, Mahnung und
-     * Buchhaltungsexport lesen quote und invoice, und die Berichte
-     * rechnen über job. Wer sie jetzt löscht, nimmt dem Betrieb diese
-     * Funktionen weg, ohne Ersatz.
-     */
-    title: "Altbestand",
-    items: [
-      { label: "Pipelines", href: "/pipelines/projekte", icon: "pipelines", area: "pipelines" },
-      { label: "Angebote", href: "/angebote", icon: "angebote", area: "angebote" },
-      { label: "Aufträge", href: "/auftraege", icon: "pipelines", area: "pipelines" },
-      { label: "Einsatzplanung", href: "/dispo", icon: "dispo", area: "pipelines" },
-      { label: "Rechnungen", href: "/rechnungen", icon: "rechnungen", area: "rechnungen" },
-    ],
-  },
-  {
     title: "System",
     items: [
       { label: "Berichte", href: "/berichte", icon: "berichte", area: "berichte" },
@@ -105,11 +80,7 @@ export const NAV: NavGroup[] = [
   },
 ];
 
-/** Aufträge hängen an der Projekte-Pipeline, haben aber eigene Routen. */
 export function isActive(href: string, pathname: string): boolean {
-  if (href === "/pipelines/projekte") {
-    return pathname.startsWith("/pipelines") || pathname.startsWith("/auftraege");
-  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

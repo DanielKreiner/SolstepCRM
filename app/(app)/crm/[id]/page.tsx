@@ -3,11 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { PhasePill } from "@/components/ui/PhasePill";
 import { Pill } from "@/components/ui/Pill";
 import { Stat } from "@/components/ui/Stat";
 import { date, dateTime, eur, eurShort } from "@/lib/format";
 import { requireMe } from "@/lib/session";
+import { PHASE_LABEL, type Phase } from "@/lib/vorgang/modell";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Kunde" };
@@ -30,12 +30,12 @@ const AKTIVITAET_FARBE: Record<string, string> = {
   system: "var(--s-done)",
 };
 
-type JobRow = {
+type VorgangRow = {
   id: string;
   number: string;
-  scheduled_from: string | null;
-  value_net: string;
-  phase: { label: string; system_key: string | null } | null;
+  phase: Phase;
+  wert: number;
+  termin: string | null;
 };
 
 export default async function KundePage({
@@ -58,14 +58,19 @@ export default async function KundePage({
 
   if (!customer) notFound();
 
-  const [{ data: jobs }, { data: aktivitaeten }] = await Promise.all([
+  const [
+    { data: vorgaenge },
+    { data: werte },
+    { data: termine },
+    { data: aktivitaeten },
+  ] = await Promise.all([
     supabase
-      .from("job")
-      .select(
-        "id, number, scheduled_from, value_net, phase:phase_id ( label, system_key )",
-      )
+      .from("vorgang")
+      .select("id, number, phase")
       .eq("customer_id", id)
       .order("number", { ascending: false }),
+    supabase.from("v_vorgang_kpi").select("vorgang_id, auftragswert_netto"),
+    supabase.from("vorgang_termin").select("vorgang_id, von").order("von"),
     supabase
       .from("contact_activity")
       .select("id, kind, body, created_at, meta_json")
@@ -74,37 +79,57 @@ export default async function KundePage({
       .limit(50),
   ]);
 
-  const rows = (jobs ?? []) as unknown as JobRow[];
-  const volumen = rows.reduce((s, j) => s + Number(j.value_net), 0);
+  /*
+   * Der Wert kommt aus v_vorgang_kpi, weil authenticated auf
+   * auftragswert_netto kein Spaltenrecht hat (0025). Rollen ohne
+   * Angebotsrecht sehen die Vorgänge des Kunden ohne Beträge.
+   */
+  const wertJe = new Map(
+    (werte ?? []).map((w) => [
+      w.vorgang_id as string,
+      Number(w.auftragswert_netto ?? 0),
+    ]),
+  );
+  const terminJe = new Map<string, string>();
+  for (const t of termine ?? []) {
+    const vid = t.vorgang_id as string;
+    if (!terminJe.has(vid)) terminJe.set(vid, t.von as string);
+  }
 
-  const columns: Column<JobRow>[] = [
+  const rows: VorgangRow[] = (vorgaenge ?? []).map((v) => ({
+    id: v.id as string,
+    number: v.number as string,
+    phase: v.phase as Phase,
+    wert: wertJe.get(v.id as string) ?? 0,
+    termin: terminJe.get(v.id as string) ?? null,
+  }));
+  const volumen = rows.reduce((s, v) => s + v.wert, 0);
+
+  const columns: Column<VorgangRow>[] = [
     {
       key: "nr",
-      header: "Auftrag",
+      header: "Vorgang",
       width: "140px",
-      render: (j) => (
-        <span className="num text-[13px] font-semibold">{j.number}</span>
+      render: (v) => (
+        <span className="num text-[13px] font-semibold">{v.number}</span>
       ),
     },
     {
       key: "phase",
       header: "Phase",
       width: "180px",
-      render: (j) =>
-        j.phase ? (
-          <PhasePill label={j.phase.label} systemKey={j.phase.system_key} />
-        ) : (
-          "—"
-        ),
+      render: (v) => (
+        <Pill tone={v.phase === "verloren" ? "crit" : "doing"}>
+          {PHASE_LABEL[v.phase]}
+        </Pill>
+      ),
     },
     {
       key: "termin",
       header: "Termin",
       width: "130px",
-      render: (j) => (
-        <span className="num text-[12.5px] text-muted">
-          {date(j.scheduled_from)}
-        </span>
+      render: (v) => (
+        <span className="num text-[12.5px] text-muted">{date(v.termin)}</span>
       ),
     },
     {
@@ -112,9 +137,9 @@ export default async function KundePage({
       header: "Wert",
       width: "1fr",
       align: "right",
-      render: (j) => (
+      render: (v) => (
         <span className="num text-[13px] font-semibold">
-          {eurShort(j.value_net)}
+          {eurShort(v.wert)}
         </span>
       ),
     },
@@ -186,13 +211,13 @@ export default async function KundePage({
 
         <div className="flex flex-col gap-4">
           <section>
-            <h2 className="mb-2 text-[15px] font-semibold">Aufträge</h2>
+            <h2 className="mb-2 text-[15px] font-semibold">Vorgänge</h2>
             <DataTable
               columns={columns}
               rows={rows}
-              getKey={(j) => j.id}
-              hrefFor={(j) => `/auftraege/${j.id}`}
-              empty="Für diesen Kunden gibt es noch keinen Auftrag."
+              getKey={(v) => v.id}
+              hrefFor={(v) => `/vorgaenge/${v.id}`}
+              empty="Für diesen Kunden gibt es noch keinen Vorgang."
               compact
             />
           </section>

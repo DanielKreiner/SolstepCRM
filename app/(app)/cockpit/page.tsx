@@ -52,7 +52,7 @@ export default async function CockpitPage() {
           wert={eurShort(c.auftragsbestand)}
           pille={`${c.auftraegeOffen} offen`}
           notiz="exkl. USt."
-          href="/pipelines/projekte"
+          href="/vorgaenge"
         />
         <KpiKarte
           label="Auslastung 4 Wochen"
@@ -67,7 +67,7 @@ export default async function CockpitPage() {
              gelogen. */
           ton="neutral"
           notiz="Kapazität aller aktiven Mitarbeiter"
-          href="/dispo"
+          href="/planung"
         />
         <KpiKarte
           label="Stunden diese Woche"
@@ -91,7 +91,7 @@ export default async function CockpitPage() {
               ? `ältester Rückstand ${c.rechnungen.aeltesteTage} Tage`
               : undefined
           }
-          href="/rechnungen"
+          href="/offene-posten"
         />
       </div>
 
@@ -132,17 +132,17 @@ export default async function CockpitPage() {
               </p>
               <div className="mt-4">
                 <Link
-                  href={`/auftraege/${c.naechsterTermin.jobId}`}
+                  href={`/vorgaenge/${c.naechsterTermin.vorgangId}`}
                   className="inline-flex w-full items-center justify-center rounded-pill bg-[#151210] px-5 py-[13px] text-[13px] font-semibold text-white hover:text-white"
                 >
-                  Zum Auftrag {c.naechsterTermin.nummer}
+                  Zum Vorgang {c.naechsterTermin.nummer}
                 </Link>
               </div>
             </>
           ) : (
             <p className="text-[13px] text-muted">
               Kein Auftrag terminiert. In der{" "}
-              <Link href="/dispo">Einsatzplanung</Link> liegen die
+              <Link href="/planung">Planung</Link> liegen die
               nicht terminierten Aufträge im Pool.
             </p>
           )}
@@ -238,7 +238,7 @@ export default async function CockpitPage() {
               ton="done"
             />
             <p className="num text-[12.5px] text-muted">
-              {c.pipeline.abgeschlossen} von {c.pipeline.gesamt} Aufträgen
+              {c.pipeline.abgeschlossen} von {c.pipeline.gesamt} Vorgängen
               abgeschlossen
             </p>
           </div>
@@ -287,7 +287,7 @@ function PageKopf({ firma, heute }: { firma: string; heute: string }) {
           — ein Knopf, der einen Auftrag aus dem Nichts erzeugt, umginge die
           Kalkulation. Der Weg führt deshalb über das Angebot.
         */}
-        <LinkButton href="/angebote">Angebot erstellen</LinkButton>
+        <LinkButton href="/vorgaenge">Vorgang anlegen</LinkButton>
         <LinkButton href="/berichte" variant="ghost">
           Berichte
         </LinkButton>

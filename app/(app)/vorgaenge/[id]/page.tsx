@@ -7,12 +7,15 @@ import { Stepper } from "@/components/vorgang/Stepper";
 import { Positionen } from "@/components/vorgang/Positionen";
 import { Rechnungen } from "@/components/vorgang/Rechnungen";
 import { Chat } from "@/components/vorgang/Chat";
+import { Portallink } from "@/components/vorgang/Portallink";
 import { Strom } from "@/components/vorgang/Strom";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import { date, eur, num } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { BRAND } from "@/lib/brand";
+import { ausBytea, entschluesseln } from "@/lib/mail/crypto";
 import { chatLesen } from "@/lib/vorgang/chat";
 import { vorgangDetail } from "@/lib/vorgang/daten";
 import {
@@ -65,14 +68,37 @@ export default async function VorgangPage({
   const tage = tageInPhase(kopf.phaseSeit, new Date());
 
   const supabase = await createClient();
-  const [{ data: team }, { data: artikel }] = await Promise.all([
+  const [{ data: team }, { data: artikel }, { data: zugang }] = await Promise.all([
     supabase.from("app_user").select("id, name").eq("active", true).order("name"),
     supabase
       .from("article")
       .select("id, sku, name, sale_price, image_url")
       .eq("active", true)
       .order("name"),
+    supabase
+      .from("portal_access")
+      .select("token_enc")
+      .eq("customer_id", kopf.kundeId)
+      .is("revoked_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+
+  /*
+   * Der Token liegt verschlüsselt. Ältere Zugänge tragen nur einen Hash —
+   * für die gibt es keinen anzeigbaren Link, und das steht dann auch da,
+   * statt einen kaputten auszugeben.
+   */
+  let portalLink: string | null = null;
+  if (zugang?.token_enc) {
+    try {
+      const roh = ausBytea(zugang.token_enc);
+      if (roh) portalLink = `${BRAND.domain}/portal/${entschluesseln(roh)}`;
+    } catch {
+      portalLink = null;
+    }
+  }
 
   /*
    * Der Editor steht nur im Vertrieb offen. Ab „beauftragt" ist der
@@ -157,6 +183,17 @@ export default async function VorgangPage({
               unter="Nummern aus dem Altbestand"
             />
           ) : null}
+        </div>
+
+        {/*
+          Der Portallink gehört hierher: wer mit dem Kunden telefoniert,
+          hat den Vorgang offen und nicht dessen Kundenakte.
+        */}
+        <div className="mt-4 border-t border-line pt-4">
+          <p className="mb-2 text-[11px] font-semibold tracking-[0.1em] text-faint uppercase">
+            Kundenportal
+          </p>
+          <Portallink link={portalLink} vorgangId={kopf.id} />
         </div>
 
         <Stepper phase={kopf.phase} />

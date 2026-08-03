@@ -38,6 +38,7 @@ export async function buildProposal(): Promise<ProposalLine[]> {
   const [
     { data: articles },
     { data: reservations },
+    { data: terminiert },
     { data: openOrders },
     { data: links },
   ] = await Promise.all([
@@ -47,8 +48,12 @@ export async function buildProposal(): Promise<ProposalLine[]> {
       .eq("active", true),
     supabase
       .from("stock_reservation")
-      .select("article_id, qty, job:job_id ( number, scheduled_from )")
+      .select("article_id, qty, vorgang_id, vorgang:vorgang_id ( number )")
       .is("released_at", null),
+    supabase
+      .from("vorgang_termin")
+      .select("vorgang_id")
+      .eq("art", "montage"),
     supabase
       .from("purchase_order_item")
       .select("article_id, qty, received_qty, order:purchase_order_id ( status )"),
@@ -60,15 +65,18 @@ export async function buildProposal(): Promise<ProposalLine[]> {
       .order("price"),
   ]);
 
+  /*
+   * Nur terminierte Vorgänge zählen als Bedarf. Einer ohne Montagetermin
+   * bindet kein Material, sonst bestellt der Betrieb auf Verdacht.
+   */
+  const hatTermin = new Set(
+    (terminiert ?? []).map((t) => t.vorgang_id as string),
+  );
+
   const reserviert = new Map<string, { menge: number; auftraege: Set<string> }>();
   for (const r of reservations ?? []) {
-    const job = r.job as unknown as {
-      number: string;
-      scheduled_from: string | null;
-    } | null;
-    // Nur terminierte Aufträge zählen als Bedarf. Ein Auftrag ohne Termin
-    // bindet kein Material, sonst bestellt der Betrieb auf Verdacht.
-    if (!job?.scheduled_from) continue;
+    const vorgang = r.vorgang as unknown as { number: string } | null;
+    if (!vorgang || !hatTermin.has(r.vorgang_id as string)) continue;
 
     const key = r.article_id as string;
     if (!reserviert.has(key)) {
@@ -76,7 +84,7 @@ export async function buildProposal(): Promise<ProposalLine[]> {
     }
     const eintrag = reserviert.get(key)!;
     eintrag.menge += Number(r.qty);
-    eintrag.auftraege.add(job.number);
+    eintrag.auftraege.add(vorgang.number);
   }
 
   const bestellt = new Map<string, number>();

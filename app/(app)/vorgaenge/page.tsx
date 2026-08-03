@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Pill } from "@/components/ui/Pill";
 import { date, eurShort, num } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -18,6 +17,37 @@ import {
 import { VorgangAnlegen } from "./VorgangForms";
 
 export const metadata: Metadata = { title: "Vorgänge" };
+
+/*
+ * Ein Farbstrich je Spalte, wie in der Vorlage. Die Farbe trägt keine
+ * Bedeutung für sich — sie hilft nur, die Spalte beim Scrollen
+ * wiederzufinden. Statusaussagen macht die Pille auf der Karte
+ * (CLAUDE.md Abschnitt 9: nie Farbe allein).
+ */
+const PHASE_FARBE: Record<Phase, string> = {
+  anfrage: "var(--s-new)",
+  aufnahme: "var(--s-doing)",
+  angebot: "var(--s-waiting)",
+  beauftragt: "var(--accent)",
+  montage: "var(--s-doing)",
+  abschluss: "var(--s-done)",
+  verloren: "var(--s-crit)",
+};
+
+const AVATAR_FARBEN = [
+  "var(--s-doing)",
+  "var(--s-waiting)",
+  "var(--s-done)",
+  "var(--accent-to)",
+  "var(--s-new)",
+];
+
+/* Stabil über die Zeichensumme: dieselbe Person, immer dieselbe Farbe. */
+function avatarFarbe(name: string): string {
+  let summe = 0;
+  for (const z of name) summe += z.codePointAt(0) ?? 0;
+  return AVATAR_FARBEN[summe % AVATAR_FARBEN.length] as string;
+}
 
 /**
  * Das Board: sechs Spalten, eine je Phase.
@@ -104,162 +134,225 @@ export default async function VorgaengePage({
   const verloren = alle.filter((v) => v.phase === "verloren");
   const jetzt = new Date();
 
+  const pipeline = offen.reduce((a, v) => a + (wertJe.get(v.id) ?? 0), 0);
+
   return (
     <>
       <PageHeader
         title="Vorgänge"
-        subtitle="Ein Objekt von der Anfrage bis zur Schlussrechnung"
+        subtitle={[
+          "Ein Objekt von der Anfrage bis zur Schlussrechnung",
+          `${offen.length} offen`,
+          darfBetraege && pipeline > 0 ? `${eurShort(pipeline)} Pipeline` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
         actions={
-          darfSchreiben ? (
-            <VorgangAnlegen
-              kunden={(kunden ?? []).map((k) => ({
-                wert: k.id as string,
-                text: k.name as string,
-                ...(k.city ? { zusatz: k.city as string } : {}),
-              }))}
-            />
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            {/*
+              Offen und Verloren als Segment, nicht als zwei Knöpfe: es
+              sind zwei Sichten auf dieselbe Liste, keine zwei Aktionen.
+            */}
+            <nav className="flex gap-[3px] rounded-pill bg-surface p-1 shadow-soft">
+              {(
+                [
+                  ["offen", "Offen", offen.length],
+                  ["verloren", "Verloren", verloren.length],
+                ] as const
+              ).map(([wert, label, anzahl]) => (
+                <Link
+                  key={wert}
+                  href={`/vorgaenge?tab=${wert}`}
+                  aria-current={tab === wert ? "page" : undefined}
+                  className={[
+                    "rounded-pill px-[17px] py-[10px] text-[13.5px] transition-colors",
+                    tab === wert
+                      ? "bg-sunk font-semibold text-ink hover:text-ink"
+                      : "text-muted hover:text-ink",
+                  ].join(" ")}
+                >
+                  {label}{" "}
+                  <span className="num text-[11px] opacity-60">{anzahl}</span>
+                </Link>
+              ))}
+            </nav>
+            {darfSchreiben ? (
+              <VorgangAnlegen
+                kunden={(kunden ?? []).map((k) => ({
+                  wert: k.id as string,
+                  text: k.name as string,
+                  ...(k.city ? { zusatz: k.city as string } : {}),
+                }))}
+              />
+            ) : null}
+          </div>
         }
       />
-
-      <div className="mb-4 flex flex-wrap gap-2">
-        {[
-          ["offen", `Board · ${offen.length}`],
-          ["verloren", `Verloren · ${verloren.length}`],
-        ].map(([wert, label]) => (
-          <Link
-            key={wert}
-            href={`/vorgaenge?tab=${wert}`}
-            className={[
-              "rounded-pill px-4 py-[9px] text-[12.5px] font-medium",
-              tab === wert
-                ? "bg-ink text-app hover:text-app"
-                : "border border-line bg-surface text-ink hover:bg-sunk hover:text-ink",
-            ].join(" ")}
-          >
-            {label}
-          </Link>
-        ))}
-      </div>
 
       {tab === "verloren" ? (
         <VerlorenListe zeilen={verloren} darfBetraege={darfBetraege} wertJe={wertJe} />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-3 2xl:grid-cols-6">
-          {PHASEN.map((p, i) => {
-            const karten = offen.filter((v) => v.phase === p.key);
-            const summe = karten.reduce(
-              (a, v) => a + (wertJe.get(v.id) ?? 0),
-              0,
-            );
+        /*
+         * Alle Phasen nebeneinander, waagrecht scrollbar. Maße aus
+         * design/solstep-vorgang.html: Spalte 276px, Abstand 14px,
+         * Kopfkarte und Karte je 18px Radius.
+         *
+         * Am Telefon untereinander: eine 276px-Spalte auf 375px Breite
+         * zeigt anderthalb Phasen, und man wischt sich durch sechs.
+         */
+        <div className="-mx-1 px-1 pb-3 sm:overflow-x-auto">
+          <div className="flex flex-col gap-[14px] sm:flex-row sm:items-start">
+            {PHASEN.map((p, i) => {
+              const karten = offen.filter((v) => v.phase === p.key);
+              const summe = karten.reduce(
+                (a, v) => a + (wertJe.get(v.id) ?? 0),
+                0,
+              );
 
-            return (
-              <section
-                key={p.key}
-                className="rounded-[20px] bg-panel p-3"
-                aria-label={p.label}
-              >
-                <div className="mb-3 px-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="num text-[10.5px] font-semibold text-faint">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <h2 className="text-[13.5px] font-semibold">{p.label}</h2>
-                    <span className="num ml-auto rounded-pill bg-surface px-[8px] py-[2px] text-[11px] text-muted">
-                      {karten.length}
-                    </span>
-                  </div>
-                  <p className="num mt-[2px] text-[11.5px] text-faint">
-                    {darfBetraege
-                      ? summe > 0
-                        ? eurShort(summe)
-                        : "—"
-                      : `${karten.length} Vorgänge`}
-                  </p>
-                </div>
+              return (
+                <section
+                  key={p.key}
+                  className="flex w-full shrink-0 flex-col gap-3 sm:w-[276px]"
+                  aria-label={p.label}
+                >
+                  <header className="rounded-[18px] bg-surface px-4 py-[14px] shadow-soft">
+                    <span
+                      aria-hidden
+                      className="block h-[4px] w-[44px] rounded-pill"
+                      style={{ background: PHASE_FARBE[p.key] }}
+                    />
+                    <div className="mt-[11px] flex items-center gap-2">
+                      <span className="num text-[11px] text-faint">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <h2 className="flex-1 text-[14.5px] font-semibold tracking-[-0.01em]">
+                        {p.label}
+                      </h2>
+                      <span className="num rounded-pill bg-panel px-[9px] py-[2px] text-[11.5px] text-muted">
+                        {karten.length}
+                      </span>
+                    </div>
+                    <p className="num mt-1 text-[11.5px] text-faint">
+                      {darfBetraege
+                        ? summe > 0
+                          ? eurShort(summe)
+                          : "—"
+                        : `${karten.length} Vorgänge`}
+                    </p>
+                  </header>
 
-                {karten.length === 0 ? (
-                  <p className="px-1 py-2 text-[11.5px] text-faint">leer</p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {karten.map((v) => {
-                      const tage = tageInPhase(v.phase_seit, jetzt);
-                      const alt = tage > STALE_SCHWELLE_STANDARD;
-                      const g = gateJe.get(v.id);
-                      const wert = wertJe.get(v.id) ?? null;
+                  {karten.map((v) => {
+                    const tage = tageInPhase(v.phase_seit, jetzt);
+                    const alt = tage > STALE_SCHWELLE_STANDARD;
+                    const g = gateJe.get(v.id);
+                    const wert = wertJe.get(v.id) ?? null;
 
-                      return (
-                        <li key={v.id}>
-                          <Link
-                            href={`/vorgaenge/${v.id}`}
-                            className="block rounded-card bg-surface p-3 shadow-soft transition-colors hover:bg-sunk hover:text-ink"
+                    return (
+                      <Link
+                        key={v.id}
+                        href={`/vorgaenge/${v.id}`}
+                        className="flex flex-col gap-[9px] rounded-[18px] bg-surface p-[15px] text-ink shadow-soft transition-colors hover:bg-sunk hover:text-ink"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="num rounded-pill bg-panel px-[9px] py-[3px] text-[11px] text-muted">
+                            {v.number}
+                          </span>
+                          <span
+                            className={[
+                              "num rounded-pill px-[9px] py-[3px] text-[11px]",
+                              alt
+                                ? "bg-s-crit/10 text-s-crit"
+                                : "bg-panel text-faint",
+                            ].join(" ")}
+                            title={
+                              alt
+                                ? `Seit ${tage} Tagen ohne Phasenwechsel`
+                                : "Tage in dieser Phase"
+                            }
                           >
-                            <div className="flex items-baseline gap-2">
-                              <span className="num text-[11.5px] font-semibold">
-                                {v.number}
-                              </span>
-                              <span
-                                className={[
-                                  "num ml-auto rounded-pill px-[7px] py-px text-[10px]",
-                                  alt
-                                    ? "bg-s-crit/10 text-s-crit"
-                                    : "bg-panel text-faint",
-                                ].join(" ")}
-                                title={
-                                  alt
-                                    ? `Seit ${tage} Tagen ohne Phasenwechsel`
-                                    : "Tage in dieser Phase"
-                                }
-                              >
-                                {tage} T
-                              </span>
-                            </div>
+                            {tage} T
+                          </span>
+                        </div>
 
-                            <p className="mt-[3px] truncate text-[13px] font-medium">
-                              {v.customer?.name ?? "—"}
-                            </p>
-                            <p className="num truncate text-[11px] text-faint">
-                              {[v.ort, v.kwp ? num(v.kwp, "kWp") : null]
-                                .filter(Boolean)
-                                .join(" · ") || "—"}
-                            </p>
+                        <p className="truncate text-[15.5px] leading-[1.25] font-semibold tracking-[-0.015em]">
+                          {v.customer?.name ?? "—"}
+                        </p>
+                        <p className="truncate text-[12.5px] text-muted">
+                          {v.ort ?? "—"}
+                          {v.kwp ? (
+                            <>
+                              {" · "}
+                              <span className="num">{num(v.kwp, "kWp")}</span>
+                            </>
+                          ) : null}
+                        </p>
 
-                            <div className="mt-2 flex flex-wrap items-center gap-[6px]">
-                              {darfBetraege && wert !== null ? (
-                                <span className="num text-[12px] font-semibold">
-                                  {eurShort(wert)}
-                                </span>
-                              ) : null}
-                              {/*
-                                Die Mini-Ampel steht nur in der Phase, in
-                                der Gates laufen. Anderswo wäre sie eine
-                                Zahl ohne Bedeutung.
-                              */}
-                              {p.key === "beauftragt" && g ? (
-                                <span className="num rounded-pill bg-s-warn/14 px-[7px] py-px text-[10px] font-semibold text-accent-ink">
-                                  {g.durch}/{g.gesamt}
-                                </span>
-                              ) : null}
-                              {v.zustaendig ? (
-                                <span className="ml-auto text-[10.5px] text-faint">
-                                  {kuerzel(v.zustaendig.name)}
-                                </span>
-                              ) : null}
-                            </div>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </section>
-            );
-          })}
+                        <div className="mt-[2px] flex items-center gap-[9px]">
+                          {v.zustaendig ? (
+                            <span
+                              aria-hidden
+                              title={v.zustaendig.name}
+                              className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-pill text-[10px] font-semibold text-white"
+                              style={{
+                                background: avatarFarbe(v.zustaendig.name),
+                              }}
+                            >
+                              {kuerzel(v.zustaendig.name)}
+                            </span>
+                          ) : null}
+                          <span className="num flex-1 text-[12px] font-medium">
+                            {darfBetraege && wert !== null ? eurShort(wert) : "—"}
+                          </span>
+                          {/*
+                            Die Mini-Ampel steht nur in der Phase, in der
+                            Gates laufen. Anderswo wäre sie eine Zahl ohne
+                            Bedeutung.
+                          */}
+                          {p.key === "beauftragt" && g ? (
+                            <span
+                              className={[
+                                "num rounded-pill px-[9px] py-[3px] text-[11px]",
+                                g.durch === g.gesamt
+                                  ? "bg-s-done/14 text-s-done"
+                                  : "bg-s-warn/14 text-accent-ink",
+                              ].join(" ")}
+                              title="Erledigte Gates"
+                            >
+                              {g.durch}/{g.gesamt}
+                            </span>
+                          ) : null}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </section>
+              );
+            })}
+          </div>
         </div>
       )}
     </>
   );
 }
+
+/*
+ * Verlorene Vorgänge als Tabelle, nicht als Karten (Vorlage).
+ *
+ * Sie stehen hier zum Auswerten, nicht zum Bearbeiten — dafür ist eine
+ * dichte Zeile die richtige Form: sechs Spalten, 56px hoch, der Grund
+ * als Pille mit Fläche und Text.
+ */
+const VERLOREN_SPALTEN = "130px 1.4fr 1fr 130px 1fr 140px";
+
+/* Farbe je Grund, wie in der Vorlage. Die Pille trägt zusätzlich Text. */
+const GRUND_TON: Record<string, string> = {
+  preis: "var(--s-warn)",
+  konkurrenz: "var(--s-crit)",
+  keine_rueckmeldung: "var(--s-new)",
+  nicht_machbar: "var(--s-waiting)",
+  kunde_verschoben: "var(--s-doing)",
+  sonstiges: "var(--text-3)",
+};
 
 function VerlorenListe({
   zeilen,
@@ -287,41 +380,65 @@ function VerlorenListe({
   }
 
   return (
-    <ul className="flex flex-col gap-[10px]">
-      {zeilen.map((v) => {
-        const wert = wertJe.get(v.id) ?? null;
-        return (
-          <li key={v.id}>
+    <div className="overflow-x-auto rounded-[20px] bg-surface shadow-soft">
+      <div className="min-w-[860px]">
+        <div
+          className="grid border-b border-line px-5 text-[11px] tracking-[0.07em] text-faint uppercase"
+          style={{ gridTemplateColumns: VERLOREN_SPALTEN }}
+        >
+          <div className="px-[6px] py-[14px]">Nummer</div>
+          <div className="px-[6px] py-[14px]">Kunde</div>
+          <div className="px-[6px] py-[14px]">Ort · Anlage</div>
+          <div className="px-[6px] py-[14px] text-right">Wert</div>
+          <div className="px-[6px] py-[14px]">Grund</div>
+          <div className="px-[6px] py-[14px]">Verloren am</div>
+        </div>
+
+        {zeilen.map((v) => {
+          const wert = wertJe.get(v.id) ?? null;
+          const grund = v.verloren_grund ?? "sonstiges";
+          const ton = GRUND_TON[grund] ?? "var(--text-3)";
+
+          return (
             <Link
+              key={v.id}
               href={`/vorgaenge/${v.id}`}
-              className="block rounded-[20px] bg-surface p-5 shadow-soft transition-colors hover:bg-panel"
+              className="grid min-h-[56px] items-center border-b border-line px-5 text-ink transition-colors last:border-b-0 hover:bg-panel hover:text-ink"
+              style={{ gridTemplateColumns: VERLOREN_SPALTEN }}
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="num text-[13px] font-semibold">{v.number}</span>
-                <Pill tone="crit">
-                  {v.verloren_grund
-                    ? (VERLOREN_GRUND_LABEL[v.verloren_grund as VerlorenGrund] ??
-                      v.verloren_grund)
-                    : "ohne Grund"}
-                </Pill>
-                <span className="num ml-auto text-[11.5px] text-faint">
-                  {v.verloren_am ? date(v.verloren_am) : ""}
-                </span>
+              <div className="num px-[6px] py-2 text-[12.5px] text-muted">
+                {v.number}
               </div>
-              <p className="mt-2 text-[14px] font-medium">
+              <div className="px-[6px] py-2 text-[14px] font-medium">
                 {v.customer?.name ?? "—"}
-              </p>
-              <p className="num text-[12px] text-muted">
+              </div>
+              <div className="px-[6px] py-2 text-[13px] text-muted">
                 {[v.ort, v.kwp ? num(v.kwp, "kWp") : null]
                   .filter(Boolean)
-                  .join(" · ")}
-                {darfBetraege && wert !== null ? ` · ${eurShort(wert)}` : ""}
-              </p>
+                  .join(" · ") || "—"}
+              </div>
+              <div className="num px-[6px] py-2 text-right text-[12.5px]">
+                {darfBetraege && wert !== null ? eurShort(wert) : "—"}
+              </div>
+              <div className="px-[6px] py-2">
+                <span
+                  className="rounded-pill px-[11px] py-[4px] text-[11.5px]"
+                  style={{
+                    background: `color-mix(in srgb, ${ton} 14%, transparent)`,
+                    color: ton,
+                  }}
+                >
+                  {VERLOREN_GRUND_LABEL[grund as VerlorenGrund] ?? grund}
+                </span>
+              </div>
+              <div className="num px-[6px] py-2 text-[12.5px] text-muted">
+                {v.verloren_am ? date(v.verloren_am) : "—"}
+              </div>
             </Link>
-          </li>
-        );
-      })}
-    </ul>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

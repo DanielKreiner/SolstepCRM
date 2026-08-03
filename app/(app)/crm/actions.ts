@@ -91,7 +91,7 @@ export async function createCustomer(
   if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
 
   revalidatePath("/crm");
-  revalidatePath("/pipelines/vertrieb");
+  revalidatePath("/vorgaenge");
   return { error: null, ok: `${data.name as string} angelegt.` };
 }
 
@@ -157,19 +157,16 @@ export async function archiveCustomer(
   const supabase = await createClient();
 
   const { data: offene } = await supabase
-    .from("job")
-    .select("number, phase:phase_id ( system_key )")
-    .eq("customer_id", id.data);
+    .from("vorgang")
+    .select("number, phase")
+    .eq("customer_id", id.data)
+    .not("phase", "in", "(abschluss,verloren)");
 
-  const laufend = (offene ?? []).filter(
-    (j) =>
-      (j.phase as unknown as { system_key: string | null } | null)
-        ?.system_key !== "closed",
-  );
+  const laufend = offene ?? [];
 
   if (laufend.length > 0) {
     return {
-      error: `Es laufen noch ${laufend.length} Aufträge (${laufend
+      error: `Es laufen noch ${laufend.length} Vorgänge (${laufend
         .map((j) => j.number as string)
         .slice(0, 3)
         .join(", ")}). Erst abschließen, dann archivieren.`,
@@ -265,7 +262,7 @@ export async function saveAnlage(
   if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
 
   revalidatePath("/crm");
-  revalidatePath("/pipelines/projekte");
+  revalidatePath("/vorgaenge");
   return { error: null, ok: "Anlage gespeichert." };
 }
 
@@ -280,19 +277,6 @@ export async function deleteAnlage(
   if (!id.success) return { error: "Anlage fehlt.", ok: null };
 
   const supabase = await createClient();
-
-  // job.plant_id steht auf restrict — die Meldung soll erklären statt zu scheitern.
-  const { count } = await supabase
-    .from("job")
-    .select("id", { count: "exact", head: true })
-    .eq("plant_id", id.data);
-
-  if ((count ?? 0) > 0) {
-    return {
-      error: `An dieser Anlage hängen ${count} Aufträge. Erst dort die Zuordnung lösen.`,
-      ok: null,
-    };
-  }
 
   const { error } = await supabase.from("plant").delete().eq("id", id.data);
   if (error) return { error: `Löschen fehlgeschlagen: ${error.message}`, ok: null };

@@ -58,23 +58,60 @@ export async function stockOf(sku: string): Promise<number> {
   return Number(data.stock);
 }
 
-export async function jobHours(number: string): Promise<number> {
-  const db = admin();
-  const { data: job, error: e1 } = await db
-    .from("job")
-    .select("id")
+/**
+ * Einen Vorgang über seine frühere Auftragsnummer finden.
+ *
+ * Die Tests hingen an Nummern wie A-2026-0042 aus dem Seed. Mit dem
+ * Umbau trägt jeder Vorgang eine eigene Nummer, die alte steht in
+ * alt_nummern. Der Umweg hält die Tests unabhängig davon, ob der Bestand
+ * übernommen oder frisch geseedet wurde.
+ */
+export async function vorgangId(altNummer: string): Promise<string> {
+  const { data, error } = await admin()
+    .from("vorgang")
+    .select("id, number, alt_nummern")
     .eq("company_id", COMPANY_A)
-    .eq("number", number)
+    .or(`number.eq.${altNummer},alt_nummern.like.%${altNummer}%`)
+    .limit(1)
     .single();
-  if (e1) throw e1;
+  if (error) throw new Error(`Vorgang ${altNummer} nicht gefunden: ${error.message}`);
+  return data.id as string;
+}
+
+export async function vorgangNummer(altNummer: string): Promise<string> {
+  const { data, error } = await admin()
+    .from("vorgang")
+    .select("number, alt_nummern")
+    .eq("company_id", COMPANY_A)
+    .or(`number.eq.${altNummer},alt_nummern.like.%${altNummer}%`)
+    .limit(1)
+    .single();
+  if (error) throw new Error(`Vorgang ${altNummer} nicht gefunden: ${error.message}`);
+  return data.number as string;
+}
+
+/**
+ * Iststunden eines Vorgangs.
+ *
+ * Direkt aus time_entry und nicht über v_vorgang_kpi: die View filtert
+ * auf current_company_id() und can(). Der Service-Role-Client hat kein
+ * JWT, bekäme also nichts zurück — die View ist für angemeldete Rollen
+ * gebaut, nicht für Kontrollmessungen.
+ */
+export async function vorgangHours(altNummer: string): Promise<number> {
+  const db = admin();
+  const id = await vorgangId(altNummer);
 
   const { data, error } = await db
-    .from("v_job_kpi")
-    .select("hours_actual")
-    .eq("job_id", job.id)
-    .single();
+    .from("time_entry")
+    .select("duration_min, kind, status")
+    .eq("vorgang_id", id)
+    .in("kind", ["work", "travel"])
+    .in("status", ["booked", "approved"]);
   if (error) throw error;
-  return Number(data.hours_actual);
+
+  const min = (data ?? []).reduce((s, e) => s + Number(e.duration_min ?? 0), 0);
+  return min / 60;
 }
 
 /**

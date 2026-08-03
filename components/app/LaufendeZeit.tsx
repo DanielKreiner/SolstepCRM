@@ -71,7 +71,7 @@ export function LaufendeZeit({
           </Link>
         ) : auftragId ? (
           <Link
-            href={`/auftraege/${auftragId}`}
+            href={`/vorgaenge/${auftragId}`}
             className="rounded-pill bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-[15px] py-[9px] text-[12.5px] font-semibold text-white hover:text-white"
           >
             Zum Auftrag

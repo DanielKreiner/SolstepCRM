@@ -23,15 +23,13 @@ export type Eingang = {
 
 export type Zuordnung = {
   customerId: string | null;
-  quoteId: string | null;
-  jobId: string | null;
+  vorgangId: string | null;
   grund: "token" | "reply_to" | "address" | null;
 };
 
 const LEER: Zuordnung = {
   customerId: null,
-  quoteId: null,
-  jobId: null,
+  vorgangId: null,
   grund: null,
 };
 
@@ -52,17 +50,15 @@ export async function ordneZu(
   if (token) {
     const { data } = await admin
       .from("mail_outbox")
-      .select("quote_id, job_id, invoice_id")
+      .select("vorgang_id")
       .eq("company_id", companyId)
       .eq("track_token", token)
       .maybeSingle();
 
     if (data) {
-      const kunde = await kundeZu(admin, companyId, data);
       return {
-        customerId: kunde,
-        quoteId: (data.quote_id as string | null) ?? null,
-        jobId: (data.job_id as string | null) ?? null,
+        customerId: await kundeZu(admin, data.vorgang_id as string | null),
+        vorgangId: (data.vorgang_id as string | null) ?? null,
         grund: "token",
       };
     }
@@ -72,7 +68,7 @@ export async function ordneZu(
   if (mail.inReplyTo) {
     const { data } = await admin
       .from("mail_message")
-      .select("customer_id, quote_id, job_id")
+      .select("customer_id, vorgang_id")
       .eq("company_id", companyId)
       .eq("message_id", mail.inReplyTo)
       .maybeSingle();
@@ -80,8 +76,7 @@ export async function ordneZu(
     if (data) {
       return {
         customerId: (data.customer_id as string | null) ?? null,
-        quoteId: (data.quote_id as string | null) ?? null,
-        jobId: (data.job_id as string | null) ?? null,
+        vorgangId: (data.vorgang_id as string | null) ?? null,
         grund: "reply_to",
       };
     }
@@ -100,8 +95,7 @@ export async function ordneZu(
     if ((data ?? []).length === 1) {
       return {
         customerId: data![0]!.id as string,
-        quoteId: null,
-        jobId: null,
+        vorgangId: null,
         grund: "address",
       };
     }
@@ -110,36 +104,16 @@ export async function ordneZu(
   return LEER;
 }
 
+/** Der Kunde hinter einem Vorgang — für die Zuordnung über den Token. */
 async function kundeZu(
   admin: SupabaseClient,
-  companyId: string,
-  bezug: { quote_id?: unknown; job_id?: unknown; invoice_id?: unknown },
+  vorgangId: string | null,
 ): Promise<string | null> {
-  if (bezug.quote_id) {
-    const { data } = await admin
-      .from("quote")
-      .select("customer_id")
-      .eq("id", bezug.quote_id as string)
-      .maybeSingle();
-    if (data) return data.customer_id as string;
-  }
-  if (bezug.job_id) {
-    const { data } = await admin
-      .from("job")
-      .select("customer_id")
-      .eq("id", bezug.job_id as string)
-      .maybeSingle();
-    if (data) return data.customer_id as string;
-  }
-  if (bezug.invoice_id) {
-    const { data } = await admin
-      .from("invoice")
-      .select("job:job_id ( customer_id )")
-      .eq("id", bezug.invoice_id as string)
-      .maybeSingle();
-    const job = data?.job as unknown as { customer_id: string } | null;
-    if (job) return job.customer_id;
-  }
-  void companyId;
-  return null;
+  if (!vorgangId) return null;
+  const { data } = await admin
+    .from("vorgang")
+    .select("customer_id")
+    .eq("id", vorgangId)
+    .maybeSingle();
+  return (data?.customer_id as string | null) ?? null;
 }

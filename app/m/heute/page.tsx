@@ -8,20 +8,57 @@ import { endOfViennaDay, startOfViennaDay } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Heute" };
 
+type Zeile = {
+  termin: {
+    id: string;
+    art: string;
+    von: string;
+    bis: string;
+    notiz: string | null;
+    vorgang: {
+      id: string;
+      number: string;
+      phase: string;
+      adresse: string | null;
+      plz: string | null;
+      ort: string | null;
+      customer: { name: string } | null;
+    } | null;
+  } | null;
+};
+
+const ART: Record<string, string> = {
+  aufnahme: "Aufnahme",
+  montage: "Montage",
+  service: "Service",
+};
+
+/**
+ * Der Tag der Montage.
+ *
+ * Gezeigt werden die eigenen Termine, nicht alle des Betriebs. Vorher
+ * stand hier jede Baustelle, die heute läuft — auf einem Handy, das
+ * jemand um 6:30 im Auto aufmacht, ist das eine Liste, in der die eigene
+ * Zeile untergeht.
+ */
 export default async function HeutePage() {
   const me = await requireMe();
   const supabase = await createClient();
   const heute = viennaDay();
 
-  const [{ data: jobs }, { data: zeiten }] = await Promise.all([
+  const [{ data: zuordnungen }, { data: zeiten }] = await Promise.all([
     supabase
-      .from("job")
+      .from("vorgang_termin_person")
       .select(
-        "id, number, address, zip, city, next_step, scheduled_from, scheduled_to, customer:customer_id ( name ), phase:phase_id ( label, system_key )",
+        `termin:termin_id (
+           id, art, von, bis, notiz,
+           vorgang:vorgang_id (
+             id, number, phase, adresse, plz, ort,
+             customer:customer_id ( name )
+           )
+         )`,
       )
-      .lte("scheduled_from", endOfViennaDay(heute).toISOString())
-      .gte("scheduled_to", startOfViennaDay(heute).toISOString())
-      .order("scheduled_from"),
+      .eq("user_id", me.id),
     supabase
       .from("time_entry")
       .select("id, kind, started_at, ended_at, duration_min, status")
@@ -30,6 +67,15 @@ export default async function HeutePage() {
       .lt("started_at", endOfViennaDay(heute).toISOString())
       .order("started_at"),
   ]);
+
+  const von = startOfViennaDay(heute).toISOString();
+  const bis = endOfViennaDay(heute).toISOString();
+
+  const termine = ((zuordnungen ?? []) as unknown as Zeile[])
+    .map((z) => z.termin)
+    .filter((t): t is NonNullable<Zeile["termin"]> => t !== null && t.vorgang !== null)
+    .filter((t) => t.von <= bis && t.bis >= von)
+    .sort((a, b) => (a.von < b.von ? -1 : 1));
 
   const gebucht = (zeiten ?? [])
     .filter((z) => z.kind !== "break")
@@ -46,42 +92,44 @@ export default async function HeutePage() {
       </div>
 
       <h2 className="mb-2 text-[15px] font-semibold">Meine Baustellen</h2>
-      {(jobs ?? []).length === 0 ? (
+      {termine.length === 0 ? (
         <p className="rounded-[20px] bg-surface p-5 text-[13px] text-muted shadow-soft">
-          Für heute ist kein Auftrag terminiert.
+          Für heute ist nichts für dich eingeteilt.
         </p>
       ) : (
         <ul className="flex flex-col gap-3">
-          {(jobs ?? []).map((j) => (
-            <li key={j.id as string}>
-              <Link
-                href={`/m/auftrag/${j.id as string}`}
-                className="block rounded-[20px] bg-surface p-5 text-ink shadow-soft"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="num text-[13px] font-semibold">
-                    {j.number as string}
-                  </span>
-                  {j.phase ? (
-                    <Pill tone="doing">
-                      {(j.phase as unknown as { label: string }).label}
-                    </Pill>
+          {termine.map((t) => {
+            const v = t.vorgang!;
+            return (
+              <li key={t.id}>
+                <Link
+                  href={`/m/auftrag/${v.id}`}
+                  className="block rounded-[20px] bg-surface p-5 text-ink shadow-soft"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="num text-[13px] font-semibold">
+                      {v.number}
+                    </span>
+                    <Pill tone="doing">{ART[t.art] ?? t.art}</Pill>
+                    <span className="num ml-auto text-[13px] font-semibold">
+                      {time(t.von)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[16px] font-semibold">
+                    {v.customer?.name ?? "—"}
+                  </p>
+                  <p className="text-[13px] text-muted">
+                    {[v.adresse, [v.plz, v.ort].filter(Boolean).join(" ")]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </p>
+                  {t.notiz ? (
+                    <p className="mt-2 text-[13px]">{t.notiz}</p>
                   ) : null}
-                </div>
-                <p className="mt-1 text-[16px] font-semibold">
-                  {(j.customer as unknown as { name: string } | null)?.name ?? "—"}
-                </p>
-                <p className="text-[13px] text-muted">
-                  {[j.address, [j.zip, j.city].filter(Boolean).join(" ")]
-                    .filter(Boolean)
-                    .join(", ")}
-                </p>
-                {j.next_step ? (
-                  <p className="mt-2 text-[13px]">{j.next_step as string}</p>
-                ) : null}
-              </Link>
-            </li>
-          ))}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
 

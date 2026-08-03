@@ -51,7 +51,7 @@ export type Cockpit = {
   stundenWoche: { ist: number; soll: number };
   rechnungen: { offen: number; ueberfaellig: number; aeltesteTage: number | null };
   naechsterTermin: {
-    jobId: string;
+    vorgangId: string;
     nummer: string;
     titel: string;
     kunde: string;
@@ -70,19 +70,23 @@ export type Cockpit = {
   } | null;
 };
 
-type JobZeile = {
+type VorgangZeile = {
   id: string;
   number: string;
-  city: string | null;
-  zip: string | null;
-  scheduled_from: string | null;
-  scheduled_to: string | null;
-  value_net: string;
-  planned_hours: string;
-  next_step: string | null;
-  phase: { label: string; system_key: string | null } | null;
+  phase: string;
+  ort: string | null;
+  plz: string | null;
   customer: { name: string } | null;
 };
+
+/* Was nicht abgeschlossen und nicht verloren ist, bindet Kapazität. */
+const OFFENE_PHASEN = new Set([
+  "anfrage",
+  "aufnahme",
+  "angebot",
+  "beauftragt",
+  "montage",
+]);
 
 export async function ladeCockpit(meineId: string): Promise<Cockpit> {
   const supabase = await createClient();
@@ -90,7 +94,9 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
   const wochenStart = startOfViennaWeek(heute);
 
   const [
-    { data: jobs },
+    { data: vorgaenge },
+    { data: kpis },
+    { data: termine },
     { data: leute },
     { data: rechnungen },
     { data: wocheZeiten },
@@ -100,20 +106,26 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
     { data: abwesend },
   ] = await Promise.all([
     supabase
-      .from("job")
-      .select(
-        "id, number, city, zip, scheduled_from, scheduled_to, value_net, planned_hours, next_step, phase:phase_id ( label, system_key ), customer:customer_id ( name )",
-      )
-      .order("scheduled_from", { ascending: true, nullsFirst: false }),
+      .from("vorgang")
+      .select("id, number, phase, ort, plz, customer:customer_id ( name )")
+      .order("number"),
+    supabase
+      .from("v_vorgang_kpi")
+      .select("vorgang_id, auftragswert_netto, soll_stunden"),
+    supabase
+      .from("vorgang_termin")
+      .select("vorgang_id, art, von, bis")
+      .order("von"),
     supabase
       .from("app_user")
       .select("id, name, role, weekly_hours")
       .eq("active", true)
       .order("name"),
     supabase
-      .from("invoice")
-      .select("id, number, amount_net, paid_amount, due_date, status")
-      .not("status", "in", "(paid,draft)"),
+      .from("vorgang_dokument")
+      .select("id, nummer, betrag_brutto, faellig_am, status")
+      .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
+      .in("status", ["versendet"]),
     supabase
       .from("time_entry")
       .select("duration_min, kind, user_id")
@@ -122,7 +134,7 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
     supabase
       .from("time_entry")
       .select(
-        "id, user_id, job_id, kind, started_at, user:user_id ( name ), job:job_id ( number )",
+        "id, user_id, vorgang_id, kind, started_at, user:user_id ( name ), vorgang:vorgang_id ( number )",
       )
       .eq("status", "running")
       .order("started_at"),
@@ -141,22 +153,54 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
       .gte("to_date", heute),
   ]);
 
-  const jobZeilen = (jobs ?? []) as unknown as JobZeile[];
-  const offen = jobZeilen.filter((j) => j.phase?.system_key !== "closed");
+  const zeilen = (vorgaenge ?? []) as unknown as VorgangZeile[];
+  const offen = zeilen.filter((v) => OFFENE_PHASEN.has(v.phase));
 
-  const auftragsbestand = offen.reduce((s, j) => s + Number(j.value_net), 0);
+  /*
+   * Werte und Soll-Stunden stehen in der View, weil authenticated auf
+   * den Spalten selbst kein Recht hat (0025). Rollen ohne Angebotsrecht
+   * bekommen eine leere Map — der Bestand steht dann auf null, statt
+   * dass die ganze Abfrage scheitert.
+   */
+  const kpi = new Map(
+    (kpis ?? []).map((k) => [
+      k.vorgang_id as string,
+      {
+        wert: Number(k.auftragswert_netto ?? 0),
+        sollStunden: Number(k.soll_stunden ?? 0),
+      },
+    ]),
+  );
+
+  const auftragsbestand = offen.reduce(
+    (s, v) => s + (kpi.get(v.id)?.wert ?? 0),
+    0,
+  );
 
   // --- Auslastung ---
   const kapazitaetProWoche = (leute ?? []).reduce(
     (s, p) => s + Number(p.weekly_hours ?? 0),
     0,
   );
+
+  type Termin = { vorgang_id: string; art: string; von: string; bis: string };
+  const alleTermine = (termine ?? []) as unknown as Termin[];
+  const montage = new Map<string, Termin>();
+  for (const t of alleTermine) {
+    if (t.art === "montage" && !montage.has(t.vorgang_id)) {
+      montage.set(t.vorgang_id, t);
+    }
+  }
+
   const auslastung = auslastungJeWoche({
-    auftraege: offen.map((j) => ({
-      plannedHours: Number(j.planned_hours),
-      from: j.scheduled_from ? j.scheduled_from.slice(0, 10) : null,
-      to: j.scheduled_to ? j.scheduled_to.slice(0, 10) : null,
-    })),
+    auftraege: offen.map((v) => {
+      const t = montage.get(v.id);
+      return {
+        plannedHours: kpi.get(v.id)?.sollStunden ?? 0,
+        from: t ? t.von.slice(0, 10) : null,
+        to: t ? t.bis.slice(0, 10) : null,
+      };
+    }),
     kapazitaetProWoche,
     abTag: heute,
   });
@@ -169,26 +213,31 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
   // --- Rechnungen ---
   type Rechnung = {
     id: string;
-    number: string;
-    amount_net: string;
-    paid_amount: string;
-    due_date: string;
-    status: string;
+    nummer: string | null;
+    betrag_brutto: string | null;
+    faellig_am: string | null;
+    status: string | null;
   };
   const offeneRechnungen = (rechnungen ?? []) as unknown as Rechnung[];
   const rechnungOffen = offeneRechnungen.reduce(
-    (s, r) => s + (Number(r.amount_net) - Number(r.paid_amount)),
+    (s, r) => s + Number(r.betrag_brutto ?? 0),
     0,
   );
-  const ueberfaellige = offeneRechnungen.filter((r) => r.due_date < heute);
+  const ueberfaellige = offeneRechnungen.filter(
+    (r) => r.faellig_am !== null && r.faellig_am < heute,
+  );
   const aelteste = ueberfaellige
-    .map((r) => tageSeit(r.due_date, heute))
+    .map((r) => tageSeit(r.faellig_am as string, heute))
     .sort((a, b) => b - a)[0];
 
   // --- Naechster Termin ---
-  const kommend = offen
-    .filter((j) => j.scheduled_from && j.scheduled_from >= heute)
-    .sort((a, b) => (a.scheduled_from! < b.scheduled_from! ? -1 : 1))[0];
+  const offeneIds = new Set(offen.map((v) => v.id));
+  const naechster = alleTermine
+    .filter((t) => offeneIds.has(t.vorgang_id) && t.von.slice(0, 10) >= heute)
+    .sort((a, b) => (a.von < b.von ? -1 : 1))[0];
+  const kommend = naechster
+    ? (offen.find((v) => v.id === naechster.vorgang_id) ?? null)
+    : null;
 
   // --- Handlungsbedarf ---
   const handlungsbedarf: Handlung[] = [];
@@ -199,7 +248,7 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
         ton: "kritisch",
         titel: `${w.label} über Kapazität`,
         detail: `${fmt(w.stunden)} h geplant, ${fmt(kapazitaetProWoche)} h verfügbar`,
-        href: "/dispo",
+        href: "/planung",
       });
     }
   }
@@ -207,9 +256,9 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
   for (const r of ueberfaellige.slice(0, 3)) {
     handlungsbedarf.push({
       ton: "kritisch",
-      titel: `Rechnung ${r.number} überfällig`,
-      detail: `${tageSeit(r.due_date, heute)} Tage über Zahlungsziel`,
-      href: "/rechnungen",
+      titel: `Rechnung ${r.nummer ?? ""} überfällig`.trim(),
+      detail: `${tageSeit(r.faellig_am as string, heute)} Tage über Zahlungsziel`,
+      href: "/offene-posten",
     });
   }
 
@@ -245,11 +294,11 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
   type Laufend = {
     id: string;
     user_id: string;
-    job_id: string | null;
+    vorgang_id: string | null;
     kind: string;
     started_at: string;
     user: { name: string } | null;
-    job: { number: string } | null;
+    vorgang: { number: string } | null;
   };
   const laufende = (laufendRoh ?? []) as unknown as Laufend[];
   const laufendJe = new Map(laufende.map((l) => [l.user_id, l]));
@@ -280,7 +329,7 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
                 : "Dienstgang"
               : "eingestempelt",
         seit: l.started_at,
-        auftrag: l.job?.number ?? null,
+        auftrag: l.vorgang?.number ?? null,
       };
     }
 
@@ -308,16 +357,14 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
   });
 
   // --- Pipeline-Fortschritt ---
-  const gesamt = jobZeilen.length;
-  const abgeschlossen = jobZeilen.filter(
-    (j) => j.phase?.system_key === "closed",
-  ).length;
+  const gesamt = zeilen.length;
+  const abgeschlossen = zeilen.filter((v) => v.phase === "abschluss").length;
 
   // --- Laufende Zeit, prominent ---
   const ersteLaufend = laufende[0] ?? null;
   const personenAufAuftrag = ersteLaufend
     ? laufende
-        .filter((l) => l.job_id === ersteLaufend.job_id)
+        .filter((l) => l.vorgang_id === ersteLaufend.vorgang_id)
         .map((l) => l.user?.name ?? "")
         .filter(Boolean)
     : [];
@@ -335,16 +382,17 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
       ueberfaellig: ueberfaellige.length,
       aeltesteTage: aelteste ?? null,
     },
-    naechsterTermin: kommend
-      ? {
-          jobId: kommend.id,
-          nummer: kommend.number,
-          titel: kommend.next_step ?? kommend.customer?.name ?? kommend.number,
-          kunde: kommend.customer?.name ?? "—",
-          ort: [kommend.zip, kommend.city].filter(Boolean).join(" "),
-          start: kommend.scheduled_from!,
-        }
-      : null,
+    naechsterTermin:
+      kommend && naechster
+        ? {
+            vorgangId: kommend.id,
+            nummer: kommend.number,
+            titel: kommend.customer?.name ?? kommend.number,
+            kunde: kommend.customer?.name ?? "—",
+            ort: [kommend.plz, kommend.ort].filter(Boolean).join(" "),
+            start: naechster.von,
+          }
+        : null,
     handlungsbedarf: handlungsbedarf.slice(0, 6),
     team,
     pipeline: {
@@ -355,8 +403,8 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
     laufend: ersteLaufend
       ? {
           seit: ersteLaufend.started_at,
-          auftragNummer: ersteLaufend.job?.number ?? null,
-          auftragId: ersteLaufend.job_id,
+          auftragNummer: ersteLaufend.vorgang?.number ?? null,
+          auftragId: ersteLaufend.vorgang_id,
           personen: personenAufAuftrag,
           eigene: laufende.some((l) => l.user_id === meineId),
         }

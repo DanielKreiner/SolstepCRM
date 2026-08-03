@@ -43,7 +43,7 @@ export default async function TicketPage({
        phase:phase_id ( id, label, system_key ),
        customer:customer_id ( id, name, contact_person, email, phone, zip, city ),
        assignee:assignee_id ( name ),
-       job:job_id ( id, number )`,
+       vorgang:vorgang_id ( id, number )`,
     )
     .eq("id", id)
     .maybeSingle();
@@ -65,8 +65,8 @@ export default async function TicketPage({
         .eq("active", true)
         .order("name"),
       supabase
-        .from("job")
-        .select("id, number, city")
+        .from("vorgang")
+        .select("id, number, ort")
         .order("created_at", { ascending: false })
         .limit(200),
     ]);
@@ -109,7 +109,7 @@ export default async function TicketPage({
     city: string | null;
   } | null;
   const assignee = ticket.assignee as unknown as { name: string } | null;
-  const job = ticket.job as unknown as { id: string; number: string } | null;
+  const job = ticket.vorgang as unknown as { id: string; number: string } | null;
 
   const severity = Number(ticket.severity ?? 3);
 
@@ -124,7 +124,7 @@ export default async function TicketPage({
               <PhasePill label={phase.label} systemKey={phase.system_key} />
             ) : null}
             <Link
-              href="/pipelines/service"
+              href="/service"
               className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
             >
               Zur Pipeline
@@ -152,7 +152,6 @@ export default async function TicketPage({
 
       <div className="mb-4">
         <PhasenWechsel
-          kind="service"
           cardId={ticket.id as string}
           gesperrt={!darfSchreiben}
           aktuelleId={phase?.id ?? null}
@@ -234,10 +233,10 @@ export default async function TicketPage({
             <Row label="Telefon">
               <span className="num">{customer?.phone ?? "—"}</span>
             </Row>
-            <Row label="Auftrag">
+            <Row label="Vorgang">
               {job ? (
                 <Link
-                  href={`/auftraege/${job.id}`}
+                  href={`/vorgaenge/${job.id}`}
                   className="num text-accent-ink hover:underline"
                 >
                   {job.number}
@@ -270,11 +269,11 @@ export default async function TicketPage({
             auftraege={((auftraege ?? []) as unknown as {
               id: string;
               number: string;
-              city: string | null;
+              ort: string | null;
             }[]).map((j) => ({
               wert: j.id,
               text: j.number,
-              ...(j.city ? { zusatz: j.city } : {}),
+              ...(j.ort ? { zusatz: j.ort } : {}),
             }))}
           />
         </div>

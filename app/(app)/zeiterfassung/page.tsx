@@ -81,14 +81,14 @@ export default async function ZeiterfassungPage({
       .from("time_entry")
       .select(
         `id, user_id, kind, started_at, ended_at, duration_min, status,
-         job:job_id ( id, number )`,
+         vorgang:vorgang_id ( id, number )`,
       )
       .gte("started_at", startOfViennaDay(day).toISOString())
       .lt("started_at", endOfViennaDay(day).toISOString())
       .neq("status", "replaced")
       .order("started_at"),
     supabase
-      .from("job")
+      .from("vorgang")
       .select("id, number, customer:customer_id ( name )")
       .order("number", { ascending: false })
       .limit(100),
@@ -126,7 +126,7 @@ export default async function ZeiterfassungPage({
     ended_at: string | null;
     duration_min: number | null;
     status: string;
-    job: { id: string; number: string } | null;
+    vorgang: { id: string; number: string } | null;
   };
 
   const eintraege = (entries ?? []) as unknown as Eintrag[];
@@ -138,8 +138,8 @@ export default async function ZeiterfassungPage({
     endedAt: e.ended_at,
     durationMin: e.duration_min,
     status: e.status,
-    jobId: e.job?.id ?? null,
-    jobNumber: e.job?.number ?? null,
+    jobId: e.vorgang?.id ?? null,
+    jobNumber: e.vorgang?.number ?? null,
   }));
 
   const abwesend = new Map<string, string>();
@@ -214,7 +214,7 @@ export default async function ZeiterfassungPage({
           wert={zuPruefen.length}
           pille={zuPruefen.length > 0 ? "Plausibilität" : "alles sauber"}
           ton={zuPruefen.length > 0 ? "warn" : "gut"}
-          notiz="ohne Auftrag, über 10 h ohne Pause, markiert"
+          notiz="ohne Vorgang, über 10 h ohne Pause, markiert"
         />
         <KpiKarte
           label="Korrekturanträge"
@@ -252,7 +252,7 @@ export default async function ZeiterfassungPage({
                 ["Ist", true],
                 ["Soll", true],
                 ["Diff", true],
-                ["Auftrag", false],
+                ["Vorgang", false],
                 ["Status", false],
               ].map(([h, rechts]) => (
                 <div
@@ -431,8 +431,8 @@ function beschreibeWunsch(
       `Geht ${eintrag?.ended_at ? time(eintrag.ended_at) : "—"} → ${time(wunsch.ended_at)}`,
     );
   }
-  if (typeof wunsch.job_id === "string" || wunsch.job_id === null) {
-    teile.push("Auftragszuordnung ändern");
+  if (typeof wunsch.vorgang_id === "string" || wunsch.vorgang_id === null) {
+    teile.push("Zuordnung zum Vorgang ändern");
   }
   if (typeof wunsch.kind === "string") {
     teile.push(`Art → ${wunsch.kind}`);

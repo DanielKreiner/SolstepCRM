@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, login, stockOf } from "./helpers";
+import {
+  COMPANY_A,
+  DEMO,
+  admin,
+  login,
+  stockOf,
+  vorgangId,
+  vorgangNummer,
+} from "./helpers";
 
 /*
  * Definition of Done Meilenstein 4 (CLAUDE.md Abschnitt 12):
@@ -37,7 +45,7 @@ async function aufraeumen() {
     .from("mail_outbox")
     .delete()
     .eq("company_id", COMPANY_A)
-    .is("quote_id", null);
+    .is("vorgang_id", null);
 }
 
 test("Der Vorschlag kennt Auftragsbedarf und Mindestbestand getrennt", async ({
@@ -52,8 +60,10 @@ test("Der Vorschlag kennt Auftragsbedarf und Mindestbestand getrennt", async ({
   ).toBeVisible();
 
   await expect(page.locator("text=MOD-JAS-440").first()).toBeVisible();
-  // Der Bedarf ist auftragsbezogen und nennt den Auftrag beim Namen.
-  await expect(page.getByText("A-2026-0042").first()).toBeVisible();
+  // Der Bedarf ist vorgangsbezogen und nennt den Vorgang beim Namen.
+  await expect(
+    page.getByText(await vorgangNummer("A-2026-0042")).first(),
+  ).toBeVisible();
   await expect(page.getByText("Auftrag + Mindest").first()).toBeVisible();
 
   /*
@@ -77,26 +87,37 @@ test("Der Vorschlag kennt Auftragsbedarf und Mindestbestand getrennt", async ({
   await expect(page.getByText("Solarwerk Großhandel GmbH").first()).toBeVisible();
 });
 
-test("Ohne Termin am Auftrag entsteht kein Auftragsbedarf", async ({ page }) => {
+test("Ohne Termin am Vorgang entsteht kein Auftragsbedarf", async ({ page }) => {
   const db = admin();
-  const { data: job } = await db
-    .from("job")
-    .select("id, scheduled_from")
-    .eq("company_id", COMPANY_A)
-    .eq("number", "A-2026-0042")
-    .single();
+  const id = await vorgangId("A-2026-0042");
+  const nummer = await vorgangNummer("A-2026-0042");
 
-  // Termin entfernen -> die Reservierungen dürfen nicht mehr zählen.
-  await db.from("job").update({ scheduled_from: null }).eq("id", job!.id);
+  const { data: termine } = await db
+    .from("vorgang_termin")
+    .select("id, art, von, bis, notiz")
+    .eq("vorgang_id", id)
+    .eq("art", "montage");
+
+  // Termine entfernen -> die Reservierungen dürfen nicht mehr zählen.
+  for (const t of termine ?? []) {
+    await db.from("vorgang_termin").delete().eq("id", t.id);
+  }
 
   await login(page, DEMO.lager);
   await page.goto("/lager/bestellungen");
-  await expect(page.getByText("A-2026-0042")).toHaveCount(0);
+  await expect(page.getByText(nummer)).toHaveCount(0);
 
-  await db
-    .from("job")
-    .update({ scheduled_from: job!.scheduled_from })
-    .eq("id", job!.id);
+  for (const t of termine ?? []) {
+    await db.from("vorgang_termin").insert({
+      id: t.id,
+      company_id: COMPANY_A,
+      vorgang_id: id,
+      art: t.art,
+      von: t.von,
+      bis: t.bis,
+      notiz: t.notiz,
+    });
+  }
 });
 
 test("Bestellung anlegen und an den Lieferanten senden", async ({ page }) => {
@@ -148,7 +169,7 @@ test("Bestellung anlegen und an den Lieferanten senden", async ({ page }) => {
   const { data: mails } = await db
     .from("mail_outbox")
     .select("to_addrs, subject, attachments, status")
-    .is("quote_id", null)
+    .is("vorgang_id", null)
     .eq("company_id", COMPANY_A);
 
   expect(mails).toHaveLength(1);

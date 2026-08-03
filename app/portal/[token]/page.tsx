@@ -1,21 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import {
-  Fortschrittsleiste,
-  type Schritt,
-} from "@/components/ui/Fortschrittsleiste";
 import { Pill } from "@/components/ui/Pill";
-import { date, dateShort, dateTime, eur, num, time } from "@/lib/format";
+import { dateShort, dateTime, eur, num } from "@/lib/format";
 import {
-  portalAppointments,
-  portalJobs,
-  portalPhases,
   portalPlant,
   portalTickets,
   resolvePortal,
 } from "@/lib/portal/data";
 import Link from "next/link";
-import { ConfirmAppointmentForm, NachfrageForm, TicketForm } from "./PortalForms";
+import { NachfrageForm, TicketForm } from "./PortalForms";
 import { portalVorgaenge } from "@/lib/portal/vorgang";
 import { PHASEN, phaseIndex, type Phase } from "@/lib/vorgang/modell";
 
@@ -76,44 +69,11 @@ export default async function PortalPage({
   // sich aus der Fehlermeldung nichts ableiten lässt.
   if (!session) notFound();
 
-  const [vorgaenge, jobs, tickets, phasen, anlage, termine] = await Promise.all([
+  const [vorgaenge, tickets, anlage] = await Promise.all([
     portalVorgaenge(session),
-    portalJobs(session),
     portalTickets(session),
-    portalPhases(session),
     portalPlant(session),
-    portalAppointments(session),
   ]);
-
-  /*
-   * Das laufende Projekt: der jüngste Auftrag, der noch nicht abgeschlossen
-   * ist. Hat der Kunde mehrere, trägt die Leiste den aktuellen — die
-   * übrigen stehen weiter unten in der Liste.
-   */
-  const laufendes = jobs.find(
-    (j) =>
-      (j.phase as unknown as { system_key: string | null } | null)
-        ?.system_key !== "closed",
-  );
-
-  const aktuellerSort = laufendes
-    ? ((laufendes.phase as unknown as { sort: number } | null)?.sort ?? null)
-    : null;
-
-  const schritte: Schritt[] =
-    aktuellerSort === null
-      ? []
-      : phasen.map((p) => ({
-          label: p.label,
-          zustand:
-            p.sort < aktuellerSort
-              ? "erledigt"
-              : p.sort === aktuellerSort
-                ? "aktuell"
-                : "offen",
-        }));
-
-  const naechsterTermin = termine[0] ?? null;
 
   return (
     <main className="mx-auto w-full max-w-[820px] px-4 py-8">
@@ -123,49 +83,6 @@ export default async function PortalPage({
           {session.customerName}
         </h1>
       </header>
-
-      {schritte.length > 0 && laufendes ? (
-        <section className="mb-4 rounded-[20px] bg-surface p-5 shadow-soft">
-          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-[15px] font-semibold">Ihr Projekt im Verlauf</h2>
-            <span className="num text-[12px] text-muted">
-              {laufendes.number as string}
-            </span>
-          </div>
-          <Fortschrittsleiste schritte={schritte} />
-        </section>
-      ) : null}
-
-      {naechsterTermin ? (
-        <section className="mb-4 rounded-[20px] bg-surface p-5 shadow-soft">
-          <h2 className="text-[15px] font-semibold">Nächster Termin</h2>
-          <p className="mt-2 text-[19px] leading-snug font-semibold tracking-[-0.02em]">
-            {(naechsterTermin.title as string | null) ?? "Termin vor Ort"}
-          </p>
-          <p className="num mt-1 text-[13px] text-muted">
-            {date(naechsterTermin.starts_at as string)} ·{" "}
-            {time(naechsterTermin.starts_at as string)}–
-            {time(naechsterTermin.ends_at as string)}
-          </p>
-
-          {naechsterTermin.customer_confirmed ? (
-            <p className="mt-3 text-[13px] text-s-done">
-              Von Ihnen bestätigt. Danke.
-            </p>
-          ) : (
-            <div className="mt-4">
-              <ConfirmAppointmentForm
-                token={token}
-                appointmentId={naechsterTermin.id as string}
-              />
-              <p className="mt-2 text-[11.5px] text-faint">
-                Passt der Termin nicht? Schreiben Sie uns unten über
-                {" „Anliegen“"} — wir melden uns.
-              </p>
-            </div>
-          )}
-        </section>
-      ) : null}
 
       {anlage ? (
         <section className="mb-6 rounded-[20px] bg-surface p-5 shadow-soft">

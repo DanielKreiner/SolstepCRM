@@ -7,52 +7,70 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Aufträge" };
 
+type Zeile = {
+  id: string;
+  number: string;
+  phase: string;
+  adresse: string | null;
+  plz: string | null;
+  ort: string | null;
+  customer: { name: string } | null;
+  termin: string | null;
+};
+
+const PHASE_LABEL: Record<string, string> = {
+  beauftragt: "Beauftragt",
+  montage: "Montage",
+  aufnahme: "Aufnahme",
+  angebot: "Angebot",
+  anfrage: "Anfrage",
+};
+
 /*
  * Auftragsliste der Monteur-App (SPEC 6.1, Bottom-Nav "Aufträge").
  *
- * Anders als /m/heute nicht auf den heutigen Tag begrenzt: hier steht, was
- * ansteht und was gerade läuft. Sortiert nach Termin, offene ohne Termin
- * ganz unten — sie sind noch nicht zugesagt.
+ * Anders als /m/heute nicht auf den heutigen Tag begrenzt: hier steht,
+ * was ansteht und was gerade läuft. Sortiert nach Termin, offene ohne
+ * Termin ganz unten — sie sind noch nicht zugesagt.
  *
- * Abgeschlossene Aufträge bleiben draußen. Wer sie sucht, sucht ein Dokument,
- * und dafür ist das Backoffice zuständig.
+ * Abgeschlossene und verlorene Vorgänge bleiben draußen. Wer sie sucht,
+ * sucht ein Dokument, und dafür ist das Backoffice zuständig.
  */
 export default async function MobileAuftraegePage() {
   await requireMe();
   const supabase = await createClient();
   const heute = viennaDay();
 
-  const { data: jobs } = await supabase
-    .from("job")
-    .select(
-      "id, number, address, zip, city, next_step, scheduled_from, planned_hours, phase:phase_id ( label, system_key ), customer:customer_id ( name )",
-    )
-    .order("scheduled_from", { ascending: true, nullsFirst: false })
-    .limit(80);
+  const [{ data: vorgaenge }, { data: termine }] = await Promise.all([
+    supabase
+      .from("vorgang")
+      .select("id, number, phase, adresse, plz, ort, customer:customer_id ( name )")
+      .in("phase", ["aufnahme", "angebot", "beauftragt", "montage"])
+      .order("number")
+      .limit(80),
+    supabase
+      .from("vorgang_termin")
+      .select("vorgang_id, von")
+      .order("von"),
+  ]);
 
-  type Zeile = {
-    id: string;
-    number: string;
-    address: string | null;
-    zip: string | null;
-    city: string | null;
-    next_step: string | null;
-    scheduled_from: string | null;
-    planned_hours: string;
-    phase: { label: string; system_key: string | null } | null;
-    customer: { name: string } | null;
-  };
+  const ersterTermin = new Map<string, string>();
+  for (const t of termine ?? []) {
+    const id = t.vorgang_id as string;
+    if (!ersterTermin.has(id)) ersterTermin.set(id, t.von as string);
+  }
 
-  const alle = (jobs ?? []) as unknown as Zeile[];
-  const offen = alle.filter((j) => j.phase?.system_key !== "closed");
+  const offen = (
+    (vorgaenge ?? []) as unknown as Omit<Zeile, "termin">[]
+  ).map((v) => ({ ...v, termin: ersterTermin.get(v.id) ?? null }));
 
   const laufend = offen.filter(
-    (j) => j.scheduled_from && j.scheduled_from.slice(0, 10) <= heute,
+    (v) => v.termin && v.termin.slice(0, 10) <= heute,
   );
   const kommend = offen.filter(
-    (j) => j.scheduled_from && j.scheduled_from.slice(0, 10) > heute,
+    (v) => v.termin && v.termin.slice(0, 10) > heute,
   );
-  const ohneTermin = offen.filter((j) => !j.scheduled_from);
+  const ohneTermin = offen.filter((v) => !v.termin);
 
   return (
     <>
@@ -61,9 +79,9 @@ export default async function MobileAuftraegePage() {
         {offen.length} offen · nach Termin sortiert
       </p>
 
-      <Gruppe titel="Läuft" jobs={laufend} />
-      <Gruppe titel="Kommt" jobs={kommend} />
-      <Gruppe titel="Ohne Termin" jobs={ohneTermin} />
+      <Gruppe titel="Läuft" vorgaenge={laufend} />
+      <Gruppe titel="Kommt" vorgaenge={kommend} />
+      <Gruppe titel="Ohne Termin" vorgaenge={ohneTermin} />
 
       {offen.length === 0 ? (
         <p className="rounded-[20px] bg-surface p-5 text-[13px] text-muted shadow-soft">
@@ -76,60 +94,47 @@ export default async function MobileAuftraegePage() {
 
 function Gruppe({
   titel,
-  jobs,
+  vorgaenge,
 }: {
   titel: string;
-  jobs: {
-    id: string;
-    number: string;
-    address: string | null;
-    zip: string | null;
-    city: string | null;
-    next_step: string | null;
-    scheduled_from: string | null;
-    phase: { label: string; system_key: string | null } | null;
-    customer: { name: string } | null;
-  }[];
+  vorgaenge: Zeile[];
 }) {
-  if (jobs.length === 0) return null;
+  if (vorgaenge.length === 0) return null;
 
   return (
     <section className="mb-6">
       <h2 className="mb-2 flex items-center gap-2 text-[15px] font-semibold">
         {titel}
         <span className="num rounded-pill bg-sunk px-[8px] py-[2px] text-[11px] font-normal text-muted">
-          {jobs.length}
+          {vorgaenge.length}
         </span>
       </h2>
 
       <ul className="flex flex-col gap-3">
-        {jobs.map((j) => (
-          <li key={j.id}>
+        {vorgaenge.map((v) => (
+          <li key={v.id}>
             <Link
-              href={`/m/auftrag/${j.id}`}
+              href={`/m/auftrag/${v.id}`}
               className="block min-h-[56px] rounded-[20px] bg-surface p-[18px] text-ink shadow-soft"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <span className="num text-[12.5px] font-semibold">{j.number}</span>
-                {j.phase ? <Pill tone="doing">{j.phase.label}</Pill> : null}
-                {j.scheduled_from ? (
+                <span className="num text-[12.5px] font-semibold">{v.number}</span>
+                <Pill tone="doing">{PHASE_LABEL[v.phase] ?? v.phase}</Pill>
+                {v.termin ? (
                   <span className="num ml-auto text-[11.5px] text-faint">
-                    {dateShort(j.scheduled_from)}
+                    {dateShort(v.termin)}
                   </span>
                 ) : null}
               </div>
 
               <p className="mt-[6px] text-[16px] leading-snug font-semibold">
-                {j.customer?.name ?? "—"}
+                {v.customer?.name ?? "—"}
               </p>
               <p className="text-[13px] text-muted">
-                {[j.address, [j.zip, j.city].filter(Boolean).join(" ")]
+                {[v.adresse, [v.plz, v.ort].filter(Boolean).join(" ")]
                   .filter(Boolean)
                   .join(", ") || "keine Adresse hinterlegt"}
               </p>
-              {j.next_step ? (
-                <p className="mt-2 text-[13px]">{j.next_step}</p>
-              ) : null}
             </Link>
           </li>
         ))}

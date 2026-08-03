@@ -65,7 +65,11 @@ test("Eine Rechteänderung wirkt sofort in der Datenbank", async ({ page }) => {
 
   // Vorher: der Lagerist sieht keine Rechnungen.
   const vorher = await alsRolle(DEMO.lager);
-  const { data: keine } = await vorher.from("invoice").select("id").limit(50);
+  const { data: keine } = await vorher
+    .from("vorgang_dokument")
+    .select("id")
+    .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
+    .limit(50);
   expect(keine ?? []).toHaveLength(0);
 
   await page.getByLabel("rechnungen für lager").selectOption("read");
@@ -85,12 +89,17 @@ test("Eine Rechteänderung wirkt sofort in der Datenbank", async ({ page }) => {
 
   // Nachher: dieselbe Abfrage desselben Nutzers liefert Zeilen.
   const { count: gesamt } = await admin()
-    .from("invoice")
+    .from("vorgang_dokument")
     .select("id", { count: "exact", head: true })
-    .eq("company_id", COMPANY_A);
+    .eq("company_id", COMPANY_A)
+    .in("typ", ["anzahlungsrechnung", "schlussrechnung"]);
 
   const nachher = await alsRolle(DEMO.lager);
-  const { data: jetzt } = await nachher.from("invoice").select("id").limit(50);
+  const { data: jetzt } = await nachher
+    .from("vorgang_dokument")
+    .select("id")
+    .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
+    .limit(50);
   expect((jetzt ?? []).length).toBe(gesamt ?? 0);
 
   await rechtSetzen("lager", "rechnungen", "none");
@@ -126,11 +135,15 @@ test("Eine eigene Phase lässt sich anlegen und benutzen", async ({ page }) => {
     .from("pipeline")
     .select("id")
     .eq("company_id", COMPANY_A)
-    .eq("kind", "projekte")
+    .eq("kind", "service")
     .single();
 
-  // Nicht .first() — das wäre das Formular der Vertriebs-Pipeline. Die
-  // versteckte pipelineId macht es eindeutig.
+  /*
+   * Die Service-Pipeline: Vertrieb und Projekte laufen über den Vorgang,
+   * dessen Phasen ein Enum sind. Editierbare Phasen je Mandant gibt es
+   * nur noch hier. Nicht .first() — die versteckte pipelineId macht das
+   * Formular eindeutig.
+   */
   const form = page.locator(
     `form:has(input[name="pipelineId"][value="${pipeline!.id as string}"])`,
   );
@@ -160,9 +173,21 @@ test("Eine eigene Phase lässt sich anlegen und benutzen", async ({ page }) => {
   expect(neu!.system_key).toBeNull();
   expect(neu!.is_final).toBe(false);
 
-  // Und sie steht sofort als Spalte im Board.
-  await page.goto("/pipelines/projekte");
-  await expect(page.getByText("Gerüst bestellt").first()).toBeVisible();
+  /*
+   * Und sie steht sofort am Ticket zur Wahl. Die Liste zeigt Status,
+   * nicht Phasen — der Phasenwechsel sitzt auf der Detailseite.
+   */
+  const { data: ticket } = await admin()
+    .from("service_ticket")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .limit(1)
+    .single();
+
+  await page.goto(`/service/${ticket!.id as string}`);
+  await expect(
+    page.getByRole("button", { name: "Gerüst bestellt" }),
+  ).toBeVisible();
 });
 
 test("Eine Systemphase lässt sich umbenennen, aber nicht löschen", async ({
@@ -220,14 +245,17 @@ test("Eine belegte Phase lässt sich nicht löschen", async ({ page }) => {
     .select("id")
     .eq("key", "e2e_geruest")
     .single();
-  const { data: job } = await db
-    .from("job")
+  const { data: ticket } = await db
+    .from("service_ticket")
     .select("id, phase_id")
     .eq("company_id", COMPANY_A)
-    .eq("number", "A-2026-0042")
+    .limit(1)
     .single();
 
-  await db.from("job").update({ phase_id: phase!.id }).eq("id", job!.id);
+  await db
+    .from("service_ticket")
+    .update({ phase_id: phase!.id })
+    .eq("id", ticket!.id);
 
   await login(page, DEMO.gf);
   await page.goto("/einstellungen?bereich=phasen");
@@ -239,7 +267,10 @@ test("Eine belegte Phase lässt sich nicht löschen", async ({ page }) => {
   await expect(zeile.getByRole("alert")).toContainText("Erst verschieben");
 
   // Zurücksetzen und dann löschen — jetzt geht es.
-  await db.from("job").update({ phase_id: job!.phase_id }).eq("id", job!.id);
+  await db
+    .from("service_ticket")
+    .update({ phase_id: ticket!.phase_id })
+    .eq("id", ticket!.id);
   await page.reload();
 
   const zeile2 = page

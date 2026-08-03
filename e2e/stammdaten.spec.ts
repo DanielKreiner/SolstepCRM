@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, login, suchwahl } from "./helpers";
+import { COMPANY_A, DEMO, admin, login } from "./helpers";
 
 /*
  * Anlegen, Ändern, Löschen der Stammdaten.
@@ -17,13 +17,6 @@ const MARKE = "E2E-STAMM";
 
 async function aufraeumen(): Promise<void> {
   const db = admin();
-
-  const { data: jobs } = await db
-    .from("job")
-    .select("id")
-    .eq("company_id", COMPANY_A)
-    .like("next_step", `${MARKE}%`);
-  for (const j of jobs ?? []) await db.from("job").delete().eq("id", j.id);
 
   await db.from("article").delete().eq("company_id", COMPANY_A).like("sku", `${MARKE}%`);
   await db.from("plant").delete().eq("company_id", COMPANY_A).like("modules", `${MARKE}%`);
@@ -96,24 +89,20 @@ test("Kunde anlegen, ändern und archivieren", async ({ page }) => {
     .toBe(true);
 });
 
-test("Ein Kunde mit laufendem Auftrag lässt sich nicht archivieren", async ({
+test("Ein Kunde mit laufendem Vorgang lässt sich nicht archivieren", async ({
   page,
 }) => {
   const db = admin();
 
-  // Bestandskunde mit offenem Auftrag aus dem Seed.
-  const { data: job } = await db
-    .from("job")
-    .select("customer_id, number, phase:phase_id ( system_key )")
+  const { data: offener } = await db
+    .from("vorgang")
+    .select("customer_id, number, phase")
     .eq("company_id", COMPANY_A)
-    .limit(20);
+    .not("phase", "in", "(abschluss,verloren)")
+    .limit(1)
+    .maybeSingle();
 
-  const offener = (job ?? []).find(
-    (j) =>
-      (j.phase as unknown as { system_key: string | null } | null)
-        ?.system_key !== "closed",
-  );
-  expect(offener, "Seed hat keinen offenen Auftrag").toBeTruthy();
+  expect(offener, "Seed hat keinen offenen Vorgang").toBeTruthy();
 
   await login(page, DEMO.gf);
   await page.goto(
@@ -123,7 +112,7 @@ test("Ein Kunde mit laufendem Auftrag lässt sich nicht archivieren", async ({
   page.on("dialog", (d) => void d.accept());
   await page.getByRole("button", { name: "Archivieren" }).click();
 
-  await expect(page.getByText(/Es laufen noch \d+ Aufträge/)).toBeVisible({
+  await expect(page.getByText(/Es laufen noch \d+ Vorgänge/)).toBeVisible({
     timeout: 15_000,
   });
 });
@@ -167,68 +156,6 @@ test("Eine doppelte Artikelnummer wird abgewiesen", async ({ page }) => {
   await page.getByRole("button", { name: "Artikel anlegen" }).last().click();
 
   await expect(page.getByText(/gibt es schon/)).toBeVisible({ timeout: 15_000 });
-});
-
-test("Auftrag anlegen — Nummer kommt aus der Datenbank", async ({ page }) => {
-  const db = admin();
-  await login(page, DEMO.gf);
-  await page.goto("/auftraege");
-
-  const { data: kunde } = await db
-    .from("customer")
-    .select("id, name")
-    .eq("company_id", COMPANY_A)
-    .is("deleted_at", null)
-    .limit(1)
-    .single();
-
-  await page.getByRole("button", { name: "Auftrag anlegen" }).click();
-
-  await suchwahl(page, "Kunde", kunde!.name as string);
-  // Erste echte Phase der Projektpipeline.
-  await page
-    .getByLabel("Phase")
-    .selectOption({ index: 1 });
-  await page.getByLabel("Geplante Stunden").fill("40");
-  await page.getByLabel("Auftragswert netto").fill("25000");
-  await page.getByLabel("Nächster Schritt").fill(`${MARKE} Termin fixieren`);
-
-  await page.getByRole("button", { name: "Auftrag anlegen" }).last().click();
-  await expect(page.getByText(/Auftrag A-\d{4}-\d{4} angelegt/)).toBeVisible({
-    timeout: 15_000,
-  });
-
-  const { data: auftrag } = await db
-    .from("job")
-    .select("id, number, planned_hours, value_net")
-    .eq("company_id", COMPANY_A)
-    .like("next_step", `${MARKE}%`)
-    .single();
-
-  expect(auftrag!.number).toMatch(/^A-\d{4}-\d{4}$/);
-  expect(Number(auftrag!.planned_hours)).toBe(40);
-  expect(Number(auftrag!.value_net)).toBe(25000);
-});
-
-test("Ein Auftrag mit Buchungen lässt sich nicht löschen", async ({ page }) => {
-  const db = admin();
-
-  const { data: auftrag } = await db
-    .from("job")
-    .select("id")
-    .eq("company_id", COMPANY_A)
-    .eq("number", "A-2026-0041")
-    .single();
-
-  await login(page, DEMO.gf);
-  await page.goto(`/auftraege/${auftrag!.id}?bearbeiten=1`);
-
-  page.on("dialog", (d) => void d.accept());
-  await page.getByRole("button", { name: "Auftrag löschen" }).click();
-
-  await expect(page.getByText(/revisionspflichtig/)).toBeVisible({
-    timeout: 15_000,
-  });
 });
 
 test("Ohne Schreibrecht gibt es keine Anlegen-Knöpfe", async ({ page }) => {

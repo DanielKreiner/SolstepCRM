@@ -1,96 +1,11 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { angebotAnnehmen } from "@/lib/quote-accept";
 import { portalTicketAntwort, resolvePortal } from "@/lib/portal/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type PortalState = { error: string | null; ok: string | null };
-
-const acceptSchema = z.object({
-  token: z.string().min(10),
-  quoteId: z.string().uuid(),
-  name: z.string().trim().min(2, "Bitte den Namen eintragen."),
-});
-
-/**
- * Digitale Annahme durch den Kunden.
- *
- * Festgehalten werden Name, Zeitpunkt und IP (CLAUDE.md Meilenstein 8).
- * Die IP ist der schwächste der drei Belege, aber zusammen mit dem
- * signierten Token und dem Namen reicht die Kette für den Nachweis, dass
- * die Annahme aus dem Zugang dieses Kunden kam.
- */
-export async function acceptFromPortal(
-  _prev: PortalState,
-  formData: FormData,
-): Promise<PortalState> {
-  const parsed = acceptSchema.safeParse({
-    token: formData.get("token"),
-    quoteId: formData.get("quoteId"),
-    name: formData.get("name"),
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
-  }
-
-  const session = await resolvePortal(parsed.data.token);
-  if (!session) return { error: "Der Zugang ist abgelaufen.", ok: null };
-
-  const admin = createAdminClient();
-
-  /*
-   * Das Angebot muss diesem Kunden gehören — der Token allein reicht
-   * nicht. Diese Prüfung bleibt hier: sie ist die Mandanten- und
-   * Kundentrennung des Portalpfads und darf nicht in die gemeinsame
-   * Annahmefunktion wandern, die auch das Backoffice benutzt.
-   */
-  const { data: eigen } = await admin
-    .from("quote")
-    .select("id")
-    .eq("id", parsed.data.quoteId)
-    .eq("customer_id", session.customerId)
-    .eq("company_id", session.companyId)
-    .maybeSingle();
-
-  if (!eigen) return { error: "Angebot nicht gefunden.", ok: null };
-
-  const kopf = await headers();
-  const ip =
-    kopf.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    kopf.get("x-real-ip") ??
-    null;
-
-  const ergebnis = await angebotAnnehmen(admin, {
-    quoteId: parsed.data.quoteId,
-    companyId: session.companyId,
-    name: parsed.data.name,
-    ip,
-    via: "portal",
-  });
-
-  if (!ergebnis.ok) return { error: ergebnis.grund, ok: null };
-
-  if (!ergebnis.neu) {
-    return { error: null, ok: "Dieses Angebot ist bereits angenommen." };
-  }
-
-  await admin.from("notification").insert({
-    company_id: session.companyId,
-    kind: "quote_accepted_portal",
-    title: `Angebot ${ergebnis.quoteNumber} im Portal angenommen`,
-    body: `Angenommen durch ${parsed.data.name}. Auftrag ${ergebnis.jobNumber} angelegt.`,
-    link: `/auftraege/${ergebnis.jobId}`,
-  });
-
-  revalidatePath(`/portal/${parsed.data.token}`, "layout");
-  return {
-    error: null,
-    ok: `Danke. Die Annahme von ${ergebnis.quoteNumber} ist erfasst — wir melden uns wegen des Termins.`,
-  };
-}
 
 const ticketSchema = z.object({
   token: z.string().min(10),
@@ -187,8 +102,8 @@ const confirmSchema = z.object({
 /**
  * Terminbestätigung durch den Kunden (SPEC 5.1).
  *
- * Der Termin muss zu einem Auftrag DIESES Kunden gehören. job_appointment
- * trägt selbst kein customer_id, deshalb wird der Auftrag mitgelesen und
+ * Der Termin muss zu einem Vorgang DIESES Kunden gehören. vorgang_termin
+ * trägt selbst kein customer_id, deshalb wird der Vorgang mitgelesen und
  * gegen die Sitzung geprüft — ein Token allein darf keinen fremden Termin
  * bestätigen können.
  *
@@ -212,50 +127,64 @@ export async function confirmAppointmentFromPortal(
   const admin = createAdminClient();
 
   const { data: termin } = await admin
-    .from("job_appointment")
-    .select("id, starts_at, customer_confirmed, job:job_id ( id, number, customer_id )")
+    .from("vorgang_termin")
+    .select(
+      "id, von, kunde_bestaetigt_am, vorgang:vorgang_id ( id, number, customer_id )",
+    )
     .eq("id", parsed.data.appointmentId)
     .eq("company_id", session.companyId)
     .maybeSingle();
 
-  const job = termin?.job as unknown as
+  const vorgang = termin?.vorgang as unknown as
     | { id: string; number: string; customer_id: string }
     | null;
 
-  if (!termin || !job || job.customer_id !== session.customerId) {
+  if (!termin || !vorgang || vorgang.customer_id !== session.customerId) {
     return { error: "Termin nicht gefunden.", ok: null };
   }
 
-  if (termin.customer_confirmed) {
+  if (termin.kunde_bestaetigt_am) {
     return { error: null, ok: "Der Termin ist bereits bestätigt." };
   }
 
   const { error } = await admin
-    .from("job_appointment")
-    .update({ customer_confirmed: true })
+    .from("vorgang_termin")
+    .update({ kunde_bestaetigt_am: new Date().toISOString() })
     .eq("id", termin.id);
 
   if (error) {
     return { error: `Bestätigung fehlgeschlagen: ${error.message}`, ok: null };
   }
 
+  const wann = new Date(termin.von as string).toLocaleDateString("de-AT");
+
   // Der Betrieb soll es mitbekommen, ohne ins Portal schauen zu müssen.
   await admin.from("notification").insert({
     company_id: session.companyId,
     kind: "appointment_confirmed",
     title: `Termin bestätigt — ${session.customerName}`,
-    body: `${job.number} am ${new Date(termin.starts_at as string).toLocaleDateString("de-AT")}`,
-    link: `/auftraege/${job.id}`,
+    body: `${vorgang.number} am ${wann}`,
+    link: `/vorgaenge/${vorgang.id}`,
+  });
+
+  await admin.from("vorgang_event").insert({
+    company_id: session.companyId,
+    vorgang_id: vorgang.id,
+    typ: "termin",
+    titel: "Termin bestätigt",
+    body: `${session.customerName} hat den Termin am ${wann} im Portal bestätigt.`,
+    kunde_sichtbar: true,
   });
 
   await admin.from("contact_activity").insert({
     company_id: session.companyId,
     customer_id: session.customerId,
     kind: "portal",
-    body: `Termin zu ${job.number} im Kundenportal bestätigt.`,
+    body: `Termin zu ${vorgang.number} im Kundenportal bestätigt.`,
   });
 
   revalidatePath(`/portal/${parsed.data.token}`);
+  revalidatePath(`/portal/${parsed.data.token}/vorgang/${vorgang.id}`);
   return { error: null, ok: "Danke, der Termin ist bestätigt." };
 }
 

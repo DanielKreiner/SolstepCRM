@@ -74,7 +74,7 @@ export function MaterialForm({
             htmlFor="m-job"
             className="text-[12.5px] font-semibold text-muted"
           >
-            Auftrag
+            Vorgang
           </label>
           <select
             id="m-job"
@@ -82,7 +82,7 @@ export function MaterialForm({
             onChange={(e) => setJobId(e.target.value)}
             className="min-h-[56px] w-full rounded-input border border-transparent bg-surface px-4 text-[15px] outline-0 focus:border-accent"
           >
-            <option value="">— ohne Auftrag —</option>
+            <option value="">— ohne Vorgang —</option>
             {jobs.map((j) => (
               <option key={j.id} value={j.id}>
                 {j.label}

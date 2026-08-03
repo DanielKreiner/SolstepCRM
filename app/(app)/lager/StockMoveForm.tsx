@@ -102,9 +102,9 @@ export function StockMoveForm({
         ) : (
           <Suchauswahl
             name="jobId"
-            label="Auftrag"
+            label="Vorgang"
             platzhalter="Auftrag suchen — Nummer oder Kunde"
-            leerLabel="— ohne Auftrag —"
+            leerLabel="— ohne Vorgang —"
             optionen={jobs.map((j) => ({ wert: j.id, text: j.label }))}
           />
         )}

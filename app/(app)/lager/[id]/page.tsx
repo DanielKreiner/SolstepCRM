@@ -19,7 +19,7 @@ type MoveRow = {
   kind: string;
   note: string | null;
   created_at: string;
-  job: { id: string; number: string } | null;
+  vorgang: { id: string; number: string } | null;
   person: { name: string } | null;
 };
 
@@ -59,14 +59,14 @@ export default async function ArtikelPage({
       .from("stock_move")
       .select(
         `id, qty, kind, note, created_at,
-         job:job_id ( id, number ),
+         vorgang:vorgang_id ( id, number ),
          person:user_id ( name )`,
       )
       .eq("article_id", id)
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
-      .from("job")
+      .from("vorgang")
       .select("id, number, customer:customer_id ( name )")
       .order("number", { ascending: false })
       .limit(100),
@@ -120,15 +120,15 @@ export default async function ArtikelPage({
     },
     {
       key: "auftrag",
-      header: "Auftrag",
+      header: "Vorgang",
       width: "140px",
       render: (m) =>
-        m.job ? (
+        m.vorgang ? (
           <Link
-            href={`/auftraege/${m.job.id}`}
+            href={`/vorgaenge/${m.vorgang.id}`}
             className="num text-[12.5px] text-accent-ink hover:underline"
           >
-            {m.job.number}
+            {m.vorgang.number}
           </Link>
         ) : (
           <span className="text-[12.5px] text-faint">—</span>

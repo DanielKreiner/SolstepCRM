@@ -575,14 +575,10 @@ function IntegrationsZeile({
 /** Wie viele Einträge hängen an welcher Phase — für die Löschsperre. */
 async function phasenBelegung(): Promise<Map<string, number>> {
   const supabase = await createClient();
-  const [jobs, quotes, tickets] = await Promise.all([
-    supabase.from("job").select("phase_id"),
-    supabase.from("quote").select("phase_id"),
-    supabase.from("service_ticket").select("phase_id"),
-  ]);
+  const tickets = await supabase.from("service_ticket").select("phase_id");
 
   const map = new Map<string, number>();
-  for (const liste of [jobs.data, quotes.data, tickets.data]) {
+  for (const liste of [tickets.data]) {
     for (const r of liste ?? []) {
       const id = r.phase_id as string | null;
       if (!id) continue;

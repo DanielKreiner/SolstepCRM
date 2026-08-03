@@ -6,10 +6,15 @@ export const dynamic = "force-dynamic";
 /*
  * Erinnerung an offene Angebote.
  *
- * Sieben Tage ohne Reaktion (CLAUDE.md 6.1). "Ohne Reaktion" heißt: gesendet,
- * aber weder geöffnet noch angenommen noch verloren. Je Angebot abschaltbar
- * über quote.reminder_enabled — wer einmal freundlich nachfragt, will nicht,
- * dass die Software danach weiter mahnt.
+ * Sieben Tage ohne Reaktion (CLAUDE.md 6.1). "Ohne Reaktion" heißt jetzt:
+ * der Vorgang steht in Phase 'angebot', das Angebot ist versendet und
+ * seither hat sich nichts bewegt — weder eine Annahme (dann wäre die
+ * Phase 'beauftragt') noch eine Absage (dann 'verloren').
+ *
+ * Genau einmal je Vorgang. Wer freundlich nachfragt, will nicht, dass die
+ * Software danach wöchentlich weitermahnt; der Merker ist ein Event am
+ * Vorgang und steht damit sichtbar im Aktivitätsstrom, statt in einer
+ * Spalte, die niemand aufmacht.
  */
 export async function GET(request: Request) {
   return runCron(request, "quote-reminders", async (admin) => {
@@ -20,60 +25,70 @@ export async function GET(request: Request) {
 
     for (const mandant of await aktiveMandanten(admin)) {
       const { data: offen } = await admin
-        .from("quote")
-        .select(
-          "id, number, sent_at, customer:customer_id ( name, email ), phase:phase_id ( system_key )",
-        )
+        .from("vorgang")
+        .select("id, number, phase_seit, customer:customer_id ( name, email )")
         .eq("company_id", mandant.id)
-        .eq("reminder_enabled", true)
-        .eq("status", "sent")
-        .lt("sent_at", grenze.toISOString());
+        .eq("phase", "angebot")
+        .lt("phase_seit", grenze.toISOString());
 
       if (!offen?.length) continue;
 
       const postfach = await postfachVon(admin, mandant.id);
       if (!postfach) continue;
 
-      for (const q of offen) {
-        const phase = (q.phase as unknown as { system_key: string | null } | null)
-          ?.system_key;
-        // Entschiedene Angebote nicht anfassen, auch wenn der Status hinterherhinkt.
-        if (phase === "won" || phase === "lost") continue;
-
-        const kunde = q.customer as unknown as {
+      for (const v of offen) {
+        const kunde = v.customer as unknown as {
           name: string;
           email: string | null;
         } | null;
         if (!kunde?.email) continue;
 
-        // Schon einmal erinnert? Dann nicht noch einmal.
-        const { count } = await admin
-          .from("quote_event")
+        /*
+         * Ohne versendetes Angebot gibt es nichts nachzufassen. Die Phase
+         * allein reicht als Bedingung nicht — sie lässt sich von Hand
+         * setzen, und dann stünde beim Kunden eine Nachfrage zu einem
+         * Angebot, das er nie bekommen hat.
+         */
+        const { count: versendet } = await admin
+          .from("vorgang_dokument")
           .select("id", { count: "exact", head: true })
-          .eq("quote_id", q.id)
-          .eq("kind", "reminded");
-        if ((count ?? 0) > 0) continue;
+          .eq("vorgang_id", v.id)
+          .eq("typ", "angebot")
+          .in("status", ["versendet", "angenommen"]);
+        if (!versendet) continue;
+
+        const { count: schon } = await admin
+          .from("vorgang_event")
+          .select("id", { count: "exact", head: true })
+          .eq("vorgang_id", v.id)
+          .eq("typ", "email")
+          .contains("payload", { nachfassen: true });
+        if ((schon ?? 0) > 0) continue;
 
         await admin.from("mail_outbox").insert({
           company_id: mandant.id,
           mail_account_id: postfach,
           to_addrs: [kunde.email],
-          subject: `Nachfrage zu unserem Angebot ${q.number as string}`,
+          subject: `Nachfrage zu unserem Angebot ${v.number as string}`,
           body_html:
             `<p>Guten Tag,</p><p>wir haben Ihnen vor einer Woche das Angebot ` +
-            `${q.number as string} geschickt. Gibt es dazu offene Fragen?</p>` +
+            `${v.number as string} geschickt. Gibt es dazu offene Fragen?</p>` +
             `<p>Melden Sie sich gern, wir gehen es auch telefonisch durch.</p>`,
-          body_text: `Nachfrage zum Angebot ${q.number as string}.`,
-          quote_id: q.id,
+          body_text: `Nachfrage zum Angebot ${v.number as string}.`,
+          vorgang_id: v.id,
         });
 
-        await admin.from("quote_event").insert({
+        await admin.from("vorgang_event").insert({
           company_id: mandant.id,
-          quote_id: q.id,
-          kind: "reminded",
+          vorgang_id: v.id,
+          typ: "email",
+          titel: "Nachgefasst",
+          body: `Erinnerung an das Angebot an ${kunde.name}.`,
+          payload: { nachfassen: true },
+          kunde_sichtbar: false,
         });
 
-        erinnert.push(q.number as string);
+        erinnert.push(v.number as string);
       }
     }
 

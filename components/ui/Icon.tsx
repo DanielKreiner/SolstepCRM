@@ -29,6 +29,7 @@ const C = (cx: number, cy: number, r: number): Part => ({ t: "circle", cx, cy, r
 const P = (d: string): Part => ({ t: "path", d });
 
 export const ICONS = {
+  menue: [L(4, 7, 20, 7), L(4, 12, 20, 12), L(4, 17, 20, 17)],
   cockpit: [R(3, 3, 8, 8, 2.5), R(13, 3, 8, 8, 2.5), R(3, 13, 8, 8, 2.5), R(13, 13, 8, 8, 2.5)],
   pipelines: [R(3, 4, 5, 16, 2), R(10, 4, 5, 11, 2), R(17, 4, 4, 7, 2)],
   angebote: [R(5, 3, 14, 18, 2.5), L(9, 9, 15, 9), L(9, 13, 15, 13), L(9, 17, 12, 17)],

@@ -139,7 +139,7 @@ export async function decideCorrection(
    */
   const { data: alt, error: selErr } = await supabase
     .from("time_entry")
-    .select("id, company_id, user_id, job_id, kind, note")
+    .select("id, company_id, user_id, vorgang_id, kind, note")
     .eq("id", korrektur.time_entry_id)
     .maybeSingle();
 
@@ -158,7 +158,7 @@ export async function decideCorrection(
   const { error: insErr } = await supabase.from("time_entry").insert({
     company_id: alt.company_id,
     user_id: alt.user_id,
-    job_id: alt.job_id,
+    vorgang_id: alt.vorgang_id,
     kind: alt.kind,
     started_at: aenderung.started_at,
     ended_at: aenderung.ended_at,

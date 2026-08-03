@@ -21,10 +21,10 @@ export default async function ChatPage({
   const [{ data: kanaele }, { data: jobs }] = await Promise.all([
     supabase
       .from("chat_channel")
-      .select("id, name, kind, job:job_id ( id, number )")
+      .select("id, name, kind, vorgang:vorgang_id ( id, number )")
       .order("name"),
     supabase
-      .from("job")
+      .from("vorgang")
       .select("id, number, customer:customer_id ( name )")
       .order("number", { ascending: false })
       .limit(50),
@@ -63,7 +63,7 @@ export default async function ChatPage({
           ) : (
             <ul className="mb-4 flex flex-col gap-1">
               {(kanaele ?? []).map((k) => {
-                const job = k.job as unknown as {
+                const job = k.vorgang as unknown as {
                   id: string;
                   number: string;
                 } | null;

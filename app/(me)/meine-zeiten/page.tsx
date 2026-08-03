@@ -39,7 +39,7 @@ export default async function MeineZeitenPage() {
     supabase
       .from("time_entry")
       .select(
-        "id, kind, started_at, ended_at, duration_min, status, note, job:job_id ( id, number )",
+        "id, kind, started_at, ended_at, duration_min, status, note, vorgang:vorgang_id ( id, number )",
       )
       .eq("user_id", me.id)
       .gte("started_at", `${jahr}-01-01`)

@@ -76,9 +76,9 @@ export default async function CrmPage({
     { data: alleKunden },
     { data: aktivitaeten },
     { data: anlagen },
-    { data: jobs },
+    { data: vorgaenge },
+    { data: werte },
     { data: rechnungen },
-    { data: angebote },
     { data: portalzugaenge },
   ] = await Promise.all([
     supabase
@@ -98,13 +98,13 @@ export default async function CrmPage({
       .select(
         "id, customer_id, kwp, storage_kwh, modules, inverter, meter_point, commissioned_on",
       ),
+    supabase.from("vorgang").select("id, customer_id, phase"),
     supabase
-      .from("job")
-      .select("id, customer_id, value_net, phase:phase_id ( system_key )"),
+      .from("v_vorgang_kpi")
+      .select("vorgang_id, auftragswert_netto"),
     supabase
-      .from("invoice")
-      .select("id, job_id, amount_net, paid_amount, status"),
-    supabase.from("quote").select("id, customer_id, net_total, status, accepted_at"),
+      .from("vorgang_dokument")
+      .select("id, vorgang_id, betrag_brutto, status, typ"),
     supabase
       .from("portal_access")
       .select("customer_id, expires_at, last_seen_at, token_enc")
@@ -147,47 +147,52 @@ export default async function CrmPage({
     anlagenJe.set(p.customer_id, (anlagenJe.get(p.customer_id) ?? 0) + 1);
   }
 
-  type JobZeile = {
-    id: string;
-    customer_id: string;
-    value_net: string;
-    phase: { system_key: string | null } | null;
-  };
-  const jobZeilen = (jobs ?? []) as unknown as JobZeile[];
+  type VorgangZeile = { id: string; customer_id: string; phase: string };
+  const vorgangZeilen = (vorgaenge ?? []) as unknown as VorgangZeile[];
+
+  /*
+   * Beträge über v_vorgang_kpi: auf auftragswert_netto hat authenticated
+   * kein Spaltenrecht (0025). Wer sie nicht sehen darf, bekommt eine
+   * leere Map und damit Kunden ohne Zahlen — nicht Kunden ohne Zeile.
+   */
+  const wertJe = new Map(
+    (werte ?? []).map((w) => [
+      w.vorgang_id as string,
+      Number(w.auftragswert_netto ?? 0),
+    ]),
+  );
 
   const umsatzJe = new Map<string, number>();
   const aktiveJe = new Map<string, number>();
-  const jobZuKunde = new Map<string, string>();
-  for (const j of jobZeilen) {
-    jobZuKunde.set(j.id, j.customer_id);
-    umsatzJe.set(
-      j.customer_id,
-      (umsatzJe.get(j.customer_id) ?? 0) + Number(j.value_net),
-    );
-    if (j.phase?.system_key !== "closed") {
-      aktiveJe.set(j.customer_id, (aktiveJe.get(j.customer_id) ?? 0) + 1);
+  const vorgangZuKunde = new Map<string, string>();
+  const offeneAngeboteJe = new Map<string, number>();
+
+  for (const v of vorgangZeilen) {
+    vorgangZuKunde.set(v.id, v.customer_id);
+    const wert = wertJe.get(v.id) ?? 0;
+
+    if (v.phase === "verloren") continue;
+
+    if (v.phase === "anfrage" || v.phase === "aufnahme" || v.phase === "angebot") {
+      offeneAngeboteJe.set(
+        v.customer_id,
+        (offeneAngeboteJe.get(v.customer_id) ?? 0) + wert,
+      );
+    } else {
+      umsatzJe.set(v.customer_id, (umsatzJe.get(v.customer_id) ?? 0) + wert);
+    }
+
+    if (v.phase !== "abschluss") {
+      aktiveJe.set(v.customer_id, (aktiveJe.get(v.customer_id) ?? 0) + 1);
     }
   }
 
   const offenJe = new Map<string, number>();
   for (const r of rechnungen ?? []) {
-    if (r.status === "paid" || r.status === "cancelled") continue;
-    const cid = jobZuKunde.get(r.job_id as string);
+    if (r.status !== "versendet") continue;
+    const cid = vorgangZuKunde.get(r.vorgang_id as string);
     if (!cid) continue;
-    offenJe.set(
-      cid,
-      (offenJe.get(cid) ?? 0) + (Number(r.amount_net) - Number(r.paid_amount)),
-    );
-  }
-
-  const offeneAngeboteJe = new Map<string, number>();
-  for (const q of angebote ?? []) {
-    if (q.accepted_at || q.status === "lost" || q.status === "draft") continue;
-    const cid = q.customer_id as string;
-    offeneAngeboteJe.set(
-      cid,
-      (offeneAngeboteJe.get(cid) ?? 0) + Number(q.net_total),
-    );
+    offenJe.set(cid, (offenJe.get(cid) ?? 0) + Number(r.betrag_brutto ?? 0));
   }
 
   // --- Kennzahlen ---
@@ -195,17 +200,19 @@ export default async function CrmPage({
   const bestand = kunden.filter((k) => k.type === "customer");
   const pipelineWert = [...offeneAngeboteJe.values()].reduce((s, v) => s + v, 0);
 
-  const entschieden = (angebote ?? []).filter(
-    (q) => q.accepted_at !== null || q.status === "lost",
-  );
+  /*
+   * Abschlussquote über entschiedene Vorgänge: beauftragt und weiter
+   * gilt als gewonnen, verloren als verloren. Was noch in Anfrage,
+   * Aufnahme oder Angebot steht, ist nicht entschieden und verzerrt die
+   * Quote, solange es mitzählt.
+   */
+  const gewonnen = vorgangZeilen.filter((v) =>
+    ["beauftragt", "montage", "abschluss"].includes(v.phase),
+  ).length;
+  const verloren = vorgangZeilen.filter((v) => v.phase === "verloren").length;
+  const entschieden = gewonnen + verloren;
   const abschlussquote =
-    entschieden.length > 0
-      ? Math.round(
-          (entschieden.filter((q) => q.accepted_at !== null).length /
-            entschieden.length) *
-            100,
-        )
-      : 0;
+    entschieden > 0 ? Math.round((gewonnen / entschieden) * 100) : 0;
 
   const detail = gewaehlt
     ? (kunden.find((k) => k.id === gewaehlt) ?? null)
@@ -276,7 +283,7 @@ export default async function CrmPage({
         actions={
           <>
             {darfSchreiben ? <KundeAnlegen /> : null}
-            <LinkButton href="/pipelines/vertrieb" variant="ghost">
+            <LinkButton href="/vorgaenge" variant="ghost">
               Vertriebspipeline
             </LinkButton>
           </>
@@ -305,7 +312,7 @@ export default async function CrmPage({
         <KpiKarte
           label="Abschlussquote"
           wert={`${abschlussquote} %`}
-          pille={`${entschieden.length} entschieden`}
+          pille={`${entschieden} entschieden`}
           ton={abschlussquote >= 40 ? "gut" : "neutral"}
           notiz="angenommen gegen verloren"
         />

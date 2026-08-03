@@ -138,9 +138,8 @@ export async function addPhase(
   }
 
   revalidatePath("/einstellungen");
-  revalidatePath("/pipelines/vertrieb");
-  revalidatePath("/pipelines/projekte");
-  revalidatePath("/pipelines/service");
+  revalidatePath("/vorgaenge");
+  revalidatePath("/service");
   return { error: null, ok: `Phase „${parsed.data.label}" angelegt.` };
 }
 
@@ -174,7 +173,7 @@ export async function renamePhase(
   if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
 
   revalidatePath("/einstellungen");
-  revalidatePath("/pipelines/projekte");
+  revalidatePath("/vorgaenge");
   return { error: null, ok: "Umbenannt." };
 }
 
@@ -298,7 +297,7 @@ export async function saveLocation(
   if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
 
   revalidatePath("/einstellungen");
-  revalidatePath("/dispo");
+  revalidatePath("/planung");
   return { error: null, ok: "Standort gespeichert." };
 }
 
@@ -306,16 +305,17 @@ async function zaehleBelegung(
   supabase: Awaited<ReturnType<typeof createClient>>,
   phaseId: string,
 ): Promise<number> {
-  const [jobs, quotes, tickets] = await Promise.all([
-    supabase.from("job").select("id", { count: "exact", head: true }).eq("phase_id", phaseId),
-    supabase.from("quote").select("id", { count: "exact", head: true }).eq("phase_id", phaseId),
-    supabase
-      .from("service_ticket")
-      .select("id", { count: "exact", head: true })
-      .eq("phase_id", phaseId),
-  ]);
+  /*
+   * Nur noch Service-Tickets: Vertrieb und Projekte laufen über den
+   * Vorgang, dessen Phasen ein Enum sind und nicht gelöscht werden
+   * können (0025).
+   */
+  const tickets = await supabase
+    .from("service_ticket")
+    .select("id", { count: "exact", head: true })
+    .eq("phase_id", phaseId);
 
-  return (jobs.count ?? 0) + (quotes.count ?? 0) + (tickets.count ?? 0);
+  return tickets.count ?? 0;
 }
 
 /* ------------------------------------------------------ ZEITERFASSUNG */

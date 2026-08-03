@@ -7,6 +7,7 @@ import { portalVorgangDetail } from "@/lib/portal/vorgang";
 import { PHASEN, phaseIndex, summen } from "@/lib/vorgang/modell";
 import { AngebotAktionen, PositionListe } from "./VorgangClient";
 import { OffeneAnfragen, PortalChat } from "./PortalChat";
+import { ConfirmAppointmentForm } from "../../PortalForms";
 import { chatLesen } from "@/lib/vorgang/chat";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -211,6 +212,28 @@ export default async function PortalVorgangPage({
                 {naechster.notiz}
               </p>
             ) : null}
+
+            {/*
+              Die Bestätigung ist der einzige Rückkanal vor dem
+              Montagetag. Verschieben geht hier bewusst nicht: das
+              kollidiert mit der Einsatzplanung und der Ruhezeitprüfung.
+            */}
+            {naechster.bestaetigtAm ? (
+              <p className="mt-4 text-[13px] font-medium text-s-done">
+                Von Ihnen bestätigt am {date(naechster.bestaetigtAm)}. Danke.
+              </p>
+            ) : (
+              <div className="mt-4">
+                <ConfirmAppointmentForm
+                  token={token}
+                  appointmentId={naechster.id}
+                />
+                <p className="mt-2 text-[11.5px] text-faint">
+                  Passt der Termin nicht? Schreiben Sie uns unten — wir
+                  melden uns.
+                </p>
+              </div>
+            )}
           </section>
         ) : null}
 

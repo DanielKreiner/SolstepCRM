@@ -78,7 +78,7 @@ test("Drei Buchungen im Flugmodus gehen nach dem Reconnect vollständig durch", 
 
   // Artikel explizit wählen — die Vorauswahl ist der alphabetisch erste.
   await page.getByLabel("Artikel").selectOption(article!.id as string);
-  await page.getByLabel("Auftrag", { exact: true }).selectOption("");
+  await page.getByLabel("Vorgang", { exact: true }).selectOption("");
 
   await context.setOffline(true);
 

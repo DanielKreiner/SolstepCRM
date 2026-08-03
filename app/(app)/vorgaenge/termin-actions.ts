@@ -2,6 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+  checkRoster,
+  DEFAULT_RULES,
+  type Absence,
+  type Shift,
+} from "@/lib/rules/worktime";
 import { offenePflichtGates, type Gate, type GateStatus } from "@/lib/vorgang/modell";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -125,12 +131,7 @@ export async function montageTerminieren(
     );
   }
 
-  /*
-   * Doppelbelegung ist eine Warnung, kein Block (Briefing Abschnitt 7).
-   * Ein Betrieb weiss manchmal selbst am besten, dass zwei Baustellen an
-   * einem Tag gehen — aber er soll es bewusst tun.
-   */
-  const konflikte = await doppelbelegung(supabase, teamIds, von, bis, termin.id as string);
+  const gefunden = await konflikte(supabase, teamIds, von, bis, termin.id as string);
 
   if (v.phase === "beauftragt") {
     await supabase
@@ -156,7 +157,7 @@ export async function montageTerminieren(
     ]
       .filter(Boolean)
       .join(" "),
-    payload: { termin_id: termin.id, konflikte },
+    payload: { termin_id: termin.id, konflikte: gefunden },
     created_by: me.id,
   });
 
@@ -167,8 +168,8 @@ export async function montageTerminieren(
   return {
     error: null,
     ok:
-      konflikte.length > 0
-        ? `Terminiert. Achtung: ${konflikte.join(", ")} ist im Zeitraum schon eingeteilt.`
+      gefunden.length > 0
+        ? `Terminiert. Achtung — ${gefunden.join(" · ")}`
         : "Terminiert.",
   };
 }
@@ -238,7 +239,21 @@ export async function terminVerschieben(
  *
  * Gibt Namen zurück, keine Wahrheit: die Entscheidung trifft der Betrieb.
  */
-async function doppelbelegung(
+/*
+ * Konfliktprüfung beim Terminieren.
+ *
+ * Bis zum Umbau lief die Arbeitszeitprüfung an der Freigabe des
+ * Dienstplans in der Einsatzplanung. Die gibt es nicht mehr — terminiert
+ * wird im Vorgang. Die Regeln wandern deshalb hierher, statt mit dem
+ * Screen zu verschwinden: Ruhezeit und Höchstarbeitszeit sind keine
+ * Komfortfunktion, sondern Haftung des Betriebs (CLAUDE.md Abschnitt 10,
+ * ArbZG/AZG).
+ *
+ * Gemeldet, nicht geblockt (Briefing Abschnitt 7). Ein Betrieb weiss
+ * manchmal selbst am besten, dass zwei Baustellen an einem Tag gehen —
+ * aber er soll es bewusst tun und die Meldung im Vorgang stehen haben.
+ */
+async function konflikte(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userIds: string[],
   von: Date,
@@ -247,25 +262,68 @@ async function doppelbelegung(
 ): Promise<string[]> {
   if (userIds.length === 0) return [];
 
-  const { data } = await supabase
-    .from("vorgang_termin_person")
-    .select(
-      "user_id, user:user_id ( name ), termin:termin_id ( id, von, bis )",
-    )
-    .in("user_id", userIds);
+  const [{ data: zuordnungen }, { data: leute }, { data: abwesend }] =
+    await Promise.all([
+      supabase
+        .from("vorgang_termin_person")
+        .select("user_id, user:user_id ( name ), termin:termin_id ( id, von, bis )")
+        .in("user_id", userIds),
+      supabase.from("app_user").select("id, name").in("id", userIds),
+      supabase
+        .from("absence")
+        .select("user_id, from_date, to_date, kind")
+        .eq("status", "approved")
+        .in("user_id", userIds),
+    ]);
 
-  const namen = new Set<string>();
-  for (const z of (data ?? []) as unknown as {
+  const namen = new Map(
+    (leute ?? []).map((u) => [u.id as string, u.name as string]),
+  );
+
+  const schichten: Shift[] = [];
+  const meldungen: string[] = [];
+
+  for (const z of (zuordnungen ?? []) as unknown as {
+    user_id: string;
     user: { name: string } | null;
     termin: { id: string; von: string; bis: string } | null;
   }[]) {
     if (!z.termin || z.termin.id === ausserTermin) continue;
-    const tVon = new Date(z.termin.von).getTime();
-    const tBis = new Date(z.termin.bis).getTime();
-    /* Überschneidung, wenn Anfang vor fremdem Ende und Ende nach fremdem Anfang. */
-    if (von.getTime() < tBis && bis.getTime() > tVon && z.user?.name) {
-      namen.add(z.user.name);
-    }
+    schichten.push({
+      id: z.termin.id,
+      userId: z.user_id,
+      start: z.termin.von,
+      end: z.termin.bis,
+    });
   }
-  return [...namen];
+
+  /* Der neue Termin gilt für jede eingeteilte Person. */
+  for (const uid of userIds) {
+    schichten.push({
+      id: `neu-${uid}`,
+      userId: uid,
+      start: von.toISOString(),
+      end: bis.toISOString(),
+    });
+  }
+
+  const abwesenheiten: Absence[] = ((abwesend ?? []) as unknown as {
+    user_id: string;
+    from_date: string;
+    to_date: string;
+    kind: string;
+  }[]).map((a) => ({
+    userId: a.user_id,
+    from: a.from_date,
+    to: a.to_date,
+    kind: a.kind,
+  }));
+
+  for (const k of checkRoster(schichten, DEFAULT_RULES, abwesenheiten)) {
+    /* Nur was den neuen Termin betrifft — alte Verstösse sind alte Meldungen. */
+    if (!k.shiftIds.some((id) => id.startsWith("neu-"))) continue;
+    meldungen.push(`${namen.get(k.userId) ?? "Jemand"}: ${k.message}`);
+  }
+
+  return meldungen;
 }

@@ -72,7 +72,7 @@ export async function bookStockMove(
   const { error } = await supabase.from("stock_move").insert({
     company_id: me.companyId,
     article_id: articleId,
-    job_id: jobId,
+    vorgang_id: jobId,
     user_id: me.id,
     qty,
     kind,
@@ -89,7 +89,7 @@ export async function bookStockMove(
 
   revalidatePath("/lager");
   revalidatePath(`/lager/${articleId}`);
-  if (jobId) revalidatePath(`/auftraege/${jobId}`);
+  if (jobId) revalidatePath(`/vorgaenge/${jobId}`);
 
   const label =
     kind === "out"

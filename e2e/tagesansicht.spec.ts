@@ -65,7 +65,7 @@ test("Eine Buchung ohne Auftrag wird zur Prüfung markiert", async ({ page }) =>
   await db.from("time_entry").insert({
     company_id: COMPANY_A,
     user_id: person!.id,
-    job_id: null,
+    vorgang_id: null,
     kind: "work",
     started_at: `${TAG}T05:00:00Z`,
     ended_at: `${TAG}T13:00:00Z`,
@@ -92,8 +92,8 @@ test("Über zehn Stunden ohne Pause gilt als unplausibel", async ({ page }) => {
     .eq("email", DEMO.monteur)
     .single();
 
-  const { data: job } = await db
-    .from("job")
+  const { data: vorgang } = await db
+    .from("vorgang")
     .select("id")
     .eq("company_id", COMPANY_A)
     .limit(1)
@@ -103,7 +103,7 @@ test("Über zehn Stunden ohne Pause gilt als unplausibel", async ({ page }) => {
   await db.from("time_entry").insert({
     company_id: COMPANY_A,
     user_id: person!.id,
-    job_id: job!.id,
+    vorgang_id: vorgang!.id,
     kind: "work",
     started_at: `${TAG}T04:00:00Z`,
     ended_at: `${TAG}T15:00:00Z`,
@@ -130,8 +130,8 @@ test("Mit gebuchter Pause ist derselbe Tag nicht mehr unplausibel", async ({
     .eq("email", DEMO.monteur)
     .single();
 
-  const { data: job } = await db
-    .from("job")
+  const { data: vorgang } = await db
+    .from("vorgang")
     .select("id")
     .eq("company_id", COMPANY_A)
     .limit(1)
@@ -141,7 +141,7 @@ test("Mit gebuchter Pause ist derselbe Tag nicht mehr unplausibel", async ({
     {
       company_id: COMPANY_A,
       user_id: person!.id,
-      job_id: job!.id,
+      vorgang_id: vorgang!.id,
       kind: "work",
       started_at: `${TAG}T04:00:00Z`,
       ended_at: `${TAG}T15:00:00Z`,
@@ -150,7 +150,7 @@ test("Mit gebuchter Pause ist derselbe Tag nicht mehr unplausibel", async ({
     {
       company_id: COMPANY_A,
       user_id: person!.id,
-      job_id: job!.id,
+      vorgang_id: vorgang!.id,
       kind: "break",
       started_at: `${TAG}T10:00:00Z`,
       ended_at: `${TAG}T10:30:00Z`,

@@ -10,7 +10,7 @@ import {
 
 /*
  * Artikelbilder auf dem ganzen Weg: in der Suche, in der Positionszeile,
- * auf der Angebotsseite des Kunden und im PDF.
+ * im Kundenportal und im PDF.
  *
  * Ein Modul erkennt man am Bild schneller als am Namen — vier Hersteller
  * nennen ihr Gerät fast gleich. Genau deshalb war die Klappliste
@@ -20,7 +20,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 const zustand: {
-  quoteId?: string;
+  vorgangId?: string;
   positionId?: string | undefined;
   kundeId?: string | undefined;
   artikelName?: string;
@@ -29,10 +29,19 @@ const zustand: {
 
 async function aufraeumen(): Promise<void> {
   const db = admin();
-  if (zustand.positionId) {
-    await db.from("quote_item").delete().eq("id", zustand.positionId);
-    zustand.positionId = undefined;
+  /*
+   * Nach dem Namen räumen und nicht nach der gemerkten ID: bricht der
+   * Test vor der Zuweisung ab, bliebe die Position sonst liegen und der
+   * nächste Lauf fände zwei.
+   */
+  if (zustand.vorgangId && zustand.artikelName) {
+    await db
+      .from("vorgang_position")
+      .delete()
+      .eq("vorgang_id", zustand.vorgangId)
+      .eq("bezeichnung", zustand.artikelName);
   }
+  zustand.positionId = undefined;
   if (zustand.kundeId) {
     await db.from("portal_access").delete().eq("customer_id", zustand.kundeId);
     zustand.kundeId = undefined;
@@ -43,12 +52,18 @@ test.beforeAll(async () => {
   await aufraeumen();
   const db = admin();
 
+  /*
+   * Sortiert wählen, nicht limit(1) auf gut Glück: ohne order liefert
+   * Postgres bei jedem Lauf eine andere Zeile, und dann prüft der Test
+   * mal dieses und mal jenes Bild.
+   */
   const { data: artikel } = await db
     .from("article")
     .select("name, image_url")
     .eq("company_id", COMPANY_A)
     .eq("active", true)
     .not("image_url", "is", null)
+    .order("sku")
     .limit(1)
     .single();
 
@@ -62,18 +77,17 @@ test("1 — Die Artikelsuche zeigt Vorschaubilder", async ({ page }) => {
   await login(page, DEMO.gf);
 
   const db = admin();
-  const { data: angebot } = await db
-    .from("quote")
+  const { data: vorgang } = await db
+    .from("vorgang")
     .select("id")
     .eq("company_id", COMPANY_A)
-    .is("accepted_at", null)
-    .is("sent_at", null)
+    .in("phase", ["anfrage", "aufnahme", "angebot"])
     .order("created_at", { ascending: false })
     .limit(1)
     .single();
-  zustand.quoteId = angebot!.id as string;
+  zustand.vorgangId = vorgang!.id as string;
 
-  await page.goto(`/angebote/${zustand.quoteId}`);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
 
   /*
    * Kein <select> mehr — ein Betrieb mit 468 Artikeln scrollt sonst,
@@ -99,8 +113,9 @@ test("1 — Die Artikelsuche zeigt Vorschaubilder", async ({ page }) => {
 
 test("2 — Das Bild wandert in die Position", async ({ page }) => {
   const db = admin();
+  await aufraeumen();
   await login(page, DEMO.gf);
-  await page.goto(`/angebote/${zustand.quoteId}`);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
 
   // Auf der Seite stehen zwei Mengenfelder — Artikel und freie Position.
   const form = page.locator("form", { hasText: "Artikel übernehmen" });
@@ -108,20 +123,39 @@ test("2 — Das Bild wandert in die Position", async ({ page }) => {
   await form.getByLabel("Menge").fill("2");
   await form.getByRole("button", { name: "Übernehmen" }).click();
 
-  await expect(page.getByText(/übernommen/)).toBeVisible({ timeout: 20_000 });
+  /*
+   * Auf die Wirkung warten, nicht auf die Meldung: die Liste wird nach
+   * dem Übernehmen neu gerendert, und der Erfolgstext verschwindet mit
+   * dem Formular, das ihn getragen hat.
+   */
+  await expect
+    .poll(
+      async () => {
+        const { count } = await db
+          .from("vorgang_position")
+          .select("id", { count: "exact", head: true })
+          .eq("vorgang_id", zustand.vorgangId!)
+          .eq("bezeichnung", zustand.artikelName!);
+        return count ?? 0;
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
 
-  const { data: position } = await db
-    .from("quote_item")
-    .select("id, image_url, text")
-    .eq("quote_id", zustand.quoteId!)
-    .eq("text", zustand.artikelName!)
+  const { data: position, error } = await db
+    .from("vorgang_position")
+    .select("id, bild_url, bezeichnung")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .eq("bezeichnung", zustand.artikelName!)
+    .limit(1)
     .single();
+  expect(error, error?.message).toBeNull();
 
   /*
    * Kopiert, nicht verknüpft — dieselbe Regel wie beim Preis. Ein neues
    * Produktfoto beim Hersteller ändert ein verschicktes Angebot nicht.
    */
-  expect(position!.image_url).toBe(zustand.bild);
+  expect(position!.bild_url).toBe(zustand.bild);
   zustand.positionId = position!.id as string;
 
   // Und es steht in der Positionszeile.
@@ -134,18 +168,18 @@ test("2 — Das Bild wandert in die Position", async ({ page }) => {
 test("3 — Der Kunde sieht das Bild auf der Angebotsseite", async ({ page }) => {
   const db = admin();
 
-  const { data: quote } = await db
-    .from("quote")
+  const { data: vorgang } = await db
+    .from("vorgang")
     .select("customer_id")
-    .eq("id", zustand.quoteId!)
+    .eq("id", zustand.vorgangId!)
     .single();
-  zustand.kundeId = quote!.customer_id as string;
+  zustand.kundeId = vorgang!.customer_id as string;
 
   await login(page, DEMO.gf);
   const token = await portalToken(page, zustand.kundeId);
 
   await page.context().clearCookies();
-  await page.goto(`/portal/${token}/angebot/${zustand.quoteId}`);
+  await page.goto(`/portal/${token}/vorgang/${zustand.vorgangId}`);
 
   await expect(
     page.locator(`img[src="${zustand.bild}"]`).first(),
@@ -160,7 +194,9 @@ test("4 — Das PDF entsteht auch mit Bildern", async ({ page }) => {
    * den zweiten Anlauf ohne Bilder das ganze PDF scheitern lassen — und
    * der Kunde bekäme statt eines Angebots einen Fehler.
    */
-  const antwort = await page.request.get(`/api/pdf/quote/${zustand.quoteId}`);
+  const antwort = await page.request.get(
+    `/api/pdf/vorgang/${zustand.vorgangId}?art=angebot`,
+  );
   expect(antwort.status()).toBe(200);
   expect(antwort.headers()["content-type"]).toContain("application/pdf");
 
@@ -199,15 +235,15 @@ test("5 — Kein Bild zeigt auf eine fremde Domain", async () => {
   ).toEqual([]);
 
   const { data: positionen } = await db
-    .from("quote_item")
-    .select("id, image_url")
+    .from("vorgang_position")
+    .select("id, bild_url")
     .eq("company_id", COMPANY_A)
-    .not("image_url", "is", null);
+    .not("bild_url", "is", null);
 
   const fremdePositionen = (positionen ?? []).filter(
-    (p) => !(p.image_url as string).startsWith(eigene),
+    (p) => !(p.bild_url as string).startsWith(eigene),
   );
-  expect(fremdePositionen.map((p) => p.image_url as string)).toEqual([]);
+  expect(fremdePositionen.map((p) => p.bild_url as string)).toEqual([]);
 });
 
 test("6 — Das Bild ist ohne Anmeldung abrufbar", async ({ page }) => {

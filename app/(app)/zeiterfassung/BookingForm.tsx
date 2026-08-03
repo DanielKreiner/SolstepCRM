@@ -120,10 +120,10 @@ export function BookingForm({
         */}
         <Suchauswahl
           name="jobId"
-          label="Auftrag"
+          label="Vorgang"
           pflicht={kind === "work"}
           platzhalter="Auftrag suchen — Nummer oder Kunde"
-          leerLabel="— ohne Auftrag —"
+          leerLabel="— ohne Vorgang —"
           hinweis={kind === "work" ? "Pflicht bei Arbeit" : "optional"}
           optionen={jobs.map((j) => ({ wert: j.id, text: j.label }))}
         />

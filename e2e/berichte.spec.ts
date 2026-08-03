@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, login } from "./helpers";
+import {
+  COMPANY_A,
+  DEMO,
+  admin,
+  login,
+  vorgangId,
+  vorgangNummer,
+} from "./helpers";
 
 /*
  * Definition of Done Meilenstein 11, zweiter Teil:
@@ -18,7 +25,7 @@ test("Alle vier Berichte lassen sich öffnen", async ({ page }) => {
   await login(page, DEMO.gf);
 
   for (const [id, titel] of [
-    ["auftraege", "Aufträge und Nachkalkulation"],
+    ["auftraege", "Vorgänge und Nachkalkulation"],
     ["umsatz", "Umsatz je Monat"],
     ["zeiten", "Stunden je Person"],
     ["material", "Materialverbrauch"],
@@ -35,21 +42,34 @@ test("Der Auftragsbericht rechnet den Deckungsbeitrag korrekt", async ({
   await login(page, DEMO.gf);
   await page.goto(`/berichte?bericht=auftraege&jahr=${JAHR}`);
 
-  const { data: job } = await db
-    .from("job")
-    .select("id, number, value_net")
-    .eq("company_id", COMPANY_A)
-    .eq("number", "A-2026-0041")
+  const id = await vorgangId("A-2026-0041");
+
+  const { data: vorgang } = await db
+    .from("vorgang")
+    .select("auftragswert_netto")
+    .eq("id", id)
     .single();
 
-  const { data: kpi } = await db
-    .from("v_job_kpi")
-    .select("material_actual")
-    .eq("job_id", job!.id)
-    .single();
+  /*
+   * Material selbst rechnen: v_vorgang_kpi filtert auf
+   * current_company_id(), der Service-Role-Client bekäme nichts. Die
+   * Formel ist dieselbe wie in der View (Rückgaben zählen gegen).
+   */
+  const { data: bewegungen } = await db
+    .from("stock_move")
+    .select("qty, kind, article:article_id ( purchase_price )")
+    .eq("vorgang_id", id)
+    .in("kind", ["out", "return"]);
 
-  const erwartet =
-    Number(job!.value_net) - Number(kpi!.material_actual);
+  const material = (bewegungen ?? []).reduce((sum, m) => {
+    const preis = Number(
+      (m.article as unknown as { purchase_price: string } | null)
+        ?.purchase_price ?? 0,
+    );
+    return sum + (m.kind === "out" ? 1 : -1) * Number(m.qty) * preis;
+  }, 0);
+
+  const erwartet = Number(vorgang!.auftragswert_netto) - material;
 
   // 28.400,00 minus 4.632,00 Material = 23.768
   const formatiert = new Intl.NumberFormat("de-AT", {
@@ -73,8 +93,8 @@ test("Der CSV-Export ist eine Excel-taugliche Datei", async ({ page }) => {
   // BOM, sonst zerlegt Excel unter Windows die Umlaute.
   expect(text.charCodeAt(0)).toBe(0xfeff);
   // Semikolon als Trenner, Komma als Dezimalzeichen.
-  expect(text.split("\r\n")[0]).toContain("Auftrag;Kunde;Phase");
-  expect(text).toContain("A-2026-0041");
+  expect(text.split("\r\n")[0]).toContain("Vorgang;Kunde;Phase");
+  expect(text).toContain(await vorgangNummer("A-2026-0041"));
 });
 
 test("Der PDF-Export ist ein PDF", async ({ page }) => {

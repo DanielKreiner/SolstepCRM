@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { moveCard } from "@/app/(app)/pipelines/[kind]/actions";
+import { ticketPhaseSetzen } from "@/app/(app)/service/actions";
 
 /**
  * Phasenwechsel ausserhalb des Boards.
@@ -13,9 +13,9 @@ import { moveCard } from "@/app/(app)/pipelines/[kind]/actions";
  * Leiste: die aktuelle Phase hervorgehoben, ein Klick auf die nächste
  * schiebt weiter.
  *
- * Geschrieben wird über dieselbe Server Action wie beim Ziehen. Eine
- * zweite Fassung wäre eine zweite Stelle, an der die Prüfung fehlen kann,
- * ob die Zielphase überhaupt zu dieser Pipeline gehört.
+ * Übrig ist die Leiste nur noch für Service-Tickets: Vertrieb und
+ * Projekte laufen über den Vorgang, dessen Phasen ein Enum sind und
+ * eigene Regeln tragen (lib/vorgang/modell.ts).
  */
 export type Phase = {
   id: string;
@@ -24,14 +24,12 @@ export type Phase = {
 };
 
 export function PhasenWechsel({
-  kind,
   cardId,
   phasen,
   aktuelleId,
   gesperrt = false,
 }: {
-  /** vertrieb | projekte | service */
-  kind: string;
+  /** ID des Service-Tickets */
   cardId: string;
   phasen: Phase[];
   aktuelleId: string | null;
@@ -52,7 +50,7 @@ export function PhasenWechsel({
     setGezeigt(phaseId);
 
     starte(async () => {
-      const ergebnis = await moveCard(kind, cardId, phaseId);
+      const ergebnis = await ticketPhaseSetzen(cardId, phaseId);
       if (!ergebnis.ok) {
         setGezeigt(vorher);
         setFehler(ergebnis.error ?? "Der Wechsel hat nicht geklappt.");

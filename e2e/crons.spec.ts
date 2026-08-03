@@ -13,7 +13,6 @@ import { COMPANY_A, admin } from "./helpers";
 
 const CRONS = [
   "/api/cron/quote-reminders",
-  "/api/cron/dunning",
   "/api/cron/stock-check",
   "/api/cron/certificate-check",
   "/api/cron/graph-renew",

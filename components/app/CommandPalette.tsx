@@ -8,17 +8,15 @@ import { Icon } from "@/components/ui/Icon";
 type Hit = { kind: string; id: string; label: string };
 
 const KIND_LABEL: Record<string, string> = {
-  job: "Auftrag",
+  vorgang: "Vorgang",
   customer: "Kunde",
   article: "Artikel",
-  quote: "Angebot",
 };
 
 const KIND_HREF: Record<string, (id: string) => string> = {
-  job: (id) => `/auftraege/${id}`,
+  vorgang: (id) => `/vorgaenge/${id}`,
   customer: (id) => `/crm/${id}`,
   article: (id) => `/lager/${id}`,
-  quote: (id) => `/angebote/${id}`,
 };
 
 /*
@@ -181,7 +179,7 @@ function PaletteTrigger({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="flex max-w-[520px] flex-1 cursor-pointer items-center gap-[10px] rounded-pill border-0 bg-panel px-4 py-[11px] text-left"
+      className="flex min-w-0 max-w-[520px] flex-1 cursor-pointer items-center gap-[10px] rounded-pill border-0 bg-panel px-3 py-[10px] text-left sm:px-4 sm:py-[11px]"
     >
       <span className="text-faint">
         <Icon name="suche" size={17} />

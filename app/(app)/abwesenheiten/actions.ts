@@ -98,7 +98,7 @@ export async function requestAbsence(
   if (error) return { error: `Antrag fehlgeschlagen: ${error.message}`, ok: null };
 
   revalidatePath("/abwesenheiten");
-  revalidatePath("/dispo");
+  revalidatePath("/planung");
 
   return {
     error: null,
@@ -143,7 +143,7 @@ export async function decideAbsence(
   if (error) return { error: `Entscheidung fehlgeschlagen: ${error.message}`, ok: null };
 
   revalidatePath("/abwesenheiten");
-  revalidatePath("/dispo");
+  revalidatePath("/planung");
   return {
     error: null,
     ok: parsed.data.entscheidung === "approved" ? "Genehmigt." : "Abgelehnt.",

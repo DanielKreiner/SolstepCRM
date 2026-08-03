@@ -120,39 +120,52 @@ on conflict (company_id, sku) do update set
   purchase_price = excluded.purchase_price,
   sale_price = excluded.sale_price;
 
--- -------------------------------------------------------------- AUFTRÄGE
--- phase_id kommt aus seed_pipelines(), die UUIDs stehen also nicht vorher fest.
--- Termine relativ zu heute, damit Cockpit und Einsatzplanung auch in einigen
+-- -------------------------------------------------------------- VORGÄNGE
+-- Ein Vorgang trägt den ganzen Weg. Die Nummern sind neu (V-…); die alten
+-- Auftragsnummern stehen in alt_nummern, damit ein Anruf wegen
+-- A-2026-0041 weiterhin auffindbar ist.
+insert into vorgang (
+  company_id, customer_id, number, phase,
+  kwp, speicher_kwh, adresse, plz, ort,
+  angebotswert_netto, auftragswert_netto,
+  soll_stunden, soll_materialkosten,
+  alt_nummern, phase_seit
+)
+values
+  ('11111111-1111-4111-8111-111111111111', 'c1000000-0000-4000-8000-000000000001',
+   'V-2026-0041', 'montage',
+   19.8, 10.0, 'Ahornweg 12', '4030', 'Linz',
+   28400.00, 28400.00, 64.0, 16800.00, 'A-2026-0041', now() - interval '2 days'),
+  ('11111111-1111-4111-8111-111111111111', 'c1000000-0000-4000-8000-000000000002',
+   'V-2026-0042', 'beauftragt',
+   48.6, 20.0, 'Gewerbestraße 22', '4600', 'Wels',
+   74900.00, 74900.00, 112.0, 48200.00, 'A-2026-0042', now() - interval '5 days'),
+  ('11111111-1111-4111-8111-111111111111', 'c1000000-0000-4000-8000-000000000001',
+   'V-2026-0038', 'abschluss',
+   11.2, null, 'Ahornweg 12', '4030', 'Linz',
+   15200.00, 15200.00, 38.0, 9100.00, 'A-2026-0038', now() - interval '12 days'),
+  ('22222222-2222-4222-8222-222222222222', 'c2000000-0000-4000-8000-000000000001',
+   'V-2026-0001', 'montage',
+   14.0, null, 'Südtiroler Platz 1', '8020', 'Graz',
+   19000.00, 19000.00, 40.0, 11000.00, 'A-2026-0001', now() - interval '1 day')
+on conflict (company_id, number) do nothing;
+
+-- Termine relativ zu heute, damit Cockpit und Planung auch in einigen
 -- Wochen noch etwas Sinnvolles zeigen.
-insert into job (company_id, customer_id, location_id, number, phase_id,
-                 planned_hours, value_net, material_planned,
-                 address, zip, city, next_step, scheduled_from, scheduled_to)
-select
-  j.company_id, j.customer_id, j.location_id, j.number, ph.id,
-  j.planned_hours, j.value_net, j.material_planned, j.address, j.zip, j.city, j.next_step,
-  ((current_date + j.start_in) + time '07:00') at time zone 'Europe/Vienna',
-  ((current_date + j.ende_in)  + time '16:00') at time zone 'Europe/Vienna'
+insert into vorgang_termin (company_id, vorgang_id, art, von, bis, notiz)
+select v.company_id, v.id, 'montage',
+       ((current_date + t.start_in) + time '07:00') at time zone 'Europe/Vienna',
+       ((current_date + t.ende_in)  + time '16:00') at time zone 'Europe/Vienna',
+       t.notiz
 from (values
-  ('11111111-1111-4111-8111-111111111111'::uuid, 'c1000000-0000-4000-8000-000000000001'::uuid,
-   '1a000000-0000-4000-8000-000000000001'::uuid, 'A-2026-0041', 'montage',
-   64.0, 28400.00, 16800.00, 'Ahornweg 12', '4030', 'Linz', 'Zählertausch mit Netz OÖ abstimmen',
-   -2, 3),
-  ('11111111-1111-4111-8111-111111111111'::uuid, 'c1000000-0000-4000-8000-000000000002'::uuid,
-   '1a000000-0000-4000-8000-000000000002'::uuid, 'A-2026-0042', 'terminiert',
-   112.0, 74900.00, 48200.00, 'Gewerbestraße 22', '4600', 'Wels', 'Gerüst für KW 34 fixieren',
-   7, 18),
-  ('11111111-1111-4111-8111-111111111111'::uuid, 'c1000000-0000-4000-8000-000000000001'::uuid,
-   '1a000000-0000-4000-8000-000000000001'::uuid, 'A-2026-0038', 'abgenommen',
-   38.0, 15200.00, 9100.00, 'Ahornweg 12', '4030', 'Linz', 'Schlussrechnung stellen',
-   -12, -5),
-  ('22222222-2222-4222-8222-222222222222'::uuid, 'c2000000-0000-4000-8000-000000000001'::uuid,
-   '2a000000-0000-4000-8000-000000000001'::uuid, 'A-2026-0001', 'montage',
-   40.0, 19000.00, 11000.00, 'Südtiroler Platz 1', '8020', 'Graz', 'Fremdmandant, nur für den Isolationstest',
-   -1, 4)
-) as j(company_id, customer_id, location_id, number, phase_key,
-       planned_hours, value_net, material_planned, address, zip, city, next_step,
-       start_in, ende_in)
-join pipeline p  on p.company_id = j.company_id and p.kind = 'projekte'
-join pipeline_phase ph on ph.pipeline_id = p.id and ph.key = j.phase_key;
+  ('V-2026-0041', -2,  3, 'Zählertausch mit Netz OÖ abstimmen'),
+  ('V-2026-0042',  7, 18, 'Gerüst für KW 34 fixieren'),
+  ('V-2026-0038', -12, -5, 'Schlussrechnung stellen'),
+  ('V-2026-0001', -1,  4, 'Fremdmandant, nur für den Isolationstest')
+) as t(nummer, start_in, ende_in, notiz)
+join vorgang v on v.number = t.nummer
+where not exists (
+  select 1 from vorgang_termin vt where vt.vorgang_id = v.id
+);
 
 commit;

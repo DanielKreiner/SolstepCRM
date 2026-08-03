@@ -94,7 +94,7 @@ export async function antwortSenden(
 
   revalidatePath(`/service/${parsed.data.ticketId}`);
   revalidatePath("/service");
-  revalidatePath("/pipelines/service");
+  revalidatePath("/service");
 
   return {
     error: null,
@@ -131,7 +131,7 @@ export async function ticketSpeichern(
       status: parsed.data.status,
       severity: parsed.data.severity,
       assignee_id: parsed.data.assigneeId || null,
-      job_id: parsed.data.jobId || null,
+      vorgang_id: parsed.data.jobId || null,
     })
     .eq("id", parsed.data.ticketId);
 
@@ -139,7 +139,7 @@ export async function ticketSpeichern(
 
   revalidatePath(`/service/${parsed.data.ticketId}`);
   revalidatePath("/service");
-  revalidatePath("/pipelines/service");
+  revalidatePath("/service");
   return { error: null, ok: "Gespeichert." };
 }
 
@@ -229,6 +229,64 @@ export async function ticketAnlegen(
   });
 
   revalidatePath("/service");
-  revalidatePath("/pipelines/service");
+  revalidatePath("/service");
   return { error: null, ok: `Ticket ${ticket.number as string} angelegt.` };
+}
+
+const phaseSchema = z.object({
+  ticketId: z.string().uuid(),
+  phaseId: z.string().uuid(),
+});
+
+export type MoveResult = { ok: boolean; error: string | null };
+
+/*
+ * Phasenwechsel eines Service-Tickets.
+ *
+ * Bis zum Umbau lief das über die generische Pipeline-Aktion, die für
+ * drei Entitäten gleichzeitig zuständig war. Vertrieb und Projekte sind
+ * jetzt der Vorgang mit festen Phasen; übrig bleibt Service, und dort
+ * sind die Phasen weiter Stammdaten je Mandant.
+ *
+ * Die Zielphase wird gegen die Service-Pipeline geprüft: ein
+ * manipulierter Aufruf soll ein Ticket nicht in eine fremde Phase
+ * schieben können.
+ */
+export async function ticketPhaseSetzen(
+  ticketId: string,
+  phaseId: string,
+): Promise<MoveResult> {
+  const me = await requireMe();
+
+  const parsed = phaseSchema.safeParse({ ticketId, phaseId });
+  if (!parsed.success) {
+    return { ok: false, error: "Ungültige Eingabe." };
+  }
+  if (me.perms.pipelines !== "write") {
+    return { ok: false, error: "Keine Berechtigung, Phasen zu ändern." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: phase } = await supabase
+    .from("pipeline_phase")
+    .select("id, pipeline:pipeline_id ( kind )")
+    .eq("id", parsed.data.phaseId)
+    .maybeSingle();
+
+  const kind = (phase?.pipeline as unknown as { kind: string } | null)?.kind;
+  if (!phase || kind !== "service") {
+    return { ok: false, error: "Zielphase gehört nicht zum Service." };
+  }
+
+  const { error } = await supabase
+    .from("service_ticket")
+    .update({ phase_id: parsed.data.phaseId })
+    .eq("id", parsed.data.ticketId);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/service");
+  revalidatePath(`/service/${parsed.data.ticketId}`);
+  return { ok: true, error: null };
 }

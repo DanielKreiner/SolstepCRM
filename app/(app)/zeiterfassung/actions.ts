@@ -109,7 +109,7 @@ export async function createTimeEntry(
   const { error } = await supabase.from("time_entry").insert({
     company_id: me.companyId,
     user_id: userId,
-    job_id: jobId,
+    vorgang_id: jobId,
     kind,
     started_at: beginn.toISOString(),
     ended_at: ende.toISOString(),
@@ -123,7 +123,7 @@ export async function createTimeEntry(
 
   revalidatePath("/zeiterfassung");
   revalidatePath("/stundenkonto");
-  if (jobId) revalidatePath(`/auftraege/${jobId}`);
+  if (jobId) revalidatePath(`/vorgaenge/${jobId}`);
 
   /*
    * Was die Regeln verändert haben, steht in der Rückmeldung. Eine

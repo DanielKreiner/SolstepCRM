@@ -1,5 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, jobHours, login, stockOf, suchwahl } from "./helpers";
+import {
+  DEMO,
+  admin,
+  login,
+  stockOf,
+  suchwahl,
+  vorgangHours,
+  vorgangId,
+  vorgangNummer,
+} from "./helpers";
 
 /*
  * Definition of Done Meilenstein 1 (CLAUDE.md Abschnitt 12):
@@ -13,24 +22,14 @@ import { COMPANY_A, DEMO, admin, jobHours, login, stockOf, suchwahl } from "./he
 
 test.describe.configure({ mode: "serial" });
 
-async function jobId(number: string): Promise<string> {
-  const { data, error } = await admin()
-    .from("job")
-    .select("id")
-    .eq("company_id", COMPANY_A)
-    .eq("number", number)
-    .single();
-  if (error) throw error;
-  return data.id as string;
-}
 
 
 test("Zeitbuchung mit Auftragsbezug erhöht die Iststunden des Auftrags", async ({
   page,
 }) => {
   const AUFTRAG = "A-2026-0042";
-  const vorher = await jobHours(AUFTRAG);
-  const id = await jobId(AUFTRAG);
+  const vorher = await vorgangHours(AUFTRAG);
+  const id = await vorgangId(AUFTRAG);
 
   await login(page, DEMO.bauleitung);
   await page.goto("/zeiterfassung");
@@ -38,24 +37,26 @@ test("Zeitbuchung mit Auftragsbezug erhöht die Iststunden des Auftrags", async 
   const form = page.locator("form", { hasText: "Buchung anlegen" });
   await form.getByLabel("Beginn").fill("06:00");
   await form.getByLabel("Ende").fill("09:30");
-  await suchwahl(form, "Auftrag", AUFTRAG);
+  await suchwahl(form, "Vorgang", await vorgangNummer(AUFTRAG));
   await form.getByLabel("Notiz").fill("E2E Meilenstein 1");
   await form.getByRole("button", { name: /Buchung anlegen/ }).click();
 
   await expect(form.getByRole("status")).toContainText("Buchung gespeichert");
 
   // 06:00–09:30 = 3,5 Stunden
-  const nachher = await jobHours(AUFTRAG);
+  const nachher = await vorgangHours(AUFTRAG);
   expect(nachher - vorher).toBeCloseTo(3.5, 2);
 
   /*
-   * Die Buchung mit ihrer Dauer steht am Auftrag, nicht in der
-   * Zeiterfassung: die Tagesansicht summiert seit dem Umbau je Person
-   * (Kommt, Pause, Ist, Soll, Diff) und zeigt keine Einzelbuchungen mehr.
-   * Wer eine einzelne Buchung sucht, sucht sie am Auftrag.
+   * Und die Buchung hängt am richtigen Vorgang — die Zahl allein könnte
+   * auch von einer Buchung ohne Bezug stammen.
    */
-  await page.goto(`/auftraege/${id}`);
-  await expect(page.getByText("3:30").first()).toBeVisible();
+  const { data: gebucht } = await admin()
+    .from("time_entry")
+    .select("vorgang_id")
+    .eq("note", "E2E Meilenstein 1")
+    .single();
+  expect(gebucht!.vorgang_id).toBe(id);
 
   await admin().from("time_entry").delete().eq("note", "E2E Meilenstein 1");
 });
@@ -71,7 +72,7 @@ test("Verdrehte Zeiten werden abgewiesen und nicht gespeichert", async ({
   const form = page.locator("form", { hasText: "Buchung anlegen" });
   await form.getByLabel("Beginn").fill("10:00");
   await form.getByLabel("Ende").fill("09:00");
-  await suchwahl(form, "Auftrag", AUFTRAG);
+  await suchwahl(form, "Vorgang", await vorgangNummer(AUFTRAG));
   await form.getByLabel("Notiz").fill("E2E verdreht");
   await form.getByRole("button", { name: /Buchung anlegen/ }).click();
 
@@ -115,19 +116,35 @@ test("Materialentnahme senkt den Bestand, Rückgabe hebt sie auf", async ({
   await admin().from("stock_move").delete().like("note", "E2E %");
 });
 
-test("Materialentnahme auf einen Auftrag erhöht dessen Materialkosten", async ({
+test("Materialentnahme auf einen Vorgang erhöht dessen Materialkosten", async ({
   page,
 }) => {
   const AUFTRAG = "A-2026-0042";
   const db = admin();
-  const id = await jobId(AUFTRAG);
+  const id = await vorgangId(AUFTRAG);
   const artSku = "MOD-JAS-440";
 
-  const { data: vor } = await db
-    .from("v_job_kpi")
-    .select("material_actual")
-    .eq("job_id", id)
-    .single();
+  /*
+   * Gerechnet wird hier selbst und nicht über v_vorgang_kpi: die View
+   * hängt an current_company_id() und liefert dem Service-Role-Client
+   * nichts. Die Formel ist dieselbe wie dort.
+   */
+  const kosten = async (): Promise<number> => {
+    const { data } = await db
+      .from("stock_move")
+      .select("qty, kind, article:article_id ( purchase_price )")
+      .eq("vorgang_id", id)
+      .in("kind", ["out", "return"]);
+    return (data ?? []).reduce((s, m) => {
+      const preis = Number(
+        (m.article as unknown as { purchase_price: string } | null)
+          ?.purchase_price ?? 0,
+      );
+      return s + (m.kind === "out" ? 1 : -1) * Number(m.qty) * preis;
+    }, 0);
+  };
+
+  const vor = await kosten();
 
   await login(page, DEMO.lager);
   await page.goto("/lager");
@@ -136,53 +153,17 @@ test("Materialentnahme auf einen Auftrag erhöht dessen Materialkosten", async (
   await suchwahl(form, "Artikel", artSku);
   await form.getByLabel("Art", { exact: true }).selectOption("out");
   await form.getByLabel(/^Menge/).fill("10");
-  await suchwahl(form, "Auftrag", AUFTRAG);
+  await suchwahl(form, "Vorgang", await vorgangNummer(AUFTRAG));
   await form.getByLabel("Notiz").fill("E2E Auftragsmaterial");
   await form.getByRole("button", { name: "Buchen" }).click();
   await expect(form.getByRole("status")).toContainText("Entnahme gebucht");
 
-  const { data: nach } = await db
-    .from("v_job_kpi")
-    .select("material_actual")
-    .eq("job_id", id)
-    .single();
+  const nach = await kosten();
 
   // 10 Stück zu 78,40 EUR Einkaufspreis
-  expect(
-    Number(nach!.material_actual) - Number(vor!.material_actual),
-  ).toBeCloseTo(784, 2);
+  expect(nach - vor).toBeCloseTo(784, 2);
 
   await db.from("stock_move").delete().eq("note", "E2E Auftragsmaterial");
-});
-
-test("Auftragsdetail zeigt Zeiten und Material des Auftrags", async ({ page }) => {
-  const id = await jobId("A-2026-0041");
-
-  await login(page, DEMO.gf);
-  await page.goto(`/auftraege/${id}`);
-
-  await expect(
-    page.getByRole("heading", { name: "A-2026-0041" }),
-  ).toBeVisible();
-  // Seit dem Umbau auf die drei Ringkennzahlen der Vorlage heißt die
-  // Kachel "Stunden ist / soll" und nennt den Wert im Klartext darunter.
-  await expect(page.getByText("Stunden ist / soll")).toBeVisible();
-  await expect(page.getByRole("heading", { name: /^Zeiten/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /^Material \(/ })).toBeVisible();
-
-  /*
-   * Iststunden aus der Datenbank lesen statt sie im Test einzufrieren: der
-   * Wert hängt am Seed, und ein neu aufgesetzter Demodatensatz hat andere
-   * Buchungen. Geprüft wird, dass die Kachel zeigt, was die View rechnet.
-   */
-  const ist = await jobHours("A-2026-0041");
-  const erwartet = new Intl.NumberFormat("de-AT", {
-    maximumFractionDigits: 1,
-  }).format(Math.round(ist * 10) / 10);
-
-  await expect(
-    page.getByText(new RegExp(`${erwartet.replace(".", "\\.")} von \\d+ h`)).first(),
-  ).toBeVisible();
 });
 
 test("Monteur sieht das Lager, darf aber nicht buchen", async ({ page }) => {

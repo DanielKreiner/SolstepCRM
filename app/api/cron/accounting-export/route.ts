@@ -13,6 +13,9 @@ export const dynamic = "force-dynamic";
  * Exportiert werden nur Rechnungen, die noch nicht exportiert wurden.
  * Der Merker steht in job_run, nicht an der Rechnung: die Rechnung ist
  * nach dem Ausstellen unveränderlich.
+ *
+ * Quelle sind die Rechnungsbelege am Vorgang. Entwürfe bleiben draussen —
+ * eine Buchung entsteht mit dem Versand, nicht mit dem Erfassen.
  */
 const KONTO_ERLOES = "4000";
 const KONTO_FORDERUNG = "2000";
@@ -39,12 +42,14 @@ export async function GET(request: Request) {
       }
 
       const { data: rechnungen } = await admin
-        .from("invoice")
+        .from("vorgang_dokument")
         .select(
-          "id, number, kind, amount_net, vat_amount, issued_on, status, job:job_id ( customer:customer_id ( name, number ) )",
+          `id, nummer, typ, betrag_netto, betrag_brutto, created_at, status,
+           vorgang:vorgang_id ( customer:customer_id ( name, number ) )`,
         )
         .eq("company_id", mandant.id)
-        .in("status", ["sent", "partial", "paid", "overdue"]);
+        .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
+        .in("status", ["versendet", "bezahlt"]);
 
       const neu = (rechnungen ?? []).filter(
         (r) => !schonExportiert.has(r.id as string),
@@ -55,17 +60,17 @@ export async function GET(request: Request) {
         "Belegdatum;Belegnummer;Konto;Gegenkonto;Betrag;Steuersatz;Steuerbetrag;Text";
       const zeilen = neu.map((r) => {
         const kunde = (
-          r.job as unknown as {
+          r.vorgang as unknown as {
             customer: { name: string; number: string | null } | null;
           } | null
         )?.customer;
-        const netto = Number(r.amount_net);
-        const steuer = Number(r.vat_amount);
+        const netto = Number(r.betrag_netto ?? 0);
+        const steuer = Number(r.betrag_brutto ?? 0) - netto;
         const satz = netto > 0 ? Math.round((steuer / netto) * 100) : 0;
 
         return [
-          r.issued_on as string,
-          r.number as string,
+          (r.created_at as string).slice(0, 10),
+          r.nummer as string,
           KONTO_FORDERUNG,
           KONTO_ERLOES,
           netto.toFixed(2).replace(".", ","),

@@ -63,7 +63,7 @@ export async function createChannel(
   const { error } = await supabase.from("chat_channel").insert({
     company_id: me.companyId,
     name: parsed.data.name,
-    job_id: parsed.data.jobId,
+    vorgang_id: parsed.data.jobId,
     kind: parsed.data.jobId ? "job" : "team",
   });
 

@@ -66,7 +66,7 @@ export async function GET(request: Request) {
         .eq("active", true);
 
       const { count: neueAuftraege } = await admin
-        .from("job")
+        .from("vorgang")
         .select("id", { count: "exact", head: true })
         .eq("company_id", mandant.id)
         .gte("created_at", vormonatStart.toISOString())

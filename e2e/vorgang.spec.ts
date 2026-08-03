@@ -412,7 +412,9 @@ test("8 — Der Monteur sieht seinen Einsatz mit Adresse und Material", async ({
   });
   // Adresse als Kartenlink — mit dem Handschuh tippt niemand ab.
   await expect(page.getByText("Schlüssel beim Nachbarn.")).toBeVisible();
-  await expect(page.getByText(/Material · \d+ Positionen/)).toBeVisible();
+  await expect(
+    page.getByText(/Material · \d+ Positionen/).first(),
+  ).toBeVisible();
 
   /*
    * Kein Board und keine Beträge. Beides ist keine Frage der Anzeige:

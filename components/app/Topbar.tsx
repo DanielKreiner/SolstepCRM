@@ -1,4 +1,5 @@
 import { CommandPalette } from "./CommandPalette";
+import { MobileNav } from "./MobileNav";
 import { ThemeToggle } from "./ThemeToggle";
 import { Icon } from "@/components/ui/Icon";
 import { initials } from "@/lib/format";
@@ -9,23 +10,38 @@ type Props = {
   name: string;
   role: string;
   unread: number;
+  nav: {
+    companyName: string;
+    locationName: string;
+    visibleAreas: string[];
+    badges?: Record<string, number>;
+  };
 };
 
-export function Topbar({ name, role, unread }: Props) {
+export function Topbar({ name, role, unread, nav }: Props) {
   return (
-    <header className="flex shrink-0 flex-wrap items-center gap-[14px] rounded-[22px] bg-surface px-4 py-3 shadow-soft">
+    /*
+     * Am Telefon eine Zeile, nicht zwei: flex-wrap liess die Leiste
+     * umbrechen und frass ein Sechstel des Bildschirms, bevor der Inhalt
+     * anfing. Was nicht in eine Zeile passt, wird dort ausgeblendet.
+     */
+    <header className="flex shrink-0 items-center gap-2 rounded-[22px] bg-surface px-3 py-[10px] shadow-soft sm:gap-[14px] sm:px-4 sm:py-3">
+      <MobileNav {...nav} />
+
       <CommandPalette />
 
       <div className="hidden flex-1 lg:block" />
 
-      <ThemeToggle />
+      <span className="hidden sm:block">
+        <ThemeToggle />
+      </span>
 
       <button
         type="button"
         aria-label={
           unread > 0 ? `${unread} ungelesene Hinweise` : "Keine neuen Hinweise"
         }
-        className="relative flex h-[42px] w-[42px] cursor-pointer items-center justify-center rounded-pill border-0 bg-panel text-muted transition-colors duration-200 hover:text-ink"
+        className="relative hidden h-[42px] w-[42px] cursor-pointer items-center justify-center rounded-pill border-0 bg-panel text-muted transition-colors duration-200 hover:text-ink sm:flex"
       >
         <Icon name="glocke" size={18} />
         {unread > 0 ? (
@@ -33,14 +49,14 @@ export function Topbar({ name, role, unread }: Props) {
         ) : null}
       </button>
 
-      <div className="flex items-center gap-[11px] pl-[6px]">
+      <div className="flex shrink-0 items-center gap-[11px] sm:pl-[6px]">
         <span
           aria-hidden
-          className="flex h-[42px] w-[42px] items-center justify-center rounded-pill bg-s-doing text-sm font-semibold text-white"
+          className="flex h-[38px] w-[38px] items-center justify-center rounded-pill bg-s-doing text-sm font-semibold text-white sm:h-[42px] sm:w-[42px]"
         >
           {initials(name)}
         </span>
-        <span className="hidden sm:block">
+        <span className="hidden lg:block">
           <span className="block text-sm font-semibold tracking-[-0.01em]">
             {name}
           </span>
@@ -52,7 +68,7 @@ export function Topbar({ name, role, unread }: Props) {
           <button
             type="submit"
             aria-label="Abmelden"
-            className="flex h-[42px] w-[42px] cursor-pointer items-center justify-center rounded-pill border-0 bg-panel text-muted transition-colors duration-200 hover:text-ink"
+            className="flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-pill border-0 bg-panel text-muted transition-colors duration-200 hover:text-ink sm:h-[42px] sm:w-[42px]"
           >
             <Icon name="abmelden" size={18} />
           </button>

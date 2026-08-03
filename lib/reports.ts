@@ -26,7 +26,7 @@ export type Bericht = {
 };
 
 export const BERICHTE = [
-  { id: "auftraege", label: "Aufträge und Nachkalkulation" },
+  { id: "auftraege", label: "Vorgänge und Nachkalkulation" },
   { id: "umsatz", label: "Umsatz je Monat" },
   { id: "zeiten", label: "Stunden je Person" },
   { id: "material", label: "Materialverbrauch" },
@@ -57,58 +57,68 @@ export async function baueBericht(
 async function auftragsbericht(z: Zeitraum): Promise<Bericht> {
   const supabase = await createClient();
 
-  const [{ data: jobs }, { data: kpis }] = await Promise.all([
+  const [{ data: vorgaenge }, { data: kpis }] = await Promise.all([
     supabase
-      .from("job")
-      .select(
-        "id, number, value_net, planned_hours, material_planned, scheduled_from, customer:customer_id ( name ), phase:phase_id ( label )",
-      )
+      .from("vorgang")
+      .select("id, number, phase, customer:customer_id ( name )")
       .gte("created_at", z.von)
       .lte("created_at", `${z.bis}T23:59:59`)
       .order("number"),
-    supabase.from("v_job_kpi").select("job_id, hours_actual, material_actual"),
+    supabase
+      .from("v_vorgang_kpi")
+      .select(
+        "vorgang_id, auftragswert_netto, soll_stunden, soll_materialkosten, ist_stunden, ist_materialkosten",
+      ),
   ]);
 
+  /*
+   * Beträge kommen aus der View, nicht aus der Tabelle. Für Rollen ohne
+   * Angebotsrecht liefert sie nichts — der Bericht zeigt dann Vorgänge
+   * ohne Zahlen statt gar keine Zeile. Das ist gewollt: die Montage
+   * darf wissen, dass es den Vorgang gibt.
+   */
   const kpi = new Map(
     (kpis ?? []).map((k) => [
-      k.job_id as string,
+      k.vorgang_id as string,
       {
-        stunden: Number(k.hours_actual ?? 0),
-        material: Number(k.material_actual ?? 0),
+        wert: Number(k.auftragswert_netto ?? 0),
+        sollStunden: Number(k.soll_stunden ?? 0),
+        sollMaterial: Number(k.soll_materialkosten ?? 0),
+        istStunden: Number(k.ist_stunden ?? 0),
+        istMaterial: Number(k.ist_materialkosten ?? 0),
       },
     ]),
   );
 
   return {
     id: "auftraege",
-    titel: "Aufträge und Nachkalkulation",
+    titel: "Vorgänge und Nachkalkulation",
     hinweis:
       "Beträge netto. Deckungsbeitrag ohne Lohnkosten — der Stundensatz ist " +
-      "nicht für jede Rolle lesbar.",
+      "nicht für jede Rolle lesbar. Soll stammt aus dem angenommenen Angebot.",
     spalten: [
-      { key: "nummer", label: "Auftrag" },
+      { key: "nummer", label: "Vorgang" },
       { key: "kunde", label: "Kunde" },
       { key: "phase", label: "Phase" },
       { key: "wert", label: "Auftragswert", numerisch: true },
-      { key: "stundenPlan", label: "Stunden Plan", numerisch: true },
+      { key: "stundenPlan", label: "Stunden Soll", numerisch: true },
       { key: "stundenIst", label: "Stunden Ist", numerisch: true },
-      { key: "materialPlan", label: "Material Plan", numerisch: true },
+      { key: "materialPlan", label: "Material Soll", numerisch: true },
       { key: "materialIst", label: "Material Ist", numerisch: true },
       { key: "db", label: "Nach Material", numerisch: true },
     ],
-    zeilen: (jobs ?? []).map((j) => {
-      const k = kpi.get(j.id as string);
-      const wert = Number(j.value_net);
-      const materialIst = k?.material ?? 0;
+    zeilen: (vorgaenge ?? []).map((v) => {
+      const k = kpi.get(v.id as string);
+      const wert = k?.wert ?? 0;
+      const materialIst = k?.istMaterial ?? 0;
       return {
-        nummer: j.number as string,
-        kunde:
-          (j.customer as unknown as { name: string } | null)?.name ?? "",
-        phase: (j.phase as unknown as { label: string } | null)?.label ?? "",
+        nummer: v.number as string,
+        kunde: (v.customer as unknown as { name: string } | null)?.name ?? "",
+        phase: v.phase as string,
         wert,
-        stundenPlan: Number(j.planned_hours),
-        stundenIst: Math.round((k?.stunden ?? 0) * 10) / 10,
-        materialPlan: Number(j.material_planned),
+        stundenPlan: Math.round((k?.sollStunden ?? 0) * 10) / 10,
+        stundenIst: Math.round((k?.istStunden ?? 0) * 10) / 10,
+        materialPlan: Math.round((k?.sollMaterial ?? 0) * 100) / 100,
         materialIst: Math.round(materialIst * 100) / 100,
         db: Math.round((wert - materialIst) * 100) / 100,
       };
@@ -120,11 +130,12 @@ async function umsatzbericht(z: Zeitraum): Promise<Bericht> {
   const supabase = await createClient();
 
   const { data: rechnungen } = await supabase
-    .from("invoice")
-    .select("issued_on, amount_net, vat_amount, status, kind")
-    .gte("issued_on", z.von)
-    .lte("issued_on", z.bis)
-    .neq("status", "cancelled");
+    .from("vorgang_dokument")
+    .select("created_at, betrag_netto, betrag_brutto, status, typ")
+    .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
+    .in("status", ["versendet", "bezahlt"])
+    .gte("created_at", z.von)
+    .lte("created_at", `${z.bis}T23:59:59`);
 
   const proMonat = new Map<
     string,
@@ -132,12 +143,13 @@ async function umsatzbericht(z: Zeitraum): Promise<Bericht> {
   >();
 
   for (const r of rechnungen ?? []) {
-    const monat = String(r.issued_on).slice(0, 7);
+    const monat = String(r.created_at).slice(0, 7);
     const e = proMonat.get(monat) ?? { netto: 0, ust: 0, anzahl: 0, bezahlt: 0 };
-    e.netto += Number(r.amount_net);
-    e.ust += Number(r.vat_amount);
+    const netto = Number(r.betrag_netto ?? 0);
+    e.netto += netto;
+    e.ust += Number(r.betrag_brutto ?? 0) - netto;
     e.anzahl += 1;
-    if (r.status === "paid") e.bezahlt += Number(r.amount_net);
+    if (r.status === "bezahlt") e.bezahlt += netto;
     proMonat.set(monat, e);
   }
 
@@ -145,8 +157,8 @@ async function umsatzbericht(z: Zeitraum): Promise<Bericht> {
     id: "umsatz",
     titel: "Umsatz je Monat",
     hinweis:
-      "Stornierte Rechnungen sind nicht enthalten. Beträge netto, USt. " +
-      "gesondert ausgewiesen.",
+      "Entwürfe und stornierte Rechnungen sind nicht enthalten. Beträge " +
+      "netto, USt. gesondert ausgewiesen.",
     spalten: [
       { key: "monat", label: "Monat" },
       { key: "anzahl", label: "Rechnungen", numerisch: true },

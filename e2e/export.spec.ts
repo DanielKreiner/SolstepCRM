@@ -45,9 +45,9 @@ test("Der Export ist ein lesbares ZIP mit allen Tabellen", async ({ page }) => {
   for (const t of [
     "company",
     "customer",
-    "job",
+    "vorgang",
+    "vorgang_dokument",
     "time_entry",
-    "invoice",
     "article",
     "stock_move",
   ]) {
@@ -61,11 +61,11 @@ test("Der Export enthält die tatsächlichen Daten", async ({ page }) => {
   const archiv = unzipSync(new Uint8Array(await antwort.body()));
 
   const { count: auftraege } = await admin()
-    .from("job")
+    .from("vorgang")
     .select("id", { count: "exact", head: true })
     .eq("company_id", COMPANY_A);
 
-  const roh = archiv["daten/job.csv"]!;
+  const roh = archiv["daten/vorgang.csv"]!;
   const csv = strFromU8(roh);
   const zeilen = csv.trim().split("\r\n");
   // Kopfzeile plus eine Zeile je Auftrag.

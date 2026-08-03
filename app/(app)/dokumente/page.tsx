@@ -33,7 +33,7 @@ export default async function DokumentePage() {
     .select(
       `id, kind, filename, size_bytes, signature_status, signed_at, created_at,
        visible_to_customer, user_id,
-       job:job_id ( id, number ),
+       vorgang:vorgang_id ( id, number ),
        customer:customer_id ( id, name ),
        person:user_id ( name )`,
     )
@@ -94,7 +94,7 @@ export default async function DokumentePage() {
       ) : (
         <ul className="flex flex-col gap-2">
           {alle.map((d) => {
-            const job = d.job as unknown as { id: string; number: string } | null;
+            const job = d.vorgang as unknown as { id: string; number: string } | null;
             const kunde = d.customer as unknown as {
               id: string;
               name: string;
@@ -116,7 +116,7 @@ export default async function DokumentePage() {
 
                 {job ? (
                   <Link
-                    href={`/auftraege/${job.id}`}
+                    href={`/vorgaenge/${job.id}`}
                     className="num text-[12.5px] text-accent-ink hover:underline"
                   >
                     {job.number}

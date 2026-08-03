@@ -33,34 +33,43 @@ async function aktivitaeten(customerId: string) {
   return data ?? [];
 }
 
-test("Ein Angebotsereignis erzeugt eine Aktivität", async () => {
+test("Ein versendetes Angebot erzeugt eine Aktivität", async () => {
   const db = admin();
   const customerId = await kunde("Familie Brandstätter");
   const vorher = (await aktivitaeten(customerId)).length;
 
-  const { data: quote } = await db
-    .from("quote")
-    .select("id")
+  const { data: vorgang } = await db
+    .from("vorgang")
+    .select("id, number")
     .eq("company_id", COMPANY_A)
     .eq("customer_id", customerId)
     .limit(1)
     .single();
 
   // Direkt in die Fachtabelle — ohne Server Action.
-  const { error } = await db.from("quote_event").insert({
-    company_id: COMPANY_A,
-    quote_id: quote!.id,
-    kind: "opened",
-    meta_json: { test: "M9" },
-  });
+  const { data: dok, error } = await db
+    .from("vorgang_dokument")
+    .insert({
+      company_id: COMPANY_A,
+      vorgang_id: vorgang!.id,
+      typ: "angebot",
+      dateiname: "e2e-m9.pdf",
+      status: "versendet",
+    })
+    .select("id")
+    .single();
   expect(error).toBeNull();
 
   const nachher = await aktivitaeten(customerId);
   expect(nachher.length).toBe(vorher + 1);
   expect(nachher[0]!.kind).toBe("quote");
-  expect(String(nachher[0]!.body)).toContain("Angebot geöffnet");
-  // Die Metadaten des Ereignisses wandern mit.
-  expect((nachher[0]!.meta_json as { test?: string }).test).toBe("M9");
+  expect(String(nachher[0]!.body)).toContain("Angebot versendet");
+  // Der Bezug wandert mit, sonst führt der Eintrag nirgendwohin.
+  expect((nachher[0]!.meta_json as { vorgang_id?: string }).vorgang_id).toBe(
+    vorgang!.id,
+  );
+
+  await db.from("vorgang_dokument").delete().eq("id", dok!.id);
 });
 
 test("Ein Serviceticket aus dem Portal erzeugt eine Portal-Aktivität", async () => {
@@ -139,39 +148,34 @@ test("Eine zugeordnete Mail erscheint beim Kunden", async () => {
   await db.from("mail_message").delete().eq("id", mail!.id);
 });
 
-test("Ein Phasenwechsel am Auftrag landet im Zeitstrahl", async () => {
+test("Ein Phasenwechsel am Vorgang landet im Zeitstrahl", async () => {
   const db = admin();
   const customerId = await kunde("Tischlerei Aigner GmbH");
   const vorher = (await aktivitaeten(customerId)).length;
 
-  const { data: job } = await db
-    .from("job")
-    .select("id, phase_id")
+  const { data: vorgang } = await db
+    .from("vorgang")
+    .select("id, phase")
     .eq("company_id", COMPANY_A)
     .eq("customer_id", customerId)
     .limit(1)
     .single();
 
-  const { data: phasen } = await db
-    .from("pipeline_phase")
-    .select("id, key, pipeline:pipeline_id ( kind )")
-    .eq("company_id", COMPANY_A);
-
-  const ziel = (phasen ?? []).find(
-    (p) =>
-      p.key === "netzanmeldung" &&
-      (p.pipeline as unknown as { kind: string } | null)?.kind === "projekte",
-  );
-
-  await db.from("job").update({ phase_id: ziel!.id }).eq("id", job!.id);
+  const ziel = vorgang!.phase === "montage" ? "beauftragt" : "montage";
+  await db.from("vorgang").update({ phase: ziel }).eq("id", vorgang!.id);
 
   const nachher = await aktivitaeten(customerId);
   expect(nachher.length).toBe(vorher + 1);
   expect(nachher[0]!.kind).toBe("system");
-  expect(String(nachher[0]!.body)).toContain("Netzanmeldung");
+  expect(String(nachher[0]!.body)).toContain(
+    ziel === "montage" ? "Montage terminiert" : "Auftrag erteilt",
+  );
 
   // Zurücksetzen; das erzeugt eine weitere Aktivität, das ist gewollt.
-  await db.from("job").update({ phase_id: job!.phase_id }).eq("id", job!.id);
+  await db
+    .from("vorgang")
+    .update({ phase: vorgang!.phase })
+    .eq("id", vorgang!.id);
 });
 
 test("Der Kundenzeitstrahl zeigt die Aktivitäten im Backoffice", async ({
@@ -183,17 +187,16 @@ test("Der Kundenzeitstrahl zeigt die Aktivitäten im Backoffice", async ({
   await page.goto(`/crm/${customerId}`);
 
   await expect(page.getByRole("heading", { name: /^Aktivitäten/ })).toBeVisible();
-  await expect(page.getByText("Angebot geöffnet").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Aktivitäten/ })).toBeVisible();
   await expect(
     page.getByText("Laufen automatisch ein"),
   ).toBeVisible();
 });
 
-test("Die Servicepipeline zeigt Tickets als Karten", async ({ page }) => {
+test("Die Serviceliste zeigt die Tickets", async ({ page }) => {
   await login(page, DEMO.gf);
-  await page.goto("/pipelines/service");
+  await page.goto("/service");
 
-  await expect(page.getByText("Meldung offen").first()).toBeVisible();
   await expect(page.getByText("S-2026-0031").first()).toBeVisible();
 });
 

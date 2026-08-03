@@ -9,16 +9,17 @@ export default async function MaterialPage() {
   await requireMe();
   const supabase = await createClient();
 
-  const [{ data: articles }, { data: jobs }] = await Promise.all([
+  const [{ data: articles }, { data: vorgaenge }] = await Promise.all([
     supabase
       .from("article")
       .select("id, sku, name, unit")
       .eq("active", true)
       .order("name"),
     supabase
-      .from("job")
+      .from("vorgang")
       .select("id, number, customer:customer_id ( name )")
-      .order("scheduled_from", { ascending: true, nullsFirst: false })
+      .in("phase", ["aufnahme", "beauftragt", "montage"])
+      .order("number", { ascending: false })
       .limit(30),
   ]);
 
@@ -31,7 +32,7 @@ export default async function MaterialPage() {
           label: `${a.sku as string} · ${a.name as string}`,
           unit: a.unit as string,
         }))}
-        jobs={(jobs ?? []).map((j) => ({
+        jobs={(vorgaenge ?? []).map((j) => ({
           id: j.id as string,
           label: `${j.number as string} · ${(j.customer as unknown as { name: string } | null)?.name ?? ""}`,
         }))}

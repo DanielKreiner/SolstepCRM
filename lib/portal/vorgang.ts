@@ -67,6 +67,7 @@ export type PortalTermin = {
   von: string;
   bis: string;
   notiz: string | null;
+  bestaetigtAm: string | null;
   /* Vornamen genügen: der Kunde will wissen, wer kommt, nicht wer wo wohnt. */
   personen: string[];
 };
@@ -143,7 +144,7 @@ export async function portalVorgangDetail(
         .order("created_at", { ascending: false }),
       admin
         .from("vorgang_termin")
-        .select("id, art, von, bis, notiz, personen:vorgang_termin_person ( user:user_id ( name ) )")
+        .select("id, art, von, bis, notiz, kunde_bestaetigt_am, personen:vorgang_termin_person ( user:user_id ( name ) )")
         .eq("vorgang_id", vorgangId)
         .order("von"),
       admin
@@ -215,6 +216,7 @@ export async function portalVorgangDetail(
       von: t.von,
       bis: t.bis,
       notiz: t.notiz,
+      bestaetigtAm: t.kunde_bestaetigt_am,
       personen: (t.personen ?? [])
         .map((p) => p.user?.name?.split(/\s+/)[0])
         .filter((n): n is string => Boolean(n)),
@@ -363,5 +365,6 @@ type TerminRoh = {
   von: string;
   bis: string;
   notiz: string | null;
+  kunde_bestaetigt_am: string | null;
   personen: { user: { name: string } | null }[] | null;
 };

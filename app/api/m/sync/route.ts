@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     const { error } = await supabase.from("time_entry").insert({
       company_id: me.companyId,
       user_id: me.id,
-      job_id: p.data.jobId ?? null,
+      vorgang_id: p.data.jobId ?? null,
       kind: p.data.kind,
       started_at: clientTs,
       note: p.data.note ?? null,
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
   const { error } = await supabase.from("stock_move").insert({
     company_id: me.companyId,
     article_id: p.data.articleId,
-    job_id: p.data.jobId ?? null,
+    vorgang_id: p.data.jobId ?? null,
     user_id: me.id,
     qty: p.data.qty,
     kind: p.data.kind,

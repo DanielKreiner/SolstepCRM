@@ -107,8 +107,7 @@ export async function holeNeueMails(
             ? new Date(envelope.date).toISOString()
             : new Date().toISOString(),
           customer_id: zuordnung.customerId,
-          quote_id: zuordnung.quoteId,
-          job_id: zuordnung.jobId,
+          vorgang_id: zuordnung.vorgangId,
           assigned_by: zuordnung.grund,
         });
 

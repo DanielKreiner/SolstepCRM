@@ -2,13 +2,37 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pill } from "@/components/ui/Pill";
-import { date, num } from "@/lib/format";
+import { dateTime, hhmm } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Auftrag" };
 
-export default async function MobileJobPage({
+const PHASE_LABEL: Record<string, string> = {
+  anfrage: "Anfrage",
+  aufnahme: "Aufnahme",
+  angebot: "Angebot",
+  beauftragt: "Beauftragt",
+  montage: "Montage",
+  abschluss: "Abschluss",
+  verloren: "Verloren",
+};
+
+const ART: Record<string, string> = {
+  aufnahme: "Aufnahme",
+  montage: "Montage",
+  service: "Service",
+};
+
+/*
+ * Der Vorgang auf dem Handy.
+ *
+ * Keine Beträge und keine Soll-Stunden: die liefert die Datenbank dieser
+ * Rolle nicht (Spaltenrechte aus 0025, v_vorgang_wert aus 0030). Statt
+ * eines Plan/Ist-Vergleichs steht hier, was gebucht ist — das ist die
+ * Zahl, die der Monteur selbst beeinflusst.
+ */
+export default async function MobileVorgangPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -17,35 +41,54 @@ export default async function MobileJobPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: job } = await supabase
-    .from("job")
+  const { data: vorgang } = await supabase
+    .from("vorgang")
     .select(
-      `id, number, address, zip, city, next_step, scheduled_from, scheduled_to, planned_hours,
-       customer:customer_id ( name, contact_person, phone ),
-       phase:phase_id ( label, system_key )`,
+      `id, number, phase, adresse, plz, ort, kwp, speicher_kwh,
+       customer:customer_id ( name, contact_person, phone )`,
     )
     .eq("id", id)
     .maybeSingle();
 
-  if (!job) notFound();
+  if (!vorgang) notFound();
 
-  const [{ data: kpi }, { data: checklist }] = await Promise.all([
-    supabase.from("v_job_kpi").select("hours_actual").eq("job_id", id).maybeSingle(),
-    supabase
-      .from("job_checklist_item")
-      .select("id, label, done")
-      .eq("job_id", id)
-      .order("sort"),
-  ]);
+  const [{ data: zeiten }, { data: gates }, { data: termine }] =
+    await Promise.all([
+      supabase
+        .from("time_entry")
+        .select("duration_min, kind")
+        .eq("vorgang_id", id)
+        .in("status", ["booked", "approved"]),
+      supabase
+        .from("vorgang_gate")
+        .select("id, label, status, blocking")
+        .eq("vorgang_id", id)
+        .order("sort"),
+      supabase
+        .from("vorgang_termin")
+        .select("id, art, von, bis, notiz")
+        .eq("vorgang_id", id)
+        .order("von"),
+    ]);
 
-  const customer = job.customer as unknown as {
+  const gebucht = (zeiten ?? [])
+    .filter((z) => z.kind !== "break")
+    .reduce((s, z) => s + Number(z.duration_min ?? 0), 0);
+
+  const customer = vorgang.customer as unknown as {
     name: string;
     contact_person: string | null;
     phone: string | null;
   } | null;
-  const adresse = [job.address, [job.zip, job.city].filter(Boolean).join(" ")]
+
+  const adresse = [
+    vorgang.adresse as string | null,
+    [vorgang.plz, vorgang.ort].filter(Boolean).join(" "),
+  ]
     .filter(Boolean)
     .join(", ");
+
+  const naechster = (termine ?? [])[0];
 
   return (
     <>
@@ -55,17 +98,17 @@ export default async function MobileJobPage({
         </Link>
       </div>
 
-      <h1 className="num text-[15px] font-semibold">{job.number as string}</h1>
+      <h1 className="num text-[15px] font-semibold">
+        {vorgang.number as string}
+      </h1>
       <p className="text-[22px] font-bold tracking-[-0.02em]">
         {customer?.name ?? "—"}
       </p>
-      {job.phase ? (
-        <div className="mt-2">
-          <Pill tone="doing">
-            {(job.phase as unknown as { label: string }).label}
-          </Pill>
-        </div>
-      ) : null}
+      <div className="mt-2">
+        <Pill tone="doing">
+          {PHASE_LABEL[vorgang.phase as string] ?? (vorgang.phase as string)}
+        </Pill>
+      </div>
 
       <div className="mt-4 flex flex-col gap-3">
         <div className="rounded-[20px] bg-surface p-5 shadow-soft">
@@ -93,42 +136,63 @@ export default async function MobileJobPage({
         ) : null}
 
         <div className="rounded-[20px] bg-surface p-5 shadow-soft">
-          <p className="text-[12.5px] text-muted">Stunden</p>
-          <p className="num text-[22px] font-semibold">
-            {num(Math.round(Number(kpi?.hours_actual ?? 0) * 10) / 10)} /{" "}
-            {num(job.planned_hours as string)}
-          </p>
-          <p className="mt-1 text-[12px] text-muted">
-            Termin {date(job.scheduled_from as string | null)}
-          </p>
+          <p className="text-[12.5px] text-muted">Gebucht</p>
+          <p className="num text-[22px] font-semibold">{hhmm(gebucht)}</p>
+          {naechster ? (
+            <p className="mt-1 text-[12px] text-muted">
+              {ART[naechster.art as string] ?? (naechster.art as string)}{" "}
+              {dateTime(naechster.von as string)}
+            </p>
+          ) : (
+            <p className="mt-1 text-[12px] text-muted">Kein Termin gesetzt</p>
+          )}
         </div>
 
-        {(checklist ?? []).length > 0 ? (
+        {vorgang.kwp ? (
           <div className="rounded-[20px] bg-surface p-5 shadow-soft">
-            <p className="mb-2 text-[12.5px] text-muted">Aufgaben</p>
+            <p className="text-[12.5px] text-muted">Anlage</p>
+            <p className="num text-[15px]">
+              {vorgang.kwp as string} kWp
+              {vorgang.speicher_kwh
+                ? ` · ${vorgang.speicher_kwh as string} kWh Speicher`
+                : ""}
+            </p>
+          </div>
+        ) : null}
+
+        {(gates ?? []).length > 0 ? (
+          <div className="rounded-[20px] bg-surface p-5 shadow-soft">
+            <p className="mb-2 text-[12.5px] text-muted">Voraussetzungen</p>
             <ul className="flex flex-col gap-2">
-              {(checklist ?? []).map((c) => (
-                <li
-                  key={c.id as string}
-                  className="flex items-center gap-3 text-[14px]"
-                >
-                  <span
-                    aria-hidden
-                    className={`h-4 w-4 shrink-0 rounded-[5px] border ${c.done ? "border-s-done bg-s-done" : "border-line"}`}
-                  />
-                  <span className={c.done ? "text-muted line-through" : ""}>
-                    {c.label as string}
-                  </span>
-                </li>
-              ))}
+              {(gates ?? []).map((g) => {
+                const durch =
+                  g.status === "erledigt" || g.status === "nicht_noetig";
+                return (
+                  <li
+                    key={g.id as string}
+                    className="flex items-center gap-3 text-[14px]"
+                  >
+                    <span
+                      aria-hidden
+                      className={`h-4 w-4 shrink-0 rounded-[5px] border ${durch ? "border-s-done bg-s-done" : "border-line"}`}
+                    />
+                    <span className={durch ? "text-muted line-through" : ""}>
+                      {g.label as string}
+                    </span>
+                    {!durch && g.blocking ? (
+                      <Pill tone="warn">blockiert</Pill>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ) : null}
 
-        {job.next_step ? (
+        {naechster?.notiz ? (
           <div className="rounded-[20px] bg-surface p-5 shadow-soft">
-            <p className="text-[12.5px] text-muted">Nächster Schritt</p>
-            <p className="text-[15px]">{job.next_step as string}</p>
+            <p className="text-[12.5px] text-muted">Notiz zum Termin</p>
+            <p className="text-[15px]">{naechster.notiz as string}</p>
           </div>
         ) : null}
 

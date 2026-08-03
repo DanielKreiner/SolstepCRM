@@ -62,13 +62,14 @@ export async function Shell({
       .is("read_at", null),
     supabase.from("v_stock_alert").select("id", { count: "exact", head: true }),
     supabase
-      .from("quote")
+      .from("vorgang")
       .select("id", { count: "exact", head: true })
-      .in("status", ["sent", "opened"]),
+      .eq("phase", "angebot"),
     supabase
-      .from("invoice")
+      .from("vorgang_dokument")
       .select("id", { count: "exact", head: true })
-      .not("status", "in", "(paid,draft)"),
+      .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
+      .eq("status", "versendet"),
     supabase
       .from("absence")
       .select("id", { count: "exact", head: true })
@@ -91,28 +92,47 @@ export async function Shell({
     .filter(([, level]) => level !== "none")
     .map(([area]) => area);
 
+  const navBadges = nurEchte({
+    "/vorgaenge": angeboteOffen,
+    "/lager": lowStock,
+    "/offene-posten": rechnungenOffen,
+    "/zeiterfassung": korrekturenOffen,
+    "/abwesenheiten": antraegeOffen,
+    "/crm": ticketsOffen,
+    "/bewerber": bewerberOffen,
+  });
+
   return (
-    <div className="flex h-dvh gap-[14px] overflow-hidden bg-app p-[14px]">
+    <div className="flex h-dvh gap-[10px] overflow-hidden bg-app p-[10px] sm:gap-[14px] sm:p-[14px]">
       <div className="hidden md:flex">
         <Sidebar
           companyName={me.company.name}
           locationName={location?.name ?? "Alle Standorte"}
           visibleAreas={visibleAreas}
-          badges={nurEchte({
-            "/angebote": angeboteOffen,
-            "/lager": lowStock,
-            "/rechnungen": rechnungenOffen,
-            "/zeiterfassung": korrekturenOffen,
-            "/abwesenheiten": antraegeOffen,
-            "/crm": ticketsOffen,
-            "/bewerber": bewerberOffen,
-          })}
+          badges={navBadges}
         />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-[14px]">
-        <Topbar name={me.name} role={me.role} unread={unread ?? 0} />
-        <main className="flex-1 overflow-auto rounded-panel bg-panel px-4 pt-[26px] pb-8 shadow-soft sm:px-[26px]">
+        <Topbar
+          name={me.name}
+          role={me.role}
+          unread={unread ?? 0}
+          nav={{
+            companyName: me.company.name,
+            locationName: location?.name ?? "Alle Standorte",
+            visibleAreas,
+            badges: navBadges,
+          }}
+        />
+        {/*
+          relative ist hier kein Schmuck: sr-only-Elemente sind absolut
+          positioniert. Ohne positionierten Vorfahren beziehen sie sich
+          auf das Dokument, entkommen dem overflow und ziehen die Seite
+          um ihre Position in die Länge — die ganze Anwendung liess sich
+          dann ins Leere scrollen.
+        */}
+        <main className="relative flex-1 overflow-auto rounded-panel bg-panel px-4 pt-[26px] pb-8 shadow-soft sm:px-[26px]">
           <div className="mx-auto w-full max-w-[var(--content-max)]">
             {children}
           </div>

@@ -54,14 +54,14 @@ test.beforeAll(async () => {
   zustand.userId = user!.id as string;
   zustand.userName = user!.name as string;
 
-  const { data: job } = await db
-    .from("job")
+  const { data: vorgang } = await db
+    .from("vorgang")
     .select("number")
     .eq("company_id", COMPANY_A)
     .order("number", { ascending: false })
     .limit(1)
     .single();
-  zustand.jobLabel = job!.number as string;
+  zustand.jobLabel = vorgang!.number as string;
 });
 
 test.afterAll(aufraeumen);
@@ -78,7 +78,7 @@ async function buche(
   await page.getByLabel("Person").selectOption(zustand.userId!);
   await page.getByLabel("Beginn").fill(von);
   await page.getByLabel("Ende").fill(bis);
-  await suchwahl(page, "Auftrag", zustand.jobLabel!);
+  await suchwahl(page, "Vorgang", zustand.jobLabel!);
   await page.getByLabel("Notiz").fill(notiz);
   await page.getByRole("button", { name: "Buchung anlegen" }).click();
 }
