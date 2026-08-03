@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /*
@@ -368,6 +368,113 @@ describe("v_vorgang_wert", () => {
     const { data, error } = await c
       .from("vorgang")
       .select("number, adresse, phase")
+      .limit(1);
+
+    expect(error).toBeNull();
+    expect((data ?? []).length).toBeGreaterThan(0);
+  });
+});
+
+/*
+ * Rechnungen am Vorgang. Die Grenze muss beide Wege schliessen: den Beleg
+ * und den Verlaufseintrag. Der Strom trug die Beträge im Klartext, bis
+ * 0031 ihn an dasselbe Recht gehängt hat.
+ */
+describe("Rechnungen am Vorgang", () => {
+  const DARF_RECHNUNGEN: Rolle[] = ["gf", "buero"];
+  let vorgangId: string | null = null;
+  let dokumentId: string | null = null;
+  let eventId: string | null = null;
+
+  /*
+   * Eigene Grundlage statt Verlass auf den Bestand: die E2E-Läufe räumen
+   * ihre Vorgänge am Ende weg, und ein Test, der dann nichts findet,
+   * meldet Erfolg für eine Grenze, die er gar nicht geprüft hat.
+   */
+  beforeAll(async () => {
+    const { data: v } = await admin
+      .from("vorgang")
+      .select("id")
+      .eq("company_id", COMPANY_A)
+      .limit(1)
+      .single();
+    vorgangId = v!.id as string;
+
+    const { data: d } = await admin
+      .from("vorgang_dokument")
+      .insert({
+        company_id: COMPANY_A,
+        vorgang_id: vorgangId,
+        typ: "schlussrechnung",
+        nummer: "RE-TEST-0001",
+        dateiname: "Prüfbeleg.pdf",
+        betrag_brutto: 1234.56,
+        status: "versendet",
+      })
+      .select("id")
+      .single();
+    dokumentId = d!.id as string;
+
+    const { data: e } = await admin
+      .from("vorgang_event")
+      .insert({
+        company_id: COMPANY_A,
+        vorgang_id: vorgangId,
+        typ: "rechnung",
+        titel: "Prüfeintrag Rechnung",
+        body: "1.234,56 € brutto",
+      })
+      .select("id")
+      .single();
+    eventId = e!.id as string;
+  });
+
+  afterAll(async () => {
+    if (eventId) await admin.from("vorgang_event").delete().eq("id", eventId);
+    if (dokumentId) {
+      await admin.from("vorgang_dokument").delete().eq("id", dokumentId);
+    }
+  });
+
+  it("zeigt Rechnungsbelege nur mit Rechnungsrecht", async () => {
+    for (const rolle of Object.keys(MAIL) as Rolle[]) {
+      const c = clients.get(rolle)!;
+      const { data } = await c
+        .from("vorgang_dokument")
+        .select("id")
+        .eq("id", dokumentId!);
+
+      expect((data ?? []).length > 0, `${rolle} sieht Rechnungsbelege`).toBe(
+        DARF_RECHNUNGEN.includes(rolle),
+      );
+    }
+  });
+
+  it("hält auch den Verlauf dicht", async () => {
+    for (const rolle of Object.keys(MAIL) as Rolle[]) {
+      const c = clients.get(rolle)!;
+      const { data } = await c
+        .from("vorgang_event")
+        .select("id")
+        .eq("id", eventId!);
+
+      expect(
+        (data ?? []).length > 0,
+        `${rolle} liest Rechnungseinträge im Verlauf`,
+      ).toBe(DARF_RECHNUNGEN.includes(rolle));
+    }
+  });
+
+  it("lässt alle anderen Verlaufseinträge stehen", async () => {
+    /*
+     * Ohne Verlauf wüsste die Bauleitung nicht, warum ihr Auftrag steht.
+     * Gesperrt sind die Beträge, nicht die Geschichte.
+     */
+    const c = clients.get("bauleitung")!;
+    const { data, error } = await c
+      .from("vorgang_event")
+      .select("id")
+      .in("typ", ["notiz", "phase_wechsel", "gate_update", "termin"])
       .limit(1);
 
     expect(error).toBeNull();

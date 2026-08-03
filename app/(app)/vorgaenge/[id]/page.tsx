@@ -5,6 +5,7 @@ import { Aktionspanel } from "@/components/vorgang/Aktionen";
 import { GateAmpel } from "@/components/vorgang/GateAmpel";
 import { Stepper } from "@/components/vorgang/Stepper";
 import { Positionen } from "@/components/vorgang/Positionen";
+import { Rechnungen } from "@/components/vorgang/Rechnungen";
 import { Strom } from "@/components/vorgang/Strom";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
@@ -45,6 +46,7 @@ export default async function VorgangPage({
   const { kopf, gates, events, positionen, termine, dokumente } = daten;
   const darfSchreiben = me.perms.pipelines === "write";
   const darfAngebote = me.perms.angebote !== "none";
+  const darfRechnungen = me.perms.rechnungen !== "none";
 
   const offen = offenePflichtGates(gates);
   const s = summen(
@@ -231,6 +233,28 @@ export default async function VorgangPage({
                 {naechsterTermin.subText ? ` · ${naechsterTermin.subText}` : ""}
               </p>
             </section>
+          ) : null}
+
+          {darfRechnungen ? (
+            <Rechnungen
+              vorgangId={kopf.id}
+              phase={kopf.phase}
+              darfSchreiben={me.perms.rechnungen === "write"}
+              belege={dokumente
+                .filter(
+                  (d) =>
+                    d.typ === "anzahlungsrechnung" || d.typ === "schlussrechnung",
+                )
+                .map((d) => ({
+                  id: d.id,
+                  typ: d.typ,
+                  nummer: d.nummer,
+                  betragBrutto: d.betragBrutto,
+                  status: d.status,
+                  faelligAm: d.faelligAm,
+                  bezahltAm: d.bezahltAm,
+                }))}
+            />
           ) : null}
 
           {dokumente.length > 0 ? (

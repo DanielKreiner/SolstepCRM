@@ -29,6 +29,7 @@ export const NAV: NavGroup[] = [
       { label: "Vorgänge", href: "/vorgaenge", icon: "pipelines", area: "pipelines" },
       { label: "Planung", href: "/planung", icon: "dispo", area: "pipelines" },
       { label: "Material", href: "/material", icon: "lager", area: "pipelines" },
+      { label: "Offene Posten", href: "/offene-posten", icon: "rechnungen", area: "rechnungen" },
       { label: "Pipelines (alt)", href: "/pipelines/projekte", icon: "pipelines", area: "pipelines" },
       { label: "Angebote", href: "/angebote", icon: "angebote", area: "angebote" },
       { label: "CRM", href: "/crm", icon: "crm", area: "crm" },

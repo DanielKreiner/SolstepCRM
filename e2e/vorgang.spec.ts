@@ -439,10 +439,12 @@ test("9 — Das Lager sieht den Vorgang in der Materialliste", async ({ page }) 
     timeout: 15_000,
   });
 
-  // Abhaken, und das Büro sieht die Ampel grün werden.
+  /*
+   * Auf die eigene Karte eingrenzen: in der Liste stehen alle Vorgänge
+   * mit offenem Material-Gate, und .first() träfe irgendeinen davon.
+   */
   await page
-    .locator("form", { hasText: "Jetzt:" })
-    .first()
+    .locator("li", { hasText: zustand.nummer! })
     .getByRole("button", { name: "Liefertermin bestätigt" })
     .click();
 
@@ -457,4 +459,178 @@ test("9 — Das Lager sieht den Vorgang in der Materialliste", async ({ page }) 
       return data?.status;
     }, { timeout: 20_000 })
     .toBe("erledigt");
+});
+
+test("10 — Schlussrechnung, Zahlung und die Offene-Posten-Liste", async ({
+  page,
+}) => {
+  const db = admin();
+
+  /* Der Vorgang steht seit Test 7 in „montage". */
+  await login(page, DEMO.gf);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+
+  const { data: anz } = await db
+    .from("vorgang_dokument")
+    .select("id, betrag_brutto")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .eq("typ", "anzahlungsrechnung")
+    .single();
+
+  const { data: v } = await db
+    .from("vorgang")
+    .select("auftragswert_netto")
+    .eq("id", zustand.vorgangId!)
+    .single();
+
+  const brutto = Math.round(Number(v!.auftragswert_netto) * 1.2 * 100) / 100;
+  const anzahlung = Number(anz!.betrag_brutto);
+
+  /* ---- Offene Posten vorher: die Anzahlung steht drin ---- */
+  await page.goto("/offene-posten");
+  await expect(page.getByText(zustand.nummer!).first()).toBeVisible({
+    timeout: 15_000,
+  });
+
+  /* ---- Schlussrechnung erstellen ---- */
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+  await page.getByRole("button", { name: "Schlussrechnung erstellen" }).click();
+
+  /*
+   * Auf den Beleg warten, nicht auf die Meldung: existiert er aus einem
+   * früheren Lauf schon, lautet die Antwort „besteht bereits" — richtig,
+   * aber ein anderer Text. Geprüft wird, dass die Rechnung da ist.
+   */
+  await expect
+    .poll(async () => {
+      const { count } = await db
+        .from("vorgang_dokument")
+        .select("id", { count: "exact", head: true })
+        .eq("vorgang_id", zustand.vorgangId!)
+        .eq("typ", "schlussrechnung");
+      return count;
+    }, { timeout: 25_000 })
+    .toBe(1);
+
+  const { data: schluss } = await db
+    .from("vorgang_dokument")
+    .select("id, nummer, betrag_brutto, status, faellig_am")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .eq("typ", "schlussrechnung")
+    .single();
+
+  /*
+   * Auftragswert brutto minus die tatsächlich gestellte Anzahlung — nicht
+   * minus den Prozentsatz von heute. Ändert jemand die 30 auf 40, darf
+   * die Schlussrechnung nicht plötzlich zu wenig fordern.
+   */
+  expect(Number(schluss!.betrag_brutto)).toBeCloseTo(brutto - anzahlung, 1);
+  expect(schluss!.status).toBe("entwurf");
+  expect(schluss!.faellig_am).not.toBeNull();
+
+  /* ---- Beide Rechnungen versenden und bezahlen ---- */
+  for (const id of [anz!.id, schluss!.id]) {
+    await db
+      .from("vorgang_dokument")
+      .update({ status: "versendet" })
+      .eq("id", id);
+  }
+  await page.reload();
+
+  const belege = page.locator("li", { hasText: "Zahlung erfassen" });
+  const anzahl = await belege.count();
+  expect(anzahl).toBe(2);
+
+  for (let i = 0; i < anzahl; i++) {
+    /*
+     * Immer den ersten offenen nehmen: nach jeder Zahlung verschwindet
+     * einer aus der Liste, ein fester Index träfe danach den falschen.
+     */
+    const beleg = page.locator("li", { hasText: "Zahlung erfassen" }).first();
+    await beleg.getByRole("button", { name: "Zahlung erfassen" }).click();
+    await beleg.getByRole("button", { name: "Zahlung erfassen" }).click();
+    await expect(page.getByText(/Zahlung erfasst/).first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.reload();
+  }
+
+  const { data: nachher } = await db
+    .from("vorgang_dokument")
+    .select("status")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .in("typ", ["anzahlungsrechnung", "schlussrechnung"]);
+
+  expect(nachher!.every((d) => d.status === "bezahlt")).toBe(true);
+
+  /* ---- Offene Posten nachher: der Vorgang ist raus ---- */
+  await page.goto("/offene-posten");
+  await expect(page.getByText(zustand.nummer!)).toHaveCount(0);
+});
+
+test("11 — Eine Teilzahlung lässt den Posten offen", async ({ page }) => {
+  const db = admin();
+
+  /* Die Schlussrechnung wieder öffnen und teilweise bezahlen. */
+  const { data: schluss } = await db
+    .from("vorgang_dokument")
+    .select("id, betrag_brutto")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .eq("typ", "schlussrechnung")
+    .single();
+
+  await db
+    .from("vorgang_dokument")
+    .update({ status: "versendet", bezahlt_am: null })
+    .eq("id", schluss!.id);
+
+  await login(page, DEMO.gf);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+
+  const beleg = page.locator("li", { hasText: "Zahlung erfassen" }).first();
+  await beleg.getByRole("button", { name: "Zahlung erfassen" }).click();
+  await beleg.getByLabel("Betrag").fill("100");
+  await beleg.getByRole("button", { name: "Zahlung erfassen" }).click();
+
+  await expect(page.getByText(/Teilzahlung vermerkt/)).toBeVisible({
+    timeout: 20_000,
+  });
+
+  const { data: nachher } = await db
+    .from("vorgang_dokument")
+    .select("status, bezahlt_am")
+    .eq("id", schluss!.id)
+    .single();
+
+  /*
+   * Der Beleg bleibt offen. Sonst verschwindet ein Restbetrag aus der
+   * Postenliste, den noch jemand eintreiben muss.
+   */
+  expect(nachher!.status).toBe("versendet");
+  expect(nachher!.bezahlt_am).toBeNull();
+
+  await page.goto("/offene-posten");
+  await expect(page.getByText(zustand.nummer!).first()).toBeVisible();
+});
+
+test("12 — Die Bauleitung sieht den Auftragswert, aber keine Rechnungen", async ({
+  page,
+}) => {
+  await login(page, DEMO.bauleitung);
+  const antwort = await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+  if ((antwort?.status() ?? 200) >= 400) return;
+
+  // Auftragswert ja …
+  await expect(page.getByText("Auftragswert netto")).toBeVisible({
+    timeout: 15_000,
+  });
+
+  /*
+   * … Rechnungsbelege nein. Die Grenze zieht die Policy in 0025, nicht
+   * das UI: die Zeilen kommen gar nicht erst an.
+   */
+  await expect(page.locator("body")).not.toContainText("Schlussrechnung");
+
+  await page.goto("/offene-posten");
+  await expect(page.locator("body")).not.toContainText("Schlussrechnung");
 });
