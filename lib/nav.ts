@@ -27,6 +27,8 @@ export const NAV: NavGroup[] = [
        * solange der Umbau läuft.
        */
       { label: "Vorgänge", href: "/vorgaenge", icon: "pipelines", area: "pipelines" },
+      { label: "Planung", href: "/planung", icon: "dispo", area: "pipelines" },
+      { label: "Material", href: "/material", icon: "lager", area: "pipelines" },
       { label: "Pipelines (alt)", href: "/pipelines/projekte", icon: "pipelines", area: "pipelines" },
       { label: "Angebote", href: "/angebote", icon: "angebote", area: "angebote" },
       { label: "CRM", href: "/crm", icon: "crm", area: "crm" },
@@ -50,6 +52,12 @@ export const NAV: NavGroup[] = [
      */
     title: "Mein Arbeitstag",
     items: [
+      /*
+       * Für die Montage der Einstieg: wohin, wann, was ist zu tun. Kein
+       * Board, keine Beträge — die liefert die Datenbank dieser Rolle
+       * gar nicht.
+       */
+      { label: "Mein Einsatz", href: "/mein-einsatz", icon: "einsatz", area: null },
       { label: "Stempeln", href: "/m/stempeln", icon: "zeit", area: null },
       { label: "Meine Zeiten", href: "/meine-zeiten", icon: "konto", area: null },
       { label: "Meine Dokumente", href: "/meine-dokumente", icon: "dokumente", area: null },

@@ -18,6 +18,7 @@ import {
   vorgangVerloren,
 } from "@/app/(app)/vorgaenge/actions";
 import { angebotAngenommen } from "@/app/(app)/vorgaenge/kaskade-actions";
+import { montageTerminieren } from "@/app/(app)/vorgaenge/termin-actions";
 
 /**
  * Das Aktionspanel: genau eine primäre Aktion je Phase.
@@ -82,6 +83,7 @@ export function Aktionspanel({
   darfSchreiben,
   verlorenGrund,
   anzahlungProzent,
+  team,
 }: {
   vorgangId: string;
   phase: Phase;
@@ -90,6 +92,7 @@ export function Aktionspanel({
   darfSchreiben: boolean;
   verlorenGrund: string | null;
   anzahlungProzent: number;
+  team: { id: string; name: string }[];
 }) {
   if (phase === "verloren") {
     return (
@@ -111,6 +114,17 @@ export function Aktionspanel({
    * vier Antworten, und daraus entsteht alles Weitere. Deshalb ein
    * eigener Dialog statt eines Knopfs.
    */
+  if (phase === "beauftragt") {
+    return (
+      <TerminPanel
+        vorgangId={vorgangId}
+        offeneGates={offeneGates}
+        darfSchreiben={darfSchreiben}
+        team={team}
+      />
+    );
+  }
+
   if (phase === "angebot") {
     return (
       <AnnahmePanel
@@ -575,6 +589,194 @@ function JaNein({
         <option value="nein">nein</option>
       </select>
       <span className="text-[10.5px] text-faint">{hinweis}</span>
+    </span>
+  );
+}
+
+
+/**
+ * Terminierung — im Vorgang, nicht in einem Planungsmodul.
+ *
+ * Wer terminiert, hat gerade den Kunden am Telefon und die Gates vor
+ * Augen. Das Planungsboard ist danach nur eine zweite Ansicht derselben
+ * Termine.
+ */
+function TerminPanel({
+  vorgangId,
+  offeneGates,
+  darfSchreiben,
+  team,
+}: {
+  vorgangId: string;
+  offeneGates: string[];
+  darfSchreiben: boolean;
+  team: { id: string; name: string }[];
+}) {
+  const [offen, setOffen] = useState(false);
+  const [status, formAction] = useActionState<AktionsStatus, FormData>(
+    montageTerminieren,
+    LEER,
+  );
+  const blockiert = offeneGates.length > 0;
+
+  return (
+    <section className="rounded-[20px] bg-surface p-5 shadow-soft">
+      <h2 className="text-[15px] font-semibold">Montage terminieren</h2>
+      <p className="mt-1 mb-4 text-[12.5px] text-muted">
+        {blockiert
+          ? "Terminierung ist blockiert, solange Pflicht-Gates offen sind."
+          : "Alle Pflicht-Gates sind durch."}
+      </p>
+
+      {!offen ? (
+        <>
+          <button
+            type="button"
+            disabled={!darfSchreiben || blockiert}
+            onClick={() => setOffen(true)}
+            className={[
+              "min-h-[52px] w-full rounded-pill border-0 px-6 text-[14.5px] font-semibold",
+              !darfSchreiben || blockiert
+                ? "cursor-not-allowed bg-sunk text-faint"
+                : "cursor-pointer bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-white shadow-[0_8px_22px_rgba(201,121,24,0.28)]",
+            ].join(" ")}
+          >
+            Montage terminieren
+          </button>
+
+          {blockiert ? (
+            <p className="mt-3 rounded-input bg-s-crit/8 px-4 py-3 text-[12.5px] text-s-crit">
+              Offene Pflicht-Gates: {offeneGates.join(" · ")}
+            </p>
+          ) : null}
+
+          {darfSchreiben ? (
+            <VerlorenKnopf vorgangId={vorgangId} phase="beauftragt" />
+          ) : null}
+        </>
+      ) : (
+        <form action={formAction}>
+          <input type="hidden" name="vorgangId" value={vorgangId} />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Datum id="tp-von-d" name="vonDatum" label="Von" />
+            <Uhr id="tp-von-z" name="vonZeit" label="Beginn" vorgabe="07:00" />
+            <Datum id="tp-bis-d" name="bisDatum" label="Bis" />
+            <Uhr id="tp-bis-z" name="bisZeit" label="Ende" vorgabe="16:00" />
+          </div>
+
+          <fieldset className="mt-4">
+            <legend className="mb-2 text-[12px] font-medium text-muted">
+              Team
+            </legend>
+            <div className="flex flex-col gap-[6px]">
+              {team.length === 0 ? (
+                <span className="text-[12px] text-faint">
+                  Kein Mitarbeiter aktiv.
+                </span>
+              ) : (
+                team.map((u) => (
+                  <label key={u.id} className="flex items-center gap-2 text-[12.5px]">
+                    <input
+                      type="checkbox"
+                      name="team"
+                      value={u.id}
+                      className="h-4 w-4 accent-[var(--accent)]"
+                    />
+                    {u.name}
+                  </label>
+                ))
+              )}
+            </div>
+          </fieldset>
+
+          <div className="mt-3 grid gap-3">
+            <Text
+              id="tp-sub"
+              name="subText"
+              label="Fremdfirma"
+              platzhalter="Name der Subfirma, falls beteiligt"
+            />
+            <Text id="tp-notiz" name="notiz" label="Notiz" platzhalter="Zufahrt, Schlüssel, Kontakt vor Ort" />
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <TerminAbsenden />
+            <button
+              type="button"
+              onClick={() => setOffen(false)}
+              className="cursor-pointer border-0 bg-transparent text-[12.5px] text-muted underline"
+            >
+              Abbrechen
+            </button>
+          </div>
+
+          <p className="mt-2 text-[11px] text-faint">
+            Doppelbelegung wird gemeldet, aber nicht verhindert — manchmal
+            gehen zwei Baustellen an einem Tag, und das entscheidet der
+            Betrieb.
+          </p>
+
+          <Meldung status={status} />
+        </form>
+      )}
+    </section>
+  );
+}
+
+function TerminAbsenden() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="min-h-[48px] flex-1 cursor-pointer rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-6 text-[14px] font-semibold text-white shadow-[0_8px_22px_rgba(201,121,24,0.28)] disabled:opacity-60"
+    >
+      {pending ? "Wird terminiert …" : "Terminieren"}
+    </button>
+  );
+}
+
+function Datum({ id, name, label }: { id: string; name: string; label: string }) {
+  return (
+    <span className="flex flex-col gap-[5px]">
+      <label htmlFor={id} className="text-[12px] font-medium text-muted">
+        {label}
+      </label>
+      <input
+        id={id}
+        name={name}
+        type="date"
+        required
+        className="num w-full rounded-input border border-transparent bg-sunk px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent focus:bg-surface"
+      />
+    </span>
+  );
+}
+
+function Uhr({
+  id,
+  name,
+  label,
+  vorgabe,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  vorgabe: string;
+}) {
+  return (
+    <span className="flex flex-col gap-[5px]">
+      <label htmlFor={id} className="text-[12px] font-medium text-muted">
+        {label}
+      </label>
+      <input
+        id={id}
+        name={name}
+        type="time"
+        defaultValue={vorgabe}
+        className="num w-full rounded-input border border-transparent bg-sunk px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent focus:bg-surface"
+      />
     </span>
   );
 }

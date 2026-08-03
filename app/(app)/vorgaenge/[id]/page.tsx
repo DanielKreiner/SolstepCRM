@@ -212,6 +212,10 @@ export default async function VorgangPage({
             darfSchreiben={darfSchreiben}
             verlorenGrund={kopf.verlorenGrund}
             anzahlungProzent={kopf.anzahlungProzent}
+            team={(team ?? []).map((u) => ({
+              id: u.id as string,
+              name: u.name as string,
+            }))}
           />
 
           {naechsterTermin ? (

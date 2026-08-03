@@ -409,8 +409,10 @@ export async function gateSetzen(
   _prev: VorgangStatus,
   formData: FormData,
 ): Promise<VorgangStatus> {
-  const z1 = await schreibzugang();
-  if (!z1.ok) return z1.status;
+  const me = await requireMe();
+  if (me.company.status !== "active") {
+    return { error: "Der Zugang ist derzeit nur lesend.", ok: null };
+  }
 
   const parsed = gateSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "Eingabe fehlt.", ok: null };
@@ -425,6 +427,29 @@ export async function gateSetzen(
     .maybeSingle();
 
   if (!g) return { error: "Gate nicht gefunden.", ok: null };
+
+  /*
+   * Wer Vorgänge schreiben darf, setzt jedes Gate. Das Lager darf genau
+   * eines: sein eigenes. Es arbeitet die Materialliste ab und hakt dort
+   * ab — ohne dieses Recht wäre die Lageransicht Dekoration, und jemand
+   * im Büro müsste hinterherklicken, was das Lager längst erledigt hat
+   * (Briefing Abschnitt 6).
+   */
+  const darf =
+    me.perms.pipelines === "write" ||
+    (me.perms.lager === "write" && (g.key as string) === "material");
+
+  if (!darf) {
+    return {
+      error:
+        (g.key as string) === "material"
+          ? "Für das Material-Gate fehlt deiner Rolle das Schreibrecht auf Lager."
+          : "Für Gates fehlt deiner Rolle das Schreibrecht.",
+      ok: null,
+    };
+  }
+
+  const z1 = { me };
 
   const neu: GateStatus = d.status ?? naechsterGateStatus(g.status as GateStatus);
 

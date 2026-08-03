@@ -336,3 +336,125 @@ test("6 — Ein Monteur sieht keine Beträge", async ({ page }) => {
     page.getByText("für diese Rolle nicht sichtbar"),
   ).toBeVisible({ timeout: 15_000 });
 });
+
+test("7 — Terminieren, und der Termin steht im Planungsboard", async ({ page }) => {
+  const db = admin();
+
+  /* Aus Test 4 sind alle Pflicht-Gates erledigt. */
+  await login(page, DEMO.gf);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+
+  await page.getByRole("button", { name: "Montage terminieren" }).click();
+
+  const dialog = page.locator("form", { hasText: "Fremdfirma" });
+  await dialog.getByLabel("Von", { exact: true }).fill("2027-05-10");
+  await dialog.getByLabel("Bis", { exact: true }).fill("2027-05-11");
+
+  const { data: monteur } = await db
+    .from("app_user")
+    .select("id, name")
+    .eq("company_id", COMPANY_A)
+    .eq("role", "monteur")
+    .eq("active", true)
+    .limit(1)
+    .single();
+
+  await dialog.getByLabel(monteur!.name as string).check();
+  await dialog.getByLabel("Notiz").fill("Schlüssel beim Nachbarn.");
+  await dialog.getByRole("button", { name: "Terminieren" }).click();
+
+  /*
+   * Wie beim Phasenwechsel: mit dem Sprung nach „montage" tauscht das
+   * Aktionspanel seinen Inhalt aus, und die Meldung verschwindet mit dem
+   * Formular. Geprüft wird der Zustand.
+   */
+  await expect
+    .poll(async () => {
+      const { data } = await db
+        .from("vorgang")
+        .select("phase")
+        .eq("id", zustand.vorgangId!)
+        .single();
+      return data?.phase;
+    }, { timeout: 25_000 })
+    .toBe("montage");
+
+  const { data: t } = await db
+    .from("vorgang_termin")
+    .select("id, art, von, bis, notiz")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .single();
+  expect(t!.art).toBe("montage");
+  // 07:00 Wiener Zeit im Mai ist Sommerzeit, also 05:00 UTC.
+  expect(t!.von).toContain("05:00:00");
+
+  const { data: personen } = await db
+    .from("vorgang_termin_person")
+    .select("user_id")
+    .eq("termin_id", t!.id);
+  expect(personen).toHaveLength(1);
+
+  /* Das Planungsboard zeigt denselben Termin. */
+  await page.goto("/planung?woche=2027-05-10");
+  await expect(page.getByText(zustand.nummer!).first()).toBeVisible({
+    timeout: 15_000,
+  });
+});
+
+test("8 — Der Monteur sieht seinen Einsatz mit Adresse und Material", async ({
+  page,
+}) => {
+  await login(page, DEMO.monteur);
+  await page.goto("/mein-einsatz");
+
+  await expect(page.getByText(zustand.nummer!).first()).toBeVisible({
+    timeout: 15_000,
+  });
+  // Adresse als Kartenlink — mit dem Handschuh tippt niemand ab.
+  await expect(page.getByText("Schlüssel beim Nachbarn.")).toBeVisible();
+  await expect(page.getByText(/Material · \d+ Positionen/)).toBeVisible();
+
+  /*
+   * Kein Board und keine Beträge. Beides ist keine Frage der Anzeige:
+   * die Navigation blendet aus, und die Datenbank liefert der Rolle
+   * ohnehin keine Werte.
+   */
+  await expect(page.locator("body")).not.toContainText("Auftragswert netto");
+});
+
+test("9 — Das Lager sieht den Vorgang in der Materialliste", async ({ page }) => {
+  const db = admin();
+
+  /* Material-Gate wieder öffnen, damit es in der offenen Liste steht. */
+  await db
+    .from("vorgang_gate")
+    .update({ status: "offen" })
+    .eq("vorgang_id", zustand.vorgangId!)
+    .eq("key", "material");
+
+  await login(page, DEMO.lager);
+  await page.goto("/material");
+
+  await expect(page.getByText(zustand.nummer!).first()).toBeVisible({
+    timeout: 15_000,
+  });
+
+  // Abhaken, und das Büro sieht die Ampel grün werden.
+  await page
+    .locator("form", { hasText: "Jetzt:" })
+    .first()
+    .getByRole("button", { name: "Liefertermin bestätigt" })
+    .click();
+
+  await expect
+    .poll(async () => {
+      const { data } = await db
+        .from("vorgang_gate")
+        .select("status")
+        .eq("vorgang_id", zustand.vorgangId!)
+        .eq("key", "material")
+        .single();
+      return data?.status;
+    }, { timeout: 20_000 })
+    .toBe("erledigt");
+});
