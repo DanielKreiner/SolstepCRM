@@ -119,6 +119,16 @@ const eslintConfig = [
        * Die Rechteprüfung sitzt in der aufrufenden Server Action.
        */
       "lib/vorgang/mail.ts",
+      /*
+       * Die Bestellung abschicken. Dabei entsteht ein PDF, das in den
+       * gesperrten Bucket documents gehört, und die Mail an den
+       * Lieferanten in mail_outbox — beides für eine angemeldete
+       * Sitzung unerreichbar. Gelesen wird alles mit dem RLS-Client des
+       * Anmelders; der Service-Role-Client fasst nur Speicher und
+       * Postausgang an. Die Rechteprüfung sitzt in der aufrufenden
+       * Serveraktion.
+       */
+      "lib/material/bestellung.tsx",
       "lib/supabase/admin.ts",
       "scripts/**",
       "tests/**",
