@@ -1,163 +1,174 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Pill } from "@/components/ui/Pill";
-import { date, hhmm, time, viennaDay } from "@/lib/format";
+import { date, time, viennaDay } from "@/lib/format";
+import { beladeliste } from "@/lib/material/beladeliste";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
-import { endOfViennaDay, startOfViennaDay } from "@/lib/time";
+import { addDays, endOfViennaDay, startOfViennaDay } from "@/lib/time";
+import { Einsatzkarte, OhnePlan, type Einsatz } from "./Einsatzkarte";
 
 export const metadata: Metadata = { title: "Heute" };
 
-type Zeile = {
-  termin: {
-    id: string;
-    art: string;
-    von: string;
-    bis: string;
-    notiz: string | null;
-    vorgang: {
-      id: string;
-      number: string;
-      phase: string;
-      adresse: string | null;
-      plz: string | null;
-      ort: string | null;
-      customer: { name: string } | null;
-    } | null;
-  } | null;
-};
-
-const ART: Record<string, string> = {
-  aufnahme: "Aufnahme",
-  montage: "Montage",
-  service: "Service",
-};
-
 /**
- * Der Tag der Montage.
+ * Der wichtigste Screen des Produkts.
  *
- * Gezeigt werden die eigenen Termine, nicht alle des Betriebs. Vorher
- * stand hier jede Baustelle, die heute läuft — auf einem Handy, das
- * jemand um 6:30 im Auto aufmacht, ist das eine Liste, in der die eigene
- * Zeile untergeht.
+ * Ein Monteur macht ihn um halb sieben im Auto auf und will drei Dinge
+ * wissen: wohin, mit wem, was ist zu laden. Und er will einmal tippen,
+ * damit die Zeit läuft — am richtigen Auftrag, ohne Umweg über eine
+ * Uhr auf einer anderen Seite.
  */
 export default async function HeutePage() {
   const me = await requireMe();
   const supabase = await createClient();
   const heute = viennaDay();
 
-  const [{ data: zuordnungen }, { data: zeiten }] = await Promise.all([
+  const [{ data: roh }, { data: laufend }, liste] = await Promise.all([
     supabase
-      .from("vorgang_termin_person")
+      .from("einsatz")
       .select(
-        `termin:termin_id (
-           id, art, von, bis, notiz,
-           vorgang:vorgang_id (
-             id, number, phase, adresse, plz, ort,
-             customer:customer_id ( name )
-           )
-         )`,
+        `id, art, titel, von, bis, vorgang_id, notiz,
+         personen:einsatz_person ( user_id, user:user_id ( name ) ),
+         vorgang:vorgang_id ( adresse, plz, ort, customer:customer_id ( name, contact_person, phone ) )`,
       )
-      .eq("user_id", me.id),
+      .gte("von", startOfViennaDay(heute).toISOString())
+      .lte("von", endOfViennaDay(addDays(heute, 7)).toISOString())
+      .order("von"),
     supabase
       .from("time_entry")
-      .select("id, kind, started_at, ended_at, duration_min, status")
+      .select("id, started_at, einsatz_id")
       .eq("user_id", me.id)
-      .gte("started_at", startOfViennaDay(heute).toISOString())
-      .lt("started_at", endOfViennaDay(heute).toISOString())
-      .order("started_at"),
+      .eq("status", "running")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    beladeliste(supabase, { companyId: me.companyId, tag: heute, userId: me.id }),
   ]);
 
-  const von = startOfViennaDay(heute).toISOString();
-  const bis = endOfViennaDay(heute).toISOString();
+  type Roh = {
+    id: string;
+    art: string;
+    titel: string | null;
+    von: string;
+    bis: string;
+    vorgang_id: string | null;
+    notiz: string | null;
+    personen: { user_id: string; user: { name: string } | null }[];
+    vorgang: {
+      adresse: string | null;
+      plz: string | null;
+      ort: string | null;
+      customer: {
+        name: string;
+        contact_person: string | null;
+        phone: string | null;
+      } | null;
+    } | null;
+  };
 
-  const termine = ((zuordnungen ?? []) as unknown as Zeile[])
-    .map((z) => z.termin)
-    .filter((t): t is NonNullable<Zeile["termin"]> => t !== null && t.vorgang !== null)
-    .filter((t) => t.von <= bis && t.bis >= von)
-    .sort((a, b) => (a.von < b.von ? -1 : 1));
+  /* Nur die eigenen Einsätze — die Zuordnung steckt in einer Untertabelle. */
+  const meine = ((roh ?? []) as unknown as Roh[]).filter((e) =>
+    e.personen.some((p) => p.user_id === me.id),
+  );
 
-  const gebucht = (zeiten ?? [])
-    .filter((z) => z.kind !== "break")
-    .reduce((s, z) => s + Number(z.duration_min ?? 0), 0);
+  const bisEnde = endOfViennaDay(heute).getTime();
+  const heutige = meine.filter((e) => new Date(e.von).getTime() <= bisEnde);
+  const kommende = meine.filter((e) => new Date(e.von).getTime() > bisEnde);
+
+  const laeuftSeit = (laufend?.started_at as string | null) ?? null;
+  const laeuftAn = (laufend?.einsatz_id as string | null) ?? null;
+
+  const abbilden = (e: Roh): Einsatz => {
+    const block = liste.bloecke.find((b) => b.vorgangId === e.vorgang_id);
+    return {
+      id: e.id,
+      art: e.art,
+      titel: e.titel ?? "Einsatz",
+      vonZeit: time(e.von),
+      bisZeit: time(e.bis),
+      adresse:
+        [e.vorgang?.adresse, [e.vorgang?.plz, e.vorgang?.ort].filter(Boolean).join(" ")]
+          .filter(Boolean)
+          .join(", ") || null,
+      kunde: e.vorgang?.customer?.name ?? null,
+      kontakt: e.vorgang?.customer?.contact_person ?? null,
+      telefon: e.vorgang?.customer?.phone ?? null,
+      team: e.personen
+        .filter((p) => p.user_id !== me.id)
+        .map((p) => p.user?.name)
+        .filter((n): n is string => Boolean(n)),
+      vorgangId: e.vorgang_id,
+      zuLaden: block?.zuLaden.length ?? 0,
+      fehlt: block?.fehlt.length ?? 0,
+      lieferungen: liste.lieferungen.filter(
+        (l) => l.vorgangNummer && e.vorgang_id,
+      ).length,
+    };
+  };
 
   return (
     <>
       <h1 className="mb-1 text-[24px] font-bold tracking-[-0.02em]">Heute</h1>
-      <p className="mb-4 text-[13px] text-muted">{date(heute)}</p>
+      <p className="mb-4 text-[13px] text-muted">
+        {date(heute)}
+        {liste.fahrzeug ? ` · ${liste.fahrzeug.name}` : ""}
+      </p>
 
-      <div className="mb-4 rounded-[20px] bg-surface p-5 shadow-soft">
-        <p className="text-[12.5px] text-muted">Heute gebucht</p>
-        <p className="num text-[28px] font-semibold">{hhmm(gebucht)}</p>
+      {heutige.length === 0 ? (
+        <section className="mb-4 rounded-[20px] bg-surface p-6 shadow-soft">
+          <h2 className="text-[16px] font-semibold">Kein Einsatz geplant</h2>
+          <p className="mt-1 text-[13px] text-muted">
+            Wenn du trotzdem arbeitest, starte die Zeit hier — sag kurz woran.
+          </p>
+        </section>
+      ) : (
+        <div className="mb-4 flex flex-col gap-4">
+          {heutige.map((e) => (
+            <Einsatzkarte
+              key={e.id}
+              einsatz={abbilden(e)}
+              laeuftSeit={laeuftSeit}
+              laeuftHier={laeuftAn === e.id}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="mb-6">
+        <OhnePlan
+          gesperrt={Boolean(laeuftSeit)}
+          einsaetze={heutige
+            .filter((e) => e.id !== laeuftAn)
+            .map((e) => ({
+              id: e.id,
+              label: `${time(e.von)} · ${e.vorgang?.customer?.name ?? e.titel ?? "Einsatz"}`,
+            }))}
+        />
       </div>
 
-      <h2 className="mb-2 text-[15px] font-semibold">Meine Baustellen</h2>
-      {termine.length === 0 ? (
-        <p className="rounded-[20px] bg-surface p-5 text-[13px] text-muted shadow-soft">
-          Für heute ist nichts für dich eingeteilt.
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {termine.map((t) => {
-            const v = t.vorgang!;
-            return (
-              <li key={t.id}>
-                <Link
-                  href={`/m/auftrag/${v.id}`}
-                  className="block rounded-[20px] bg-surface p-5 text-ink shadow-soft"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="num text-[13px] font-semibold">
-                      {v.number}
-                    </span>
-                    <Pill tone="doing">{ART[t.art] ?? t.art}</Pill>
-                    <span className="num ml-auto text-[13px] font-semibold">
-                      {time(t.von)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[16px] font-semibold">
-                    {v.customer?.name ?? "—"}
-                  </p>
-                  <p className="text-[13px] text-muted">
-                    {[v.adresse, [v.plz, v.ort].filter(Boolean).join(" ")]
-                      .filter(Boolean)
-                      .join(", ")}
-                  </p>
-                  {t.notiz ? (
-                    <p className="mt-2 text-[13px]">{t.notiz}</p>
-                  ) : null}
-                </Link>
+      {kommende.length > 0 ? (
+        <section>
+          <h2 className="mb-2 text-[15px] font-semibold">Die nächsten Tage</h2>
+          <ul className="flex flex-col gap-[6px]">
+            {kommende.map((e) => (
+              <li
+                key={e.id}
+                className="flex flex-wrap items-center gap-2 rounded-card bg-surface px-4 py-3 shadow-soft"
+              >
+                <span className="num w-[92px] shrink-0 text-[13px] font-semibold">
+                  {date(e.von)}
+                </span>
+                <span className="num w-[52px] shrink-0 text-[12.5px] text-muted">
+                  {time(e.von)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[13.5px]">
+                  {e.vorgang?.customer?.name ?? e.titel ?? "Einsatz"}
+                </span>
+                {e.art === "service" ? <Pill tone="waiting">Service</Pill> : null}
               </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <h2 className="mt-6 mb-2 text-[15px] font-semibold">Meine Zeiten</h2>
-      {(zeiten ?? []).length === 0 ? (
-        <p className="rounded-[20px] bg-surface p-5 text-[13px] text-muted shadow-soft">
-          Heute noch nichts gebucht.
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {(zeiten ?? []).map((z) => (
-            <li
-              key={z.id as string}
-              className="flex items-center gap-3 rounded-input bg-surface px-4 py-3 shadow-soft"
-            >
-              <span className="num text-[13px]">
-                {time(z.started_at as string)} –{" "}
-                {z.ended_at ? time(z.ended_at as string) : "läuft"}
-              </span>
-              <span className="flex-1" />
-              {z.status === "flagged" ? <Pill tone="crit">geprüft</Pill> : null}
-              <span className="num text-[13px] font-semibold">
-                {hhmm(z.duration_min as number | null)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </>
   );
 }
