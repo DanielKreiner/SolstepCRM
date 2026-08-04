@@ -119,6 +119,22 @@ export default async function PlanungPage({
         }[]).map((q) => ({ wert: q.schluessel, text: q.label }))}
         darfPlanen={darfPlanen}
         vorgangVorbelegt={vorgang ?? null}
+        /*
+         * Nur Serviceeinsätze bekommen die Stoppliste. Bei einer Montage
+         * gibt es eine Adresse und keinen Tagesablauf — dort wäre die
+         * Liste eine leere Fläche mit Überschrift.
+         */
+        servicetage={tafel.einsaetze
+          .filter((e) => e.art === "service")
+          .map((e) => ({
+            id: e.id,
+            titel: e.titel,
+            von: e.von,
+            personen: e.personen
+              .map((uid) => tafel.personen.find((p) => p.id === uid)?.name)
+              .filter((n): n is string => Boolean(n)),
+            stopps: e.stopps,
+          }))}
       />
     </>
   );

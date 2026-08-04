@@ -7,6 +7,7 @@ import { Dialog, DialogFuss } from "@/components/ui/Dialog";
 import { Suchauswahl, type Option } from "@/components/ui/Suchauswahl";
 import { einsatzLoeschen, einsatzSpeichern, type PlanStatus } from "@/app/(app)/planung/actions";
 import { blockiert, pruefe } from "@/lib/einsatz/konflikte";
+import { Servicetag, type ServiceEinsatz } from "./Servicetag";
 import {
   Plantafel,
   type TafelAbw,
@@ -34,6 +35,7 @@ export function Planung({
   qualifikationen,
   darfPlanen,
   vorgangVorbelegt,
+  servicetage,
 }: {
   woche: string;
   tage: string[];
@@ -50,6 +52,8 @@ export function Planung({
    * gerade kommt, noch einmal suchen.
    */
   vorgangVorbelegt: string | null;
+  /** Serviceeinsätze der Woche — die mit mehreren Adressen an einem Tag. */
+  servicetage: ServiceEinsatz[];
 }) {
   const [offen, setOffen] = useState<{ tag: string; userId: string | null } | null>(
     vorgangVorbelegt && darfPlanen ? { tag: tage[0]!, userId: null } : null,
@@ -111,6 +115,8 @@ export function Planung({
         darfPlanen={darfPlanen}
         neuerEinsatz={(tag, userId) => setOffen({ tag, userId })}
       />
+
+      <Servicetag einsaetze={servicetage} darfPlanen={darfPlanen} />
 
       {offen ? (
         <EinsatzDialog

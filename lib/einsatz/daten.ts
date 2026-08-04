@@ -28,6 +28,15 @@ export type TafelEinsatz = {
   vorgangNummer: string | null;
   kundeName: string | null;
   anzahlStopps: number;
+  stopps: {
+    id: string;
+    sort: number;
+    name: string;
+    adresse: string | null;
+    uhrzeit: string | null;
+    km: number | null;
+    fahrzeitMin: number | null;
+  }[];
 };
 
 export type TafelAbwesenheit = {
@@ -98,7 +107,7 @@ export async function tafelLaden(
           `id, art, titel, von, bis, ganztaegig, notiz, sub_text, fahrzeug_id,
            benoetigte_qualifikationen, vorgang_id,
            personen:einsatz_person ( user_id ),
-           stopps:einsatz_stopp ( id ),
+           stopps:einsatz_stopp ( id, sort, name, adresse, uhrzeit, km, fahrzeit_min ),
            vorgang:vorgang_id ( number, customer:customer_id ( name ) )`,
         )
         /* Alles, was in die Woche hineinragt — auch was davor beginnt. */
@@ -152,6 +161,18 @@ export async function tafelLaden(
         vorgangNummer: v?.number ?? null,
         kundeName: v?.customer?.name ?? null,
         anzahlStopps: (e.stopps ?? []).length,
+        stopps: (e.stopps ?? [])
+          .slice()
+          .sort((a, b) => a.sort - b.sort)
+          .map((x) => ({
+            id: x.id,
+            sort: x.sort,
+            name: x.name,
+            adresse: x.adresse,
+            uhrzeit: x.uhrzeit,
+            km: x.km === null ? null : Number(x.km),
+            fahrzeitMin: x.fahrzeit_min,
+          })),
       };
     }),
 
@@ -218,6 +239,16 @@ type EinsatzRoh = {
   benoetigte_qualifikationen: string[] | null;
   vorgang_id: string | null;
   personen: { user_id: string }[] | null;
-  stopps: { id: string }[] | null;
+  stopps:
+    | {
+        id: string;
+        sort: number;
+        name: string;
+        adresse: string | null;
+        uhrzeit: string | null;
+        km: string | null;
+        fahrzeit_min: number | null;
+      }[]
+    | null;
   vorgang: unknown;
 };

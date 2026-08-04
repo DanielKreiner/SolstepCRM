@@ -50,12 +50,12 @@ const SPALTEN = "1.5fr 90px 90px 90px 90px 100px 1.2fr 140px";
 export default async function ZeiterfassungPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tag?: string }>;
+  searchParams: Promise<{ tag?: string; filter?: string }>;
 }) {
   const me = await requireMe();
   const supabase = await createClient();
 
-  const { tag } = await searchParams;
+  const { tag, filter } = await searchParams;
   const day = tag && /^\d{4}-\d{2}-\d{2}$/.test(tag) ? tag : viennaDay();
   /*
    * Wer fremde Zeiten sehen darf, entscheidet der Bereich 'mitarbeiter' —
@@ -69,6 +69,44 @@ export default async function ZeiterfassungPage({
    * wegzulassen: es behauptet, niemand arbeite.
    */
   const darfAlle = me.perms.mitarbeiter !== "none";
+
+  /*
+   * Die Korrekturliste: Buchungen, die der Schutzlauf automatisch
+   * gestoppt hat (über Mitternacht oder länger als zwölf Stunden). Sie
+   * hängen an keinem Tag, sondern warten auf eine Entscheidung — deshalb
+   * eine eigene Liste und keine Spalte in der Tagesansicht.
+   *
+   * Nur für die, die fremde Zeiten sehen dürfen. Ein Monteur soll seine
+   * eigene korrigierte Zeit sehen, aber nicht die Liste des Betriebs.
+   */
+  const { data: markiert } = darfAlle
+    ? await supabase
+        .from("time_entry")
+        .select(
+          "id, started_at, ended_at, duration_min, flagged_reason, user:user_id ( name ), vorgang:vorgang_id ( number )",
+        )
+        .eq("status", "flagged")
+        .order("started_at", { ascending: false })
+        .limit(100)
+    : { data: [] };
+
+  const zuKorrigieren = ((markiert ?? []) as unknown as {
+    id: string;
+    started_at: string;
+    ended_at: string | null;
+    duration_min: number | null;
+    flagged_reason: string | null;
+    user: { name: string } | null;
+    vorgang: { number: string } | null;
+  }[]).map((e) => ({
+    id: e.id,
+    name: e.user?.name ?? "unbekannt",
+    von: e.started_at,
+    bis: e.ended_at,
+    minuten: e.duration_min,
+    grund: e.flagged_reason,
+    nummer: e.vorgang?.number ?? null,
+  }));
 
   const [
     { data: entries },
@@ -182,6 +220,87 @@ export default async function ZeiterfassungPage({
     label: u.name as string,
   }));
 
+  /* Eigene Ansicht: die Liste steht für sich und nicht neben einem Tag. */
+  if (filter === "zu-pruefen") {
+    return (
+      <>
+        <PageHeader
+          title="Zeiten zu prüfen"
+          subtitle="Automatisch gestoppt, weil sie über Mitternacht oder länger als zwölf Stunden liefen. Die Zahl ist eine Annahme — sie gehört bestätigt oder korrigiert."
+          actions={
+            <Link
+              href="/zeiterfassung"
+              className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk hover:text-ink"
+            >
+              Zur Tagesansicht
+            </Link>
+          }
+        />
+
+        {!darfAlle ? (
+          <p className="rounded-[20px] bg-surface p-6 text-[13px] text-muted shadow-soft">
+            Für fremde Zeiten fehlt deiner Rolle das Leserecht.
+          </p>
+        ) : zuKorrigieren.length === 0 ? (
+          <p className="rounded-[20px] bg-surface p-6 text-[13px] text-muted shadow-soft">
+            Nichts zu prüfen. Alle Buchungen wurden von Hand beendet.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {zuKorrigieren.map((z) => (
+              <li
+                key={z.id}
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[20px] bg-surface px-5 py-4 shadow-soft"
+              >
+                <span className="min-w-[160px]">
+                  <span className="block text-[14px] font-semibold">{z.name}</span>
+                  <span className="num block text-[12px] text-muted">
+                    {z.nummer ?? "ohne Vorgang"}
+                  </span>
+                </span>
+
+                <span className="num min-w-[230px] text-[13px]">
+                  {new Date(z.von).toLocaleString("de-AT", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                  {" – "}
+                  {z.bis
+                    ? new Date(z.bis).toLocaleString("de-AT", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "läuft"}
+                  {z.minuten ? ` · ${hhmm(z.minuten)}` : ""}
+                </span>
+
+                <span className="min-w-0 flex-1 text-[12.5px] text-muted">
+                  {z.grund ?? "automatisch gestoppt"}
+                </span>
+
+                {/*
+                  Korrigiert wird in der Tagesansicht, wo der ganze Tag
+                  der Person steht — eine Zeit ohne ihren Tag zu ändern
+                  heisst, die Überschneidung mit der nächsten zu übersehen.
+                */}
+                <Link
+                  href={`/zeiterfassung?tag=${z.von.slice(0, 10)}`}
+                  className="shrink-0 rounded-pill border border-line bg-surface px-[16px] py-[8px] text-[12.5px] font-medium text-ink hover:bg-sunk hover:text-ink"
+                >
+                  Tag öffnen
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader
@@ -195,6 +314,23 @@ export default async function ZeiterfassungPage({
           </div>
         }
       />
+
+      {zuKorrigieren.length > 0 ? (
+        <Link
+          href="/zeiterfassung?filter=zu-pruefen"
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-[20px] bg-s-warn/12 px-5 py-4 text-ink shadow-soft hover:text-ink"
+        >
+          <span className="rounded-pill bg-s-warn/20 px-[11px] py-[3px] text-[10.5px] font-bold tracking-[0.08em] text-accent-ink">
+            ZU PRÜFEN
+          </span>
+          <span className="num min-w-0 flex-1 text-[13.5px] font-medium">
+            {zuKorrigieren.length}{" "}
+            {zuKorrigieren.length === 1 ? "Buchung wurde" : "Buchungen wurden"}{" "}
+            automatisch gestoppt
+          </span>
+          <span className="shrink-0 text-[12.5px] text-muted">ansehen ›</span>
+        </Link>
+      ) : null}
 
       <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
         <KpiKarte
