@@ -103,6 +103,15 @@ const eslintConfig = [
        * der aufrufenden Server Action, die Mandantenzuordnung hier.
        */
       "lib/onboarding/**",
+      /*
+       * Der Mahnlauf. mail_account hält die Zugangsdaten der Postfächer
+       * und ist für authenticated vollständig gesperrt, mail_outbox
+       * ebenso — eine angemeldete Sitzung kann keine Mail schreiben.
+       * Dieselbe Aufteilung wie bei lib/onboarding: die Rechteprüfung
+       * sitzt in der aufrufenden Server Action, die Mandantenzuordnung
+       * hier.
+       */
+      "lib/mahnung.ts",
       "lib/supabase/admin.ts",
       "scripts/**",
       "tests/**",

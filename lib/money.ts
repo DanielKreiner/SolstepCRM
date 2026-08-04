@@ -108,39 +108,3 @@ export function nextInvoiceAmount(
   const betrag = round2((auftragswert * (stufe?.percent ?? 0)) / 100);
   return Math.min(betrag, rest);
 }
-
-/*
- * Mahnstufen.
- *
- * Die Fristen sind bewusst großzügig: ein Handwerksbetrieb verliert mit
- * einer zu scharfen ersten Mahnung mehr Kunden als Geld.
- */
-export const DUNNING_LEVELS = [
-  { level: 1, afterDays: 7, label: "Zahlungserinnerung" },
-  { level: 2, afterDays: 21, label: "1. Mahnung" },
-  { level: 3, afterDays: 35, label: "2. Mahnung" },
-] as const;
-
-/**
- * Welche Mahnstufe ist heute fällig?
- * Gibt null zurück, wenn nichts zu tun ist.
- */
-export function dueDunningLevel(
-  dueDate: string,
-  currentLevel: number,
-  today: string,
-): (typeof DUNNING_LEVELS)[number] | null {
-  const tageUeberfaellig = Math.floor(
-    (new Date(`${today}T00:00:00Z`).getTime() -
-      new Date(`${dueDate}T00:00:00Z`).getTime()) /
-      86_400_000,
-  );
-  if (tageUeberfaellig <= 0) return null;
-
-  // Die höchste erreichte Stufe gewinnt, aber immer nur eine pro Lauf —
-  // sonst überspringt ein vergessener Cron-Lauf die Zahlungserinnerung.
-  const faellig = DUNNING_LEVELS.filter(
-    (s) => tageUeberfaellig >= s.afterDays && s.level > currentLevel,
-  );
-  return faellig[0] ?? null;
-}

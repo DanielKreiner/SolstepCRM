@@ -1030,3 +1030,144 @@ test("18 — Der Kunde schreibt, interne Notizen bleiben im Betrieb", async ({
   expect(n!.body).toBe("Wann kommen Sie ungefähr?");
   expect(n!.intern).toBe(false);
 });
+
+/*
+ * Der Mahnlauf.
+ *
+ * Der schärfste Teil ist nicht das Mahnen, sondern das Nicht-Mahnen: eine
+ * ausgesetzte Rechnung und eine, die noch nicht fällig ist, dürfen keine
+ * Mail auslösen. Und eine Stufe je Lauf, sonst bekommt ein Kunde nach
+ * einem stillgestandenen Cron die zweite Mahnung als erste Nachricht.
+ */
+test("19 — Der Mahnlauf erinnert, stuft hoch und lässt Ausgesetztes in Ruhe", async ({
+  page,
+}) => {
+  const db = admin();
+
+  const { data: beleg } = await db
+    .from("vorgang_dokument")
+    .select("id, nummer, status, faellig_am")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .eq("typ", "schlussrechnung")
+    .single();
+
+  const aufraeumen = async () => {
+    await db.from("mail_outbox").delete().eq("vorgang_dokument_id", beleg!.id);
+    await db.from("job_run").delete().eq("kind", "dunning");
+  };
+  await aufraeumen();
+
+  const zaehleMails = async (): Promise<number> => {
+    const { count } = await db
+      .from("mail_outbox")
+      .select("id", { count: "exact", head: true })
+      .eq("vorgang_dokument_id", beleg!.id);
+    return count ?? 0;
+  };
+
+  const lauf = async () => {
+    await db.from("job_run").delete().eq("kind", "dunning");
+    const antwort = await page.request.get("/api/cron/dunning", {
+      headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
+    });
+    expect(antwort.status()).toBe(200);
+    return antwort.json() as Promise<{ gemahnt: number }>;
+  };
+
+  /* ---- Noch nicht fällig: nichts passiert ---- */
+  const morgen = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  await db
+    .from("vorgang_dokument")
+    .update({
+      status: "versendet",
+      faellig_am: morgen,
+      mahnstufe: 0,
+      mahnung_aktiv: true,
+    })
+    .eq("id", beleg!.id);
+
+  await lauf();
+  expect(await zaehleMails(), "vor Fälligkeit wurde gemahnt").toBe(0);
+
+  /* ---- Zehn Tage überfällig: Zahlungserinnerung, Stufe 1 ---- */
+  const vorZehnTagen = new Date(Date.now() - 10 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  await db
+    .from("vorgang_dokument")
+    .update({ faellig_am: vorZehnTagen })
+    .eq("id", beleg!.id);
+
+  await lauf();
+  expect(await zaehleMails()).toBe(1);
+
+  const { data: nachErster } = await db
+    .from("vorgang_dokument")
+    .select("mahnstufe, gemahnt_am")
+    .eq("id", beleg!.id)
+    .single();
+  expect(nachErster!.mahnstufe).toBe(1);
+  expect(nachErster!.gemahnt_am).not.toBeNull();
+
+  const { data: mail } = await db
+    .from("mail_outbox")
+    .select("subject, body_text")
+    .eq("vorgang_dokument_id", beleg!.id)
+    .single();
+  expect(String(mail!.subject)).toContain("Zahlungserinnerung");
+  expect(String(mail!.subject)).toContain(String(beleg!.nummer));
+
+  /* ---- Derselbe Tag noch einmal: keine zweite Mail ---- */
+  await lauf();
+  expect(await zaehleMails(), "dieselbe Stufe wurde doppelt gemahnt").toBe(1);
+
+  /*
+   * ---- Vierzig Tage überfällig, aber erst Stufe 1: es kommt Stufe 2
+   * und nicht Stufe 3. Eine Stufe je Lauf.
+   */
+  const vorVierzigTagen = new Date(Date.now() - 40 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  await db
+    .from("vorgang_dokument")
+    .update({ faellig_am: vorVierzigTagen })
+    .eq("id", beleg!.id);
+
+  await lauf();
+  const { data: nachZweiter } = await db
+    .from("vorgang_dokument")
+    .select("mahnstufe")
+    .eq("id", beleg!.id)
+    .single();
+  expect(nachZweiter!.mahnstufe, "der Lauf hat eine Stufe übersprungen").toBe(2);
+
+  /* ---- Ausgesetzt: der nächste Lauf lässt sie in Ruhe ---- */
+  await db
+    .from("vorgang_dokument")
+    .update({ mahnung_aktiv: false })
+    .eq("id", beleg!.id);
+
+  const vorher = await zaehleMails();
+  await lauf();
+  expect(await zaehleMails(), "ausgesetzte Rechnung wurde gemahnt").toBe(vorher);
+
+  /* ---- In der Liste steht die Stufe, und man kann sie aufnehmen ---- */
+  await login(page, DEMO.gf);
+  await page.goto("/offene-posten");
+  await expect(page.getByText("1. Mahnung").first()).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByText("Mahnlauf ausgesetzt").first()).toBeVisible();
+
+  await aufraeumen();
+  await db
+    .from("vorgang_dokument")
+    .update({
+      mahnstufe: 0,
+      gemahnt_am: null,
+      mahnung_aktiv: true,
+      faellig_am: beleg!.faellig_am,
+      status: beleg!.status,
+    })
+    .eq("id", beleg!.id);
+});

@@ -5,6 +5,8 @@ import { Pill } from "@/components/ui/Pill";
 import { Stat } from "@/components/ui/Stat";
 import { date, eur } from "@/lib/format";
 import { requireMe } from "@/lib/session";
+import { stufenLabel } from "@/lib/rules/dunning";
+import { MahnAktionen } from "./MahnAktionen";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Offene Posten" };
@@ -12,9 +14,9 @@ export const metadata: Metadata = { title: "Offene Posten" };
 /**
  * Offene Posten — alle Rechnungen, die nicht bezahlt sind.
  *
- * Kein Mahnwesen (Briefing Abschnitt 8): eine Liste, sortiert nach
- * Fälligkeit, mit dem Überfälligen zuerst. Wer mahnt, entscheidet der
- * Betrieb; diese Ansicht sagt nur, worüber zu entscheiden ist.
+ * Sortiert nach Fälligkeit, das Überfällige zuerst. Der Mahnlauf läuft
+ * nachts über dieselbe Regel, die hier der Knopf befragt
+ * (lib/rules/dunning.ts) — was die Liste zeigt, tut der Cron auch.
  *
  * Die Zeilen kommen aus vorgang_dokument. Rollen ohne Rechnungsrecht
  * bekommen von der Policy gar keine Zeile — die Seite ist dann leer und
@@ -28,6 +30,7 @@ export default async function OffenePostenPage() {
     .from("vorgang_dokument")
     .select(
       `id, typ, nummer, betrag_brutto, status, faellig_am, created_at,
+       mahnstufe, gemahnt_am, mahnung_aktiv,
        vorgang:vorgang_id ( id, number, phase, customer:customer_id ( name ) )`,
     )
     .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
@@ -43,6 +46,9 @@ export default async function OffenePostenPage() {
     status: string | null;
     faellig_am: string | null;
     created_at: string;
+    mahnstufe: number;
+    gemahnt_am: string | null;
+    mahnung_aktiv: boolean;
     vorgang: {
       id: string;
       number: string;
@@ -63,6 +69,7 @@ export default async function OffenePostenPage() {
     0,
   );
   const entwuerfe = alle.filter((b) => b.status === "entwurf");
+  const darfMahnen = me.perms.rechnungen === "write";
 
   return (
     <>
@@ -144,6 +151,12 @@ export default async function OffenePostenPage() {
                             ? "Anzahlung"
                             : "Schlussrechnung"}
                         </span>
+                        {stufenLabel(b.mahnstufe) ? (
+                          <Pill tone="crit">{stufenLabel(b.mahnstufe)}</Pill>
+                        ) : null}
+                        {!b.mahnung_aktiv ? (
+                          <Pill tone="neutral">Mahnlauf ausgesetzt</Pill>
+                        ) : null}
                         <span className="num ml-auto text-[15px] font-semibold">
                           {eur(Number(b.betrag_brutto ?? 0))}
                         </span>
@@ -155,8 +168,19 @@ export default async function OffenePostenPage() {
                       <p className="num text-[12px] text-muted">
                         {b.vorgang!.number}
                         {b.faellig_am ? ` · fällig ${date(b.faellig_am)}` : ""}
+                        {b.gemahnt_am ? ` · gemahnt ${date(b.gemahnt_am)}` : ""}
                       </p>
                     </Link>
+
+                    {darfMahnen && b.status === "versendet" ? (
+                      <div className="-mt-[10px] rounded-b-[20px] bg-surface px-5 pb-4 shadow-soft">
+                        <MahnAktionen
+                          dokumentId={b.id}
+                          mahnungAktiv={b.mahnung_aktiv}
+                          faellig={spaet}
+                        />
+                      </div>
+                    ) : null}
                   </li>
                 );
               })}
@@ -164,8 +188,9 @@ export default async function OffenePostenPage() {
           )}
 
           <p className="mt-3 text-[11.5px] text-faint">
-            Kein Mahnlauf: wer wann erinnert wird, entscheidet der Betrieb.
-            Diese Liste sagt nur, worüber zu entscheiden ist.
+            Der Mahnlauf erinnert nach 7 Tagen, mahnt nach 21 und nach 35 —
+            höchstens eine Stufe je Tag. Wer eine Ratenzahlung vereinbart
+            hat, setzt ihn für diese Rechnung aus.
           </p>
         </>
       )}

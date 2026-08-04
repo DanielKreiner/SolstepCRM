@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  DUNNING_LEVELS,
-  dueDunningLevel,
   nextInvoiceAmount,
   round2,
   totals,
@@ -96,40 +94,5 @@ describe("Teilrechnungen", () => {
   it("deckelt die Teilrechnung auf den Rest", () => {
     // Nur noch 1000 offen, 40 Prozent wären 11360
     expect(nextInvoiceAmount(WERT, WERT - 1000, "partial")).toBe(1000);
-  });
-});
-
-describe("Mahnstufen", () => {
-  const FAELLIG = "2026-08-01";
-
-  it("mahnt nicht vor Fälligkeit", () => {
-    expect(dueDunningLevel(FAELLIG, 0, "2026-07-31")).toBeNull();
-    expect(dueDunningLevel(FAELLIG, 0, "2026-08-01")).toBeNull();
-  });
-
-  it("mahnt nicht in den ersten Tagen nach Fälligkeit", () => {
-    expect(dueDunningLevel(FAELLIG, 0, "2026-08-06")).toBeNull();
-  });
-
-  it("stuft nach sieben, einundzwanzig und fünfunddreißig Tagen hoch", () => {
-    expect(dueDunningLevel(FAELLIG, 0, "2026-08-08")?.level).toBe(1);
-    expect(dueDunningLevel(FAELLIG, 1, "2026-08-22")?.level).toBe(2);
-    expect(dueDunningLevel(FAELLIG, 2, "2026-09-05")?.level).toBe(3);
-  });
-
-  it("überspringt keine Stufe, auch wenn ein Lauf ausgefallen ist", () => {
-    // 60 Tage überfällig, aber noch nie gemahnt: es kommt Stufe 1.
-    expect(dueDunningLevel(FAELLIG, 0, "2026-09-30")?.level).toBe(1);
-  });
-
-  it("mahnt eine bereits erreichte Stufe nicht erneut", () => {
-    expect(dueDunningLevel(FAELLIG, 1, "2026-08-10")).toBeNull();
-    expect(dueDunningLevel(FAELLIG, 3, "2026-12-01")).toBeNull();
-  });
-
-  it("hat aufsteigende, eindeutige Stufen", () => {
-    const levels = DUNNING_LEVELS.map((s) => s.level);
-    expect(levels).toEqual([...levels].sort((a, b) => a - b));
-    expect(new Set(levels).size).toBe(levels.length);
   });
 });

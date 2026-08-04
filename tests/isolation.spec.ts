@@ -77,7 +77,13 @@ describe("Aufbau des Tests", () => {
   it("kennt die mandantengebundenen Tabellen", () => {
     expect(tables.length).toBeGreaterThan(30);
     // Stichproben quer durch die fachlichen Bereiche
-    for (const t of ["job", "invoice", "time_entry", "absence", "customer"]) {
+    for (const t of [
+      "vorgang",
+      "vorgang_dokument",
+      "time_entry",
+      "absence",
+      "customer",
+    ]) {
       expect(tables).toContain(t);
     }
   });
@@ -89,7 +95,7 @@ describe("Aufbau des Tests", () => {
     // sich nie wieder auf BASE TABLE beschränken.
     const views = relations.filter((r) => r.type === "VIEW").map((r) => r.name);
     expect(views.length).toBeGreaterThan(0);
-    for (const v of ["search_index", "v_job_kpi", "v_time_balance"]) {
+    for (const v of ["search_index", "v_vorgang_kpi", "v_time_balance"]) {
       expect(views).toContain(v);
     }
   });
@@ -98,7 +104,7 @@ describe("Aufbau des Tests", () => {
     // Ohne diese Prüfung wäre der ganze Test wertlos: "A sieht nichts von B"
     // ist trivial wahr, wenn B nichts hat.
     const { count, error } = await admin
-      .from("job")
+      .from("vorgang")
       .select("id", { count: "exact", head: true })
       .eq("company_id", COMPANY_B);
     expect(error).toBeNull();
@@ -226,7 +232,7 @@ describe("Schreiben: kein Mandant schreibt in fremde Daten", () => {
 describe("Joins: kein Durchgriff über Beziehungen", () => {
   it("eingebettete Kunden bleiben im eigenen Mandanten", async () => {
     const { data, error } = await clientA
-      .from("job")
+      .from("vorgang")
       .select("id, company_id, customer:customer_id (id, company_id)")
       .limit(200);
 
@@ -252,7 +258,7 @@ describe("Joins: kein Durchgriff über Beziehungen", () => {
 
   it("Filter auf eine fremde company_id liefert nichts", async () => {
     const { data, error } = await clientA
-      .from("job")
+      .from("vorgang")
       .select("id")
       .eq("company_id", COMPANY_B);
 

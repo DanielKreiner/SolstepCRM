@@ -324,7 +324,26 @@ export async function createPortalAccess(
 
   if (!kunde) return { error: "Kunde nicht gefunden.", ok: null };
 
-  const token = createToken(id.data);
+  /*
+   * Token erzeugen und verschlüsseln kann an der Umgebung scheitern —
+   * PORTAL_TOKEN_SECRET oder MAIL_CRED_KEY fehlt oder hat die falsche
+   * Länge. Ungefangen reisst das die ganze Seite mit und der Betrieb
+   * sieht einen weissen Fehlerbildschirm mit einer Prüfsumme darauf.
+   * Eine fehlende Einstellung ist kein Absturz, sondern eine Meldung.
+   */
+  let token: string;
+  let verschluesselt: string;
+  try {
+    token = createToken(id.data);
+    verschluesselt = `\\x${verschluesseln(token).toString("hex")}`;
+  } catch (e) {
+    const grund = e instanceof Error ? e.message : "unbekannt";
+    return {
+      error: `Der Portalzugang lässt sich nicht erzeugen: ${grund}`,
+      ok: null,
+    };
+  }
+
   const ablauf = new Date();
   ablauf.setDate(ablauf.getDate() + 90);
 
@@ -344,7 +363,7 @@ export async function createPortalAccess(
      * einmal zeigen kann. Geprüft wird weiterhin gegen den Hash — der
      * verschlüsselte Wert ist reine Anzeige.
      */
-    token_enc: `\\x${verschluesseln(token).toString("hex")}`,
+    token_enc: verschluesselt,
     expires_at: ablauf.toISOString(),
   });
 
