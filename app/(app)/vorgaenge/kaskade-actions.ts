@@ -9,6 +9,7 @@ import { BRAND } from "@/lib/brand";
 import { verschluesseln } from "@/lib/mail/crypto";
 import { createToken, hashToken } from "@/lib/portal/token";
 import { einreihen, mailClient } from "@/lib/vorgang/mail";
+import { auftragBestaetigt } from "@/lib/vorgang/kundenmails";
 
 export type KaskadeStatus = { error: string | null; ok: string | null };
 
@@ -82,10 +83,16 @@ export async function angebotAngenommen(
    * zurückzudrehen, weil eine Mailadresse fehlt, wäre der schlechtere
    * Tausch. Was nicht klappte, steht in der Meldung.
    */
-  let zusatz = "";
+  /*
+   * Der Kunde hört sofort, dass sein Auftrag angekommen ist. Ohne diese
+   * Mail ruft er zwei Tage später an und fragt genau das.
+   */
+  const bestaetigt = await auftragBestaetigt(me.companyId, d.vorgangId);
+
+  let zusatz = bestaetigt ? ` Bestätigung an ${bestaetigt} geschickt.` : "";
   if (d.portal === "ja") {
     const r = await portalMitAnlegen(supabase, me, d.vorgangId);
-    zusatz = r ? ` ${r}` : "";
+    zusatz += r ? ` ${r}` : "";
   }
 
   revalidatePath(`/vorgaenge/${d.vorgangId}`);

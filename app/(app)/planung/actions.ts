@@ -6,6 +6,7 @@ import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { alsPruefdaten, tafelLaden } from "@/lib/einsatz/daten";
 import { blockiert, pruefe, type EinsatzKonflikt } from "@/lib/einsatz/konflikte";
+import { terminMitteilen } from "@/lib/vorgang/kundenmails";
 
 export type PlanStatus = {
   error: string | null;
@@ -209,12 +210,29 @@ export async function einsatzSpeichern(
     }
   }
 
+  /*
+   * Beim Auftragseinsatz erfährt der Kunde den Termin. Ein Termin, den
+   * nur die Tafel kennt, ist für ihn keiner — und am Montag ist niemand
+   * daheim.
+   */
+  let anKunde: string | null = null;
+  if (felder.art === "auftrag" && felder.vorgang_id) {
+    anKunde = await terminMitteilen(
+      z1.me.companyId,
+      felder.vorgang_id,
+      { von, bis, ganztaegig: felder.ganztaegig },
+      Boolean(d.einsatzId),
+    );
+  }
+
   revalidatePath("/planung");
   if (felder.vorgang_id) revalidatePath(`/vorgaenge/${felder.vorgang_id}`);
 
   return {
     error: null,
-    ok: d.einsatzId ? "Einsatz geändert." : "Einsatz angelegt.",
+    ok:
+      (d.einsatzId ? "Einsatz geändert." : "Einsatz angelegt.") +
+      (anKunde ? ` Termin an ${anKunde} geschickt.` : ""),
   };
 }
 
@@ -314,6 +332,15 @@ export async function einsatzVerschieben(input: {
    * Tafel ein neuer Termin und im Vorgang der alte — und der Kunde
    * bekommt am Telefon zwei Auskünfte.
    */
+  if (alt.vorgang_id && alt.art === "auftrag") {
+    await terminMitteilen(
+      z1.me.companyId,
+      alt.vorgang_id as string,
+      { von: d.von, bis: d.bis, ganztaegig: false },
+      true,
+    );
+  }
+
   if (alt.vorgang_id) {
     const wann = new Date(d.von).toLocaleDateString("de-AT", {
       weekday: "long",
