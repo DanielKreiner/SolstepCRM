@@ -58,7 +58,7 @@ export default async function MobileLayout({
       {/* Platz unten für die Leiste plus den überstehenden Stempeln-Knopf. */}
       <main className="flex-1 px-4 pb-[112px]">{children}</main>
 
-      <MobileNav />
+      <MobileNav rolle={me.role} />
     </div>
   );
 }

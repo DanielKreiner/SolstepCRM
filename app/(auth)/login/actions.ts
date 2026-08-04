@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { startseite } from "@/lib/nav";
 import { T } from "@/lib/strings";
 
 const schema = z.object({
@@ -43,7 +44,18 @@ export async function signIn(
 
   revalidatePath("/", "layout");
 
+  /*
+   * Wohin es geht, entscheidet die Rolle: Montage und Lager landen in
+   * ihrer eigenen App, das Büro im Cockpit. Ein Monteur, der auf einem
+   * Board mit Auftragswerten landet, sucht erst einmal den Ausgang.
+   */
+  const { data: user } = await supabase.auth.getUser();
+  const rolle =
+    (user.user?.app_metadata as { role?: string } | undefined)?.role ?? "";
+
   // Nur interne Ziele, sonst ist "?weiter=" eine offene Weiterleitung.
   const target = parsed.data.weiter;
-  redirect(target && !target.startsWith("//") ? target : "/cockpit");
+  redirect(
+    target && !target.startsWith("//") ? target : startseite(rolle),
+  );
 }

@@ -52,7 +52,7 @@ export default async function DokumentePage() {
         subtitle="Was du hier siehst, hängt an deinen Rechten"
         actions={
           <Link
-            href="/meine-dokumente"
+            href="/m/dokumente"
             className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
           >
             Meine Dokumente

@@ -187,7 +187,7 @@ export async function markSigned(
   if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
 
   revalidatePath(`/mitarbeiter/${dok.user_id as string}`);
-  revalidatePath("/meine-dokumente");
+  revalidatePath("/m/dokumente");
   return { error: null, ok: `${dok.filename as string} als unterschrieben erfasst.` };
 }
 

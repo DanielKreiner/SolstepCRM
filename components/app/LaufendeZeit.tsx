@@ -64,7 +64,7 @@ export function LaufendeZeit({
         </Link>
         {eigene ? (
           <Link
-            href="/meine-zeiten"
+            href="/m/zeiten"
             className="rounded-pill bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-[15px] py-[9px] text-[12.5px] font-semibold text-white hover:text-white"
           >
             Meine Zeiten

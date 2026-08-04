@@ -19,6 +19,21 @@ const PUBLIC_PREFIXES = [
   "/api/health",
 ];
 
+/*
+ * Seiten der Betriebs-App. Montage und Lager haben dort nichts zu
+ * suchen — ausser im Lager selbst, das beide Welten berührt.
+ */
+const BETRIEBS_PREFIXES = [
+  "/cockpit",
+  "/vorgaenge",
+  "/planung",
+  "/zeiten",
+  "/offene-posten",
+  "/mitarbeiter",
+  "/einstellungen",
+  "/bestellungen",
+];
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -58,6 +73,32 @@ export async function updateSession(request: NextRequest) {
     url.pathname = "/login";
     url.searchParams.set("weiter", pathname);
     return NextResponse.redirect(url);
+  }
+
+  /*
+   * Zwei Apps, eine Codebasis: Montage und Lager sehen ihre eigene
+   * Oberfläche, das Büro die Betriebs-App. Wer die falsche aufruft —
+   * über ein altes Lesezeichen oder einen Link aus einer Mail —, landet
+   * dort, wo er hingehört, statt vor einer Seite ohne Rechte.
+   *
+   * Die Rolle steht im Token (app_metadata) und ist vom Client nicht
+   * änderbar. Das hier ist Bequemlichkeit; durchgesetzt wird der Zugriff
+   * weiterhin über die Policies.
+   */
+  if (user && !isPublic) {
+    const rolle =
+      (user.app_metadata as { role?: string } | undefined)?.role ?? "";
+    const mitarbeiter = rolle === "monteur" || rolle === "lager";
+    const istBetriebsseite = BETRIEBS_PREFIXES.some(
+      (p) => pathname === p || pathname.startsWith(`${p}/`),
+    );
+
+    if (mitarbeiter && istBetriebsseite) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/m/heute";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;

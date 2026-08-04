@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { startseite } from "@/lib/nav";
 import { Panel } from "@/components/ui/Panel";
 import { BRAND, BRAND_MARK } from "@/lib/brand";
 import { T } from "@/lib/strings";
@@ -18,7 +19,11 @@ export default async function LoginPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) redirect("/cockpit");
+  if (user) {
+    const rolle =
+      (user.app_metadata as { role?: string } | undefined)?.role ?? "";
+    redirect(startseite(rolle));
+  }
 
   const { weiter } = await searchParams;
 

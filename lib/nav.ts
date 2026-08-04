@@ -1,21 +1,45 @@
 import type { IconName } from "@/components/ui/Icon";
 
 /*
- * Navigation. Gruppen und Reihenfolge aus dem Mockup, Pfade aus CLAUDE.md
- * Abschnitt 2. `area` zeigt auf role_permission — die Sichtbarkeit wird
- * serverseitig über can() geprüft, die Navigation blendet nur zusätzlich aus.
+ * Zwei Apps, eine Codebasis.
+ *
+ * Nach dem Login entscheidet die Rolle, welche Navigation gilt. Vorher
+ * sah jede Rolle dieselben fünfzehn Punkte — ein Monteur scrollte an
+ * Rechnungen und Bewerbern vorbei, um seine Zeiten zu finden, und die
+ * Geschäftsführung hatte „Stempeln" zwischen Cockpit und Berichten.
+ *
+ * `area` zeigt auf role_permission. Die Sichtbarkeit wird serverseitig
+ * über can() geprüft; die Navigation blendet nur zusätzlich aus.
  */
 
 export type NavItem = {
   label: string;
   href: string;
   icon: IconName;
-  /** Bereich in role_permission. null = für jede Rolle sichtbar. */
+  /** Bereich in role_permission. null = für jede Rolle der App sichtbar. */
   area: string | null;
 };
 
 export type NavGroup = { title: string; items: NavItem[] };
 
+/** Welche App eine Rolle sieht. */
+export type AppArt = "betrieb" | "mitarbeiter";
+
+export function appFuerRolle(rolle: string): AppArt {
+  return rolle === "monteur" || rolle === "lager" ? "mitarbeiter" : "betrieb";
+}
+
+/** Wohin es nach dem Login geht. */
+export function startseite(rolle: string): string {
+  return appFuerRolle(rolle) === "mitarbeiter" ? "/m/heute" : "/cockpit";
+}
+
+/*
+ * Die Betriebs-App: neun Punkte, keine Gruppen mehr. Was jemand für
+ * sich selbst braucht — eigene Zeiten, eigene Dokumente — steht im
+ * Profilmenü und nicht in der Hauptnavigation; sonst mischt sich die
+ * Sicht auf den Betrieb mit der Sicht auf sich selbst.
+ */
 export const NAV: NavGroup[] = [
   {
     title: "Betrieb",
@@ -23,70 +47,39 @@ export const NAV: NavGroup[] = [
       { label: "Cockpit", href: "/cockpit", icon: "cockpit", area: null },
       /*
        * Der Vorgang ist der Einstieg: ein Objekt von der Anfrage bis zur
-       * Schlussrechnung. Es gibt keinen zweiten Weg mehr daneben — auch
-       * kein CRM: Kundenstammdaten, Anlage, Portalzugang und Historie
-       * stehen am Vorgang, ein Reiter dafür wäre eine zweite Liste über
-       * dieselben Daten.
+       * Schlussrechnung. Kundenstammdaten, Anlage, Portalzugang und
+       * Historie stehen am Vorgang — ein eigenes CRM wäre eine zweite
+       * Liste über dieselben Daten.
        */
       { label: "Vorgänge", href: "/vorgaenge", icon: "pipelines", area: "pipelines" },
       { label: "Planung", href: "/planung", icon: "dispo", area: "pipelines" },
       { label: "Material", href: "/material", icon: "lager", area: "pipelines" },
-      /*
-       * Bestellungen stehen neben Material und nicht darin: das eine ist
-       * die Frage „was fehlt", das andere „was ist unterwegs". Wer
-       * bestellt, sitzt im Büro; wer kommissioniert, im Lager.
-       */
-      { label: "Bestellungen", href: "/bestellungen", icon: "lager", area: "pipelines" },
-      { label: "Offene Posten", href: "/offene-posten", icon: "rechnungen", area: "rechnungen" },
-      /*
-       * Service steht in der Navigation, obwohl es die dritte Pipeline ist.
-       * Anliegen aus dem Kundenportal landeten sonst in einer Ansicht, die
-       * niemand aufruft — der Kunde schreibt und hört nie etwas.
-       */
-      { label: "Service", href: "/service", icon: "chat", area: "pipelines" },
-      { label: "Lager", href: "/lager", icon: "lager", area: "lager" },
-    ],
-  },
-  {
-    /*
-     * "Mein Arbeitstag" steht vor dem Teambereich, weil er jeden angeht —
-     * auch die Rollen ohne Leserecht auf fremde Zeiten. Vorher gab es von
-     * hier aus keinen Weg zur Stempeluhr: /m war nur direkt aufrufbar, und
-     * wer im Büro sitzt, findet eine App-URL nicht von selbst.
-     */
-    title: "Mein Arbeitstag",
-    items: [
-      /*
-       * Für die Montage der Einstieg: wohin, wann, was ist zu tun. Kein
-       * Board, keine Beträge — die liefert die Datenbank dieser Rolle
-       * gar nicht.
-       */
-      { label: "Mein Einsatz", href: "/mein-einsatz", icon: "einsatz", area: null },
-      { label: "Stempeln", href: "/m/stempeln", icon: "zeit", area: null },
-      { label: "Meine Zeiten", href: "/meine-zeiten", icon: "konto", area: null },
-      { label: "Meine Dokumente", href: "/meine-dokumente", icon: "dokumente", area: null },
+      { label: "Zeiten", href: "/zeiten", icon: "zeit", area: "zeiterfassung" },
       { label: "Abwesenheiten", href: "/abwesenheiten", icon: "abwesenheit", area: null },
-    ],
-  },
-  {
-    title: "Team",
-    items: [
-      { label: "Zeiterfassung", href: "/zeiterfassung", icon: "zeit", area: "zeiterfassung" },
-      { label: "Stundenkonto", href: "/stundenkonto", icon: "konto", area: "zeiterfassung" },
+      { label: "Rechnungen", href: "/offene-posten", icon: "rechnungen", area: "rechnungen" },
       { label: "Mitarbeiter", href: "/mitarbeiter", icon: "mitarbeiter", area: "mitarbeiter" },
-      { label: "Dokumente", href: "/dokumente", icon: "dokumente", area: null },
-      { label: "Chat", href: "/chat", icon: "chat", area: null },
-      { label: "Bewerber", href: "/bewerber", icon: "bewerber", area: "mitarbeiter" },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { label: "Berichte", href: "/berichte", icon: "berichte", area: "berichte" },
       { label: "Einstellungen", href: "/einstellungen", icon: "einstellungen", area: "einstellungen" },
     ],
   },
 ];
+
+/*
+ * Die Mitarbeiter-App: vier Punkte, für das Lager fünf. Mehr existiert
+ * für diese Rollen nicht — kein Board, keine Plantafel anderer, keine
+ * Beträge.
+ */
+export const NAV_MITARBEITER: NavItem[] = [
+  { label: "Heute", href: "/m/heute", icon: "cockpit", area: null },
+  { label: "Meine Zeiten", href: "/m/zeiten", icon: "zeit", area: null },
+  { label: "Abwesenheiten", href: "/m/abwesenheiten", icon: "abwesenheit", area: null },
+  { label: "Dokumente", href: "/m/dokumente", icon: "dokumente", area: null },
+  /* Nur für das Lager — der Monteur kommissioniert nicht. */
+  { label: "Lager", href: "/material", icon: "lager", area: "lager" },
+];
+
+export function navFuerMitarbeiter(rolle: string): NavItem[] {
+  return NAV_MITARBEITER.filter((i) => i.area === null || rolle === "lager");
+}
 
 export function isActive(href: string, pathname: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);

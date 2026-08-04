@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CommandPalette } from "./CommandPalette";
 import { MobileNav } from "./MobileNav";
 import { ThemeToggle } from "./ThemeToggle";
@@ -65,6 +66,21 @@ export function Topbar({ name, role, unread, nav }: Props) {
             {ROLE_LABEL[role] ?? role}
           </span>
         </span>
+        {/*
+          Der eigene Arbeitstag steht hier und nicht in der
+          Hauptnavigation: dort geht es um den Betrieb, hier um einen
+          selbst. Wer im Büro sitzt, stempelt trotzdem gelegentlich.
+        */}
+        <Link
+          href="/m/heute"
+          data-testid="mein-bereich"
+          aria-label="Mein Bereich"
+          title="Mein Bereich — eigene Zeiten und Dokumente"
+          className="flex h-[38px] w-[38px] items-center justify-center rounded-pill border-0 bg-panel text-muted transition-colors duration-200 hover:text-ink sm:h-[42px] sm:w-[42px]"
+        >
+          <Icon name="einsatz" size={18} />
+        </Link>
+
         <form action={signOut}>
           <button
             type="submit"
