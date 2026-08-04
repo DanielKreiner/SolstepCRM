@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, login, stockOf } from "./helpers";
+import { COMPANY_A, DEMO, admin, login } from "./helpers";
 
 /*
  * Definition of Done Meilenstein 5 (CLAUDE.md Abschnitt 12):
@@ -8,6 +8,44 @@ import { COMPANY_A, DEMO, admin, login, stockOf } from "./helpers";
  */
 
 test.describe.configure({ mode: "serial" });
+
+const FLUG = "E2E-FLUGMODUS";
+
+/** Alles, was dieser Test an Vorgang, Artikeln und Einsatz anlegt. */
+async function beladungAufraeumen() {
+  const db = admin();
+
+  const { data: vs } = await db
+    .from("vorgang")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .like("zaehlpunkt", `${FLUG}%`);
+
+  for (const v of vs ?? []) {
+    await db.from("lagerbewegung").delete().eq("vorgang_id", v.id);
+    await db.from("vorgang_bedarf").delete().eq("vorgang_id", v.id);
+
+    const { data: es } = await db
+      .from("einsatz")
+      .select("id")
+      .eq("vorgang_id", v.id);
+    for (const e of es ?? []) {
+      await db.from("einsatz_person").delete().eq("einsatz_id", e.id);
+      await db.from("einsatz").delete().eq("id", e.id);
+    }
+    await db.from("vorgang").delete().eq("id", v.id);
+  }
+
+  const { data: as } = await db
+    .from("article")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .like("sku", `${FLUG}%`);
+  for (const a of as ?? []) {
+    await db.from("lagerbewegung").delete().eq("artikel_id", a.id);
+    await db.from("article").delete().eq("id", a.id);
+  }
+}
 
 async function monteurId(): Promise<string> {
   const { data } = await admin()
@@ -54,85 +92,179 @@ test("Drei Buchungen im Flugmodus gehen nach dem Reconnect vollständig durch", 
   context,
 }) => {
   await aufraeumen();
+  await beladungAufraeumen();
   const db = admin();
 
-  const { data: article } = await db
-    .from("article")
-    .select("id, sku")
+  /*
+   * Der Monteur bucht sein Material seit dem Material-Briefing über die
+   * Beladeliste und nicht mehr über ein freies Formular. Der Test prüft
+   * dasselbe wie vorher — dass keine Buchung verloren geht —, nur eben
+   * am echten Weg.
+   */
+  const { data: kunde } = await db
+    .from("customer")
+    .select("id")
     .eq("company_id", COMPANY_A)
-    .eq("sku", "KAB-SOL-6")
+    .is("deleted_at", null)
+    .limit(1)
     .single();
-  const vorher = await stockOf("KAB-SOL-6");
+
+  const { data: nr } = await db.rpc("next_number", {
+    p_company: COMPANY_A,
+    p_kind: "vorgang",
+  });
+
+  const { data: v } = await db
+    .from("vorgang")
+    .insert({
+      company_id: COMPANY_A,
+      number: nr as string,
+      customer_id: kunde!.id,
+      phase: "beauftragt",
+      phase_seit: new Date().toISOString(),
+      zaehlpunkt: FLUG,
+    })
+    .select("id")
+    .single();
+
+  /* Drei Artikel mit Bestand im Hauptlager — sonst steht nichts zu laden. */
+  const { data: ort } = await db
+    .from("lagerort")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .eq("art", "hauptlager")
+    .single();
+
+  const artikelIds: string[] = [];
+  for (const i of [1, 2, 3]) {
+    const { data: a } = await db
+      .from("article")
+      .insert({
+        company_id: COMPANY_A,
+        sku: `${FLUG}-${i}`,
+        name: `Flugmodus-Artikel ${i}`,
+        unit: "Stk",
+        purchase_price: 10,
+        sale_price: 20,
+        vat_rate: 20,
+        active: true,
+        typ: "stueckliste",
+      })
+      .select("id")
+      .single();
+    artikelIds.push(a!.id as string);
+
+    await db.from("lagerbewegung").insert({
+      company_id: COMPANY_A,
+      artikel_id: a!.id,
+      typ: "rueckgabe_korrektur",
+      nach_lagerort_id: ort!.id,
+      menge: 50,
+      notiz: `${FLUG} Anfangsbestand`,
+    });
+
+    await db.from("vorgang_bedarf").insert({
+      company_id: COMPANY_A,
+      vorgang_id: v!.id,
+      artikel_id: a!.id,
+      bezeichnung: `Flugmodus-Artikel ${i}`,
+      menge: i * 2,
+      einheit: "Stk",
+      herkunft: "angebot",
+      sort: i * 10,
+    });
+  }
+
+  const uid = await monteurId();
+  const von = new Date();
+  von.setHours(7, 0, 0, 0);
+  const bis = new Date(von);
+  bis.setHours(16, 0, 0, 0);
+
+  const { data: e } = await db
+    .from("einsatz")
+    .insert({
+      company_id: COMPANY_A,
+      art: "auftrag",
+      vorgang_id: v!.id,
+      von: von.toISOString(),
+      bis: bis.toISOString(),
+    })
+    .select("id")
+    .single();
+
+  await db.from("einsatz_person").insert({
+    company_id: COMPANY_A,
+    einsatz_id: e!.id,
+    user_id: uid,
+  });
 
   await login(page, DEMO.monteur);
-
-  /*
-   * Der reale Ablauf: der Monteur hat die Seite offen, dann reißt das Netz
-   * ab. Ein Seitenwechsel im Flugmodus setzt den ServiceWorker voraus, den
-   * Next im Entwicklungsmodus nicht ausliefert — deshalb bleibt der Test auf
-   * einer Seite und prüft das, worauf es ankommt: dass keine Buchung
-   * verloren geht.
-   */
   await page.goto("/m/material");
-  await expect(page.getByRole("heading", { name: "Material" })).toBeVisible();
 
-  // Artikel explizit wählen — die Vorauswahl ist der alphabetisch erste.
-  await page.getByLabel("Artikel").selectOption(article!.id as string);
-  await page.getByLabel("Vorgang", { exact: true }).selectOption("");
+  const block = page
+    .locator("section")
+    .filter({ hasText: "Flugmodus-Artikel 1" })
+    .first();
+  await expect(block.getByRole("heading", { name: "Zu laden" })).toBeVisible();
 
   await context.setOffline(true);
 
-  const menge = page.getByLabel(/^Menge/);
-  const buchen = page.getByRole("button", { name: "Buchen", exact: true });
-
-  for (const m of ["12", "8", "5"]) {
-    // Erst füllen, wenn das Formular vom vorigen Buchen zurückgesetzt ist —
-    // sonst überschreibt der Reset die gerade eingegebene Menge.
-    await expect(menge).toHaveValue("1");
-    await menge.fill(m);
-    await buchen.click();
-    await expect(page.getByRole("status")).toContainText("erfasst");
+  /* Drei Haken im Flugmodus — je Zeile einer. */
+  for (const i of [1, 2, 3]) {
+    const zeile = block
+      .locator("li")
+      .filter({ hasText: `Flugmodus-Artikel ${i}` })
+      .first();
+    await zeile.getByRole("button", { name: "Geladen", exact: true }).click();
+    await expect(
+      zeile.getByRole("button", { name: /Geladen ✓/ }),
+    ).toBeVisible();
   }
 
-  // Der Banner zeigt die Warteschlange auch offline.
   const banner = page.getByTestId("offline-banner");
   await expect(banner).toContainText("Offline");
   await expect(banner).toContainText("3 Buchungen");
 
-  // Offline darf nichts in der Datenbank stehen.
-  expect(await stockOf("KAB-SOL-6")).toBe(vorher);
+  /* Offline darf nichts in der Datenbank stehen. */
+  const { count: offline } = await db
+    .from("lagerbewegung")
+    .select("id", { count: "exact", head: true })
+    .eq("vorgang_id", v!.id);
+  expect(offline ?? 0).toBe(0);
 
   // ---- Reconnect ----
   await context.setOffline(false);
 
   await expect
-    .poll(async () => await stockOf("KAB-SOL-6"), { timeout: 30_000 })
-    .toBe(vorher - 25);
+    .poll(
+      async () => {
+        const { count } = await db
+          .from("lagerbewegung")
+          .select("id", { count: "exact", head: true })
+          .eq("vorgang_id", v!.id);
+        return count ?? 0;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(3);
 
-  // Nur die Buchungen aus der Warteschlange — die Seed-Bewegungen desselben
-  // Artikels haben kein client_uuid.
-  const { data: moves } = await db
-    .from("stock_move")
-    .select("qty, kind, client_uuid")
-    .eq("company_id", COMPANY_A)
-    .eq("article_id", article!.id)
-    .not("client_uuid", "is", null);
+  const { data: gebucht } = await db
+    .from("lagerbewegung")
+    .select("menge, typ, client_uuid, created_by")
+    .eq("vorgang_id", v!.id);
 
-  // Drei getrennte Buchungen, jede mit eigener Idempotenzklammer.
-  expect(moves).toHaveLength(3);
-  expect(new Set((moves ?? []).map((m) => m.client_uuid)).size).toBe(3);
+  expect((gebucht ?? []).every((b) => b.typ === "entnahme")).toBe(true);
+  expect((gebucht ?? []).every((b) => b.created_by === uid)).toBe(true);
+  /* Jede Buchung mit eigener Idempotenzklammer. */
+  expect(new Set((gebucht ?? []).map((b) => b.client_uuid)).size).toBe(3);
   expect(
-    (moves ?? []).map((m) => Number(m.qty)).sort((a, b) => a - b),
-  ).toEqual([5, 8, 12]);
+    (gebucht ?? []).map((b) => Number(b.menge)).sort((a, b) => a - b),
+  ).toEqual([2, 4, 6]);
 
-  // Ist die Warteschlange leer und die Verbindung steht, verschwindet der
-  // Banner ganz — er soll nicht als Dauerhinweis herumstehen.
   await expect(banner).toHaveCount(0, { timeout: 15_000 });
 
-  for (const m of moves ?? []) {
-    await db.from("stock_move").delete().eq("client_uuid", m.client_uuid);
-  }
-  expect(await stockOf("KAB-SOL-6")).toBe(vorher);
+  await beladungAufraeumen();
   await aufraeumen();
 });
 

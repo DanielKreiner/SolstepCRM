@@ -38,7 +38,16 @@ test("Der Export ist ein lesbares ZIP mit allen Tabellen", async ({ page }) => {
   // Erklärung liegt bei.
   expect(namen).toContain("LIESMICH.txt");
   const liesmich = strFromU8(archiv["LIESMICH.txt"]!);
-  expect(liesmich).toContain("Hofstätter");
+  /*
+   * Der Name des Mandanten steht im Beipackzettel — welcher es ist,
+   * entscheidet der Betrieb in den Einstellungen und nicht dieser Test.
+   */
+  const { data: firma } = await admin()
+    .from("company")
+    .select("name")
+    .eq("id", COMPANY_A)
+    .single();
+  expect(liesmich).toContain(firma!.name as string);
   expect(liesmich).toContain("Trennzeichen Semikolon");
 
   // Die zentralen Tabellen sind dabei.
@@ -50,6 +59,9 @@ test("Der Export ist ein lesbares ZIP mit allen Tabellen", async ({ page }) => {
     "time_entry",
     "article",
     "stock_move",
+    "lagerbewegung",
+    "bestellung",
+    "vorgang_bedarf",
   ]) {
     expect(namen, `${t} fehlt`).toContain(`daten/${t}.csv`);
   }

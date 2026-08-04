@@ -21,6 +21,9 @@ const CRONS = [
   "/api/cron/mail-fetch",
   "/api/cron/accounting-export",
   "/api/cron/monthly-timesheet",
+  /* Aus der Einsatzplanung: Schutzabschaltung und Kundenerinnerung. */
+  "/api/cron/zeit-schutz",
+  "/api/cron/montage-erinnerung",
 ] as const;
 
 function geheimnis(): string {

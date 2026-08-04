@@ -5,7 +5,6 @@ import {
   admin,
   login,
   portalToken,
-  suchwahl,
 } from "./helpers";
 
 /*
@@ -90,21 +89,20 @@ test("1 — Die Artikelsuche zeigt Vorschaubilder", async ({ page }) => {
   await page.goto(`/vorgaenge/${zustand.vorgangId}?tab=angebot`);
 
   /*
-   * Kein <select> mehr — ein Betrieb mit 468 Artikeln scrollt sonst,
-   * statt zu tippen.
+   * Die Auswahl steckt seit dem Umbau im Fenster „Produkt hinzufügen".
+   * Ein <select> wäre es ohnehin nicht — ein Betrieb mit 468 Artikeln
+   * scrollt sonst, statt zu tippen.
    */
-  const feld = page.getByRole("combobox", { name: "Artikel", exact: true });
-  await expect(feld).toBeVisible();
-  await feld.click();
-  await feld.fill(zustand.artikelName!.slice(0, 12));
+  await page.getByRole("button", { name: "Produkt", exact: true }).click();
+  const fenster = page.getByRole("dialog");
+  await fenster.getByRole("searchbox").fill(zustand.artikelName!.slice(0, 12));
 
   /*
    * Nicht den ersten Treffer nehmen: mehrere Artikel beginnen gleich,
    * und dann prüft man das Bild eines anderen.
    */
-  const treffer = page
-    .getByRole("listbox", { name: "Artikel" })
-    .getByRole("option")
+  const treffer = fenster
+    .getByRole("button")
     .filter({ hasText: zustand.artikelName! })
     .first();
   await expect(treffer).toBeVisible();
@@ -117,11 +115,15 @@ test("2 — Das Bild wandert in die Position", async ({ page }) => {
   await login(page, DEMO.gf);
   await page.goto(`/vorgaenge/${zustand.vorgangId}?tab=angebot`);
 
-  // Auf der Seite stehen zwei Mengenfelder — Artikel und freie Position.
-  const form = page.locator("form", { hasText: "Artikel übernehmen" });
-  await suchwahl(form, "Artikel", zustand.artikelName!);
-  await form.getByLabel("Menge").fill("2");
-  await form.getByRole("button", { name: "Übernehmen" }).click();
+  await page.getByRole("button", { name: "Produkt", exact: true }).click();
+  const fenster = page.getByRole("dialog");
+  await fenster.getByLabel("Menge").fill("2");
+  await fenster.getByRole("searchbox").fill(zustand.artikelName!.slice(0, 12));
+  await fenster
+    .getByRole("button")
+    .filter({ hasText: zustand.artikelName! })
+    .first()
+    .click();
 
   /*
    * Auf die Wirkung warten, nicht auf die Meldung: die Liste wird nach
@@ -182,7 +184,17 @@ test("3 — Der Kunde sieht das Bild auf der Angebotsseite", async ({ page }) =>
    * Voraussetzung, nicht Prüfgegenstand: ohne Versand ist das Angebot
    * ein Entwurf, und das Portal liefert bewusst keine einzige Position.
    * Den Versandknopf selbst prüft vorgang.spec.
+   *
+   * Dazu darf keine ältere eingefrorene Fassung herumliegen — das Portal
+   * zeigt immer die letzte VERSENDETE, und die kennt diese Position
+   * nicht. Ohne Fassung fällt es auf den Entwurf zurück.
    */
+  await db
+    .from("vorgang_dokument")
+    .delete()
+    .eq("vorgang_id", zustand.vorgangId!)
+    .eq("typ", "angebot");
+
   await db
     .from("vorgang")
     .update({ angebot_versendet_am: new Date().toISOString() })

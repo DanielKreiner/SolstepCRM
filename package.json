@@ -21,7 +21,8 @@
     "seed:db": "supabase db push --include-seed",
     "seed:users": "tsx scripts/seed-demo.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "seed": "pnpm seed:db && pnpm seed:demo"
+    "seed": "pnpm seed:db && pnpm seed:demo",
+    "seed:vorfuehrung": "tsx scripts/seed-vorfuehrung.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
