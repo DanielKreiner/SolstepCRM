@@ -124,7 +124,7 @@ export default async function DokumentePage() {
                 ) : null}
                 {kunde ? (
                   <Link
-                    href={`/crm/${kunde.id}`}
+                    href={`/vorgaenge?kunde=${kunde.id}`}
                     className="text-[12.5px] text-accent-ink hover:underline"
                   >
                     {kunde.name}

@@ -123,7 +123,22 @@ export async function vorgangHours(altNummer: string): Promise<number> {
  * das Feld sichtbar ist.
  */
 export async function portalToken(page: Page, kundeId: string): Promise<string> {
-  await page.goto(`/crm?kunde=${kundeId}&bearbeiten=portal`);
+  /*
+   * Der Zugang wird am Vorgang gepflegt, seit das CRM weg ist. Ein
+   * beliebiger Vorgang dieses Kunden genügt — der Zugang gehört dem
+   * Kunden und nicht dem einzelnen Vorgang.
+   */
+  const { data: v, error } = await admin()
+    .from("vorgang")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .eq("customer_id", kundeId)
+    .limit(1)
+    .single();
+  if (error) throw new Error(`Kein Vorgang für ${kundeId}: ${error.message}`);
+
+  await page.goto(`/vorgaenge/${v.id as string}`);
+  await page.getByRole("button", { name: "Kundenportal" }).click();
 
   const feld = page.getByLabel("Portallink").first();
   const vorher = (await feld.count()) > 0 ? await feld.inputValue() : "";

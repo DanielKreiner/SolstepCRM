@@ -18,6 +18,15 @@ const MARKE = "E2E-STAMM";
 async function aufraeumen(): Promise<void> {
   const db = admin();
 
+  const { data: testkunden } = await db
+    .from("customer")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .like("name", `${MARKE}%`);
+  for (const k of testkunden ?? []) {
+    await db.from("vorgang").delete().eq("customer_id", k.id);
+  }
+
   await db.from("article").delete().eq("company_id", COMPANY_A).like("sku", `${MARKE}%`);
   await db.from("plant").delete().eq("company_id", COMPANY_A).like("modules", `${MARKE}%`);
   await db.from("customer").delete().eq("company_id", COMPANY_A).like("name", `${MARKE}%`);
@@ -26,18 +35,37 @@ async function aufraeumen(): Promise<void> {
 test.beforeAll(aufraeumen);
 test.afterAll(aufraeumen);
 
-test("Kunde anlegen, ändern und archivieren", async ({ page }) => {
+test("Kunde beim Vorgang anlegen, am Vorgang ändern und archivieren", async ({
+  page,
+}) => {
   const db = admin();
   await login(page, DEMO.gf);
-  await page.goto("/crm");
+  await page.goto("/vorgaenge");
 
-  await page.getByRole("button", { name: "Kunde anlegen" }).click();
-  await page.getByLabel("Name", { exact: true }).fill(`${MARKE} Fam. Testner`);
-  await page.getByLabel("Ort").fill("Eisenstadt");
+  /*
+   * Es gibt keinen Kundenreiter mehr. Ein neuer Kunde entsteht dort, wo
+   * er anruft: beim Anlegen des Vorgangs.
+   */
+  await page.getByRole("button", { name: "Vorgang anlegen" }).click();
+  await page.getByRole("button", { name: /Kunde ist neu/ }).click();
+  await page.getByLabel("Name des Kunden").fill(`${MARKE} Fam. Testner`);
   await page.getByLabel("E-Mail").fill("testner@example.com");
-  await page.getByRole("button", { name: "Anlegen" }).click();
+  await page.getByLabel("Baustellenort").fill("Eisenstadt");
+  await page.getByRole("button", { name: "Anlegen" }).last().click();
 
-  await expect(page.getByText("angelegt")).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(
+      async () => {
+        const { count } = await db
+          .from("customer")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", COMPANY_A)
+          .like("name", `${MARKE}%`);
+        return count ?? 0;
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(1);
 
   const { data: angelegt } = await db
     .from("customer")
@@ -46,31 +74,54 @@ test("Kunde anlegen, ändern und archivieren", async ({ page }) => {
     .like("name", `${MARKE}%`)
     .single();
 
-  expect(angelegt!.city).toBe("Eisenstadt");
   expect(angelegt!.email).toBe("testner@example.com");
+  /* Neu heisst Lead — Bestandskunde wird er mit der Beauftragung. */
   expect(angelegt!.type).toBe("lead");
 
-  // --- Ändern ---
-  await page.goto(`/crm?kunde=${angelegt!.id}&bearbeiten=stammdaten`);
-  await page.getByLabel("Ort").fill("Oberpullendorf");
-  await page.getByRole("button", { name: "Speichern" }).click();
-  await expect(page.getByText("Gespeichert.")).toBeVisible({ timeout: 15_000 });
+  const { data: vorgang } = await db
+    .from("vorgang")
+    .select("id")
+    .eq("customer_id", angelegt!.id)
+    .single();
+
+  // --- Ändern, am Vorgang ---
+  await page.goto(`/vorgaenge/${vorgang!.id}`);
+  await page.getByRole("button", { name: "Stammdaten ändern" }).click();
+
+  /*
+   * Auf der Seite gibt es zwei Orte: den der Baustelle am Vorgang und
+   * den des Kunden. Deshalb auf das Kundenformular eingrenzen — sonst
+   * ändert der Test den falschen.
+   */
+  const kundenForm = page.locator("form", { hasText: "Kunde ändern" });
+  await kundenForm.getByLabel("Ort").fill("Oberpullendorf");
+  await kundenForm.getByRole("button", { name: "Speichern" }).click();
 
   await expect
-    .poll(async () => {
-      const { data } = await db
-        .from("customer")
-        .select("city")
-        .eq("id", angelegt!.id)
-        .single();
-      return data?.city;
-    })
+    .poll(
+      async () => {
+        const { data } = await db
+          .from("customer")
+          .select("city")
+          .eq("id", angelegt!.id)
+          .single();
+        return data?.city;
+      },
+      { timeout: 20_000 },
+    )
     .toBe("Oberpullendorf");
 
   /*
-   * Archivieren: geprüft wird die Datenbank, nicht der Toast. Der Toast
-   * verschwindet, deleted_at bleibt — und nur das zählt.
+   * Archivieren geht erst, wenn nichts mehr läuft — das prüft der
+   * nächste Test. Hier wird der Vorgang deshalb vorher geschlossen.
    */
+  await db
+    .from("vorgang")
+    .update({ phase: "verloren", verloren_grund: "sonstiges" })
+    .eq("id", vorgang!.id);
+
+  await page.reload();
+  await page.getByRole("button", { name: "Stammdaten ändern" }).click();
   page.on("dialog", (d) => void d.accept());
   await page.getByRole("button", { name: "Archivieren" }).click();
 
@@ -84,7 +135,7 @@ test("Kunde anlegen, ändern und archivieren", async ({ page }) => {
           .single();
         return data?.deleted_at !== null;
       },
-      { timeout: 15_000 },
+      { timeout: 20_000 },
     )
     .toBe(true);
 });
@@ -96,7 +147,7 @@ test("Ein Kunde mit laufendem Vorgang lässt sich nicht archivieren", async ({
 
   const { data: offener } = await db
     .from("vorgang")
-    .select("customer_id, number, phase")
+    .select("id, customer_id, number, phase")
     .eq("company_id", COMPANY_A)
     .not("phase", "in", "(abschluss,verloren)")
     .limit(1)
@@ -105,9 +156,8 @@ test("Ein Kunde mit laufendem Vorgang lässt sich nicht archivieren", async ({
   expect(offener, "Seed hat keinen offenen Vorgang").toBeTruthy();
 
   await login(page, DEMO.gf);
-  await page.goto(
-    `/crm?kunde=${offener!.customer_id as string}&bearbeiten=stammdaten`,
-  );
+  await page.goto(`/vorgaenge/${offener!.id as string}`);
+  await page.getByRole("button", { name: "Stammdaten ändern" }).click();
 
   page.on("dialog", (d) => void d.accept());
   await page.getByRole("button", { name: "Archivieren" }).click();
@@ -161,8 +211,10 @@ test("Eine doppelte Artikelnummer wird abgewiesen", async ({ page }) => {
 test("Ohne Schreibrecht gibt es keine Anlegen-Knöpfe", async ({ page }) => {
   await login(page, DEMO.monteur);
 
-  await page.goto("/crm");
-  await expect(page.getByRole("button", { name: "Kunde anlegen" })).toHaveCount(0);
+  await page.goto("/vorgaenge");
+  await expect(
+    page.getByRole("button", { name: "Vorgang anlegen" }),
+  ).toHaveCount(0);
 
   await page.goto("/lager");
   await expect(page.getByRole("button", { name: "Artikel anlegen" })).toHaveCount(
@@ -184,16 +236,20 @@ test("Portalzugang erzeugen, benutzen und widerrufen", async ({ page }) => {
   // Vorherige Zugänge dieses Kunden aus dem Weg räumen.
   await db.from("portal_access").delete().eq("customer_id", kunde!.id);
 
+  const { data: vorgang } = await db
+    .from("vorgang")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .eq("customer_id", kunde!.id)
+    .limit(1)
+    .single();
+
   await login(page, DEMO.gf);
-  await page.goto(`/crm?kunde=${kunde!.id}&bearbeiten=portal`);
+  await page.goto(`/vorgaenge/${vorgang!.id}`);
+  await page.getByRole("button", { name: "Kundenportal" }).click();
 
   await page.getByRole("button", { name: "Zugang erzeugen" }).click();
 
-  /*
-   * Der Link steht an zwei Stellen: im Portal-Panel und in der
-   * Kundenübersicht. Das ist gewollt — man soll ihn sehen, ohne den Reiter
-   * zu wechseln. Der Test nimmt den ersten.
-   */
   const linkFeld = page.getByLabel("Portallink").first();
   await expect(linkFeld).toBeVisible({ timeout: 15_000 });
 
@@ -222,7 +278,8 @@ test("Portalzugang erzeugen, benutzen und widerrufen", async ({ page }) => {
 
   // --- Widerrufen ---
   await login(page, DEMO.gf);
-  await page.goto(`/crm?kunde=${kunde!.id}&bearbeiten=portal`);
+  await page.goto(`/vorgaenge/${vorgang!.id}`);
+  await page.getByRole("button", { name: "Kundenportal" }).click();
   page.on("dialog", (d) => void d.accept());
   await page.getByRole("button", { name: "Widerrufen" }).click();
 
@@ -258,10 +315,21 @@ test("Ein Monteur kann keinen Portalzugang erzeugen", async ({ page }) => {
     .limit(1)
     .single();
 
-  await login(page, DEMO.monteur);
-  await page.goto(`/crm?kunde=${kunde!.id}&bearbeiten=portal`);
+  const { data: vorgang } = await db
+    .from("vorgang")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .eq("customer_id", kunde!.id)
+    .limit(1)
+    .single();
 
-  // Ohne CRM-Schreibrecht gibt es den Reiter gar nicht.
+  await login(page, DEMO.monteur);
+  await page.goto(`/vorgaenge/${vorgang!.id}`);
+
+  /*
+   * Ohne CRM-Schreibrecht gibt es den Knopf nicht — und selbst wenn man
+   * den Bereich aufklappt, steht dort nur der Hinweis.
+   */
   await expect(page.getByRole("button", { name: "Zugang erzeugen" })).toHaveCount(
     0,
   );

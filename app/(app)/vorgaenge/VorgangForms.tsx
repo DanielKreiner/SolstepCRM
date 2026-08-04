@@ -53,9 +53,15 @@ export function StammdatenForm({
         schritt="0.01"
         wert={werte.speicherKwh ?? ""}
       />
-      <Eingabe id="vs-adresse" name="adresse" label="Adresse" breit wert={werte.adresse} />
-      <Eingabe id="vs-plz" name="plz" label="PLZ" wert={werte.plz} />
-      <Eingabe id="vs-ort" name="ort" label="Ort" wert={werte.ort} />
+      <Eingabe
+        id="vs-adresse"
+        name="adresse"
+        label="Baustellenadresse"
+        breit
+        wert={werte.adresse}
+      />
+      <Eingabe id="vs-plz" name="plz" label="Baustellen-PLZ" wert={werte.plz} />
+      <Eingabe id="vs-ort" name="ort" label="Baustellenort" wert={werte.ort} />
       <Eingabe
         id="vs-zaehlpunkt"
         name="zaehlpunkt"
@@ -109,6 +115,7 @@ const QUELLEN = [
  */
 export function VorgangAnlegen({ kunden }: { kunden: Option[] }) {
   const [offen, setOffen] = useState(false);
+  const [neuerKunde, setNeuerKunde] = useState(false);
 
   if (!offen) {
     return (
@@ -131,14 +138,44 @@ export function VorgangAnlegen({ kunden }: { kunden: Option[] }) {
         knopf="Anlegen"
         leerenNachErfolg
       >
-        <Suchauswahl
-          name="customerId"
-          label="Kunde"
-          pflicht
-          breit
-          platzhalter="Kunde suchen — Name oder Ort"
-          optionen={kunden}
-        />
+        {/*
+          Bestandskunde oder neuer — beides hier. Mit dem CRM ist die
+          Stelle weggefallen, an der man einen Kunden anlegen konnte, und
+          eine Anfrage kommt nun einmal oft von jemandem, den es noch
+          nicht gibt.
+        */}
+        {neuerKunde ? (
+          <>
+            <Eingabe
+              id="vn-kname"
+              name="kundeName"
+              label="Name des Kunden"
+              breit
+              pflicht
+            />
+            <Eingabe id="vn-kkontakt" name="kundeKontakt" label="Ansprechpartner" />
+            <Eingabe id="vn-kmail" name="kundeEmail" label="E-Mail" typ="email" />
+            <Eingabe id="vn-ktel" name="kundeTelefon" label="Telefon" />
+          </>
+        ) : (
+          <Suchauswahl
+            name="customerId"
+            label="Kunde"
+            pflicht
+            breit
+            platzhalter="Kunde suchen — Name oder Ort"
+            optionen={kunden}
+          />
+        )}
+        <button
+          type="button"
+          onClick={() => setNeuerKunde((v) => !v)}
+          className="cursor-pointer justify-self-start border-0 bg-transparent p-0 text-[12px] font-medium text-accent-ink underline sm:col-span-2"
+        >
+          {neuerKunde
+            ? "Doch einen bestehenden Kunden wählen"
+            : "Kunde ist neu — hier anlegen"}
+        </button>
         <Eingabe id="vn-kwp" name="kwp" label="Leistung in kWp" typ="number" schritt="0.01" />
         <Eingabe
           id="vn-speicher"
@@ -154,8 +191,8 @@ export function VorgangAnlegen({ kunden }: { kunden: Option[] }) {
           breit
           hinweis="leer lassen übernimmt die Kundenadresse"
         />
-        <Eingabe id="vn-plz" name="plz" label="PLZ" />
-        <Eingabe id="vn-ort" name="ort" label="Ort" />
+        <Eingabe id="vn-plz" name="plz" label="Baustellen-PLZ" />
+        <Eingabe id="vn-ort" name="ort" label="Baustellenort" />
         <Auswahl id="vn-quelle" name="quelle" label="Herkunft" optionen={QUELLEN} />
         <Textfeld
           id="vn-notiz"

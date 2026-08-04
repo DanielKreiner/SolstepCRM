@@ -20,7 +20,7 @@ import {
   restoreCustomer,
   saveAnlage,
   updateCustomer,
-} from "./actions";
+} from "./kunde-actions";
 
 export type KundeWerte = {
   id: string;
@@ -110,7 +110,7 @@ export function KundeBearbeiten({ kunde }: { kunde: KundeWerte }) {
     <div className="flex flex-col gap-3">
       <Formular
         aktion={updateCustomer}
-        titel="Stammdaten"
+        titel="Kunde ändern"
         knopf="Speichern"
         versteckt={{ customerId: kunde.id }}
       >

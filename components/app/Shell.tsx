@@ -98,7 +98,7 @@ export async function Shell({
     "/offene-posten": rechnungenOffen,
     "/zeiterfassung": korrekturenOffen,
     "/abwesenheiten": antraegeOffen,
-    "/crm": ticketsOffen,
+    "/service": ticketsOffen,
     "/bewerber": bewerberOffen,
   });
 

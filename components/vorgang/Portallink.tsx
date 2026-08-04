@@ -3,16 +3,17 @@
 import { useState } from "react";
 
 /**
- * Der Portallink des Kunden, direkt am Vorgang.
+ * Der Portallink, der direkt auf diesen Vorgang zeigt.
  *
- * Bisher stand er nur im CRM. Wer einem Kunden am Telefon den Link
- * durchgeben wollte, musste den Vorgang verlassen, den Kunden suchen und
- * dort nachsehen — auf halbem Weg weiss man dann nicht mehr, welcher der
- * drei Vorgänge gemeint war.
+ * Die Beschriftung sagt bewusst nicht "Portallink": daneben steht das
+ * Feld mit dem allgemeinen Zugang, und zwei Felder, deren Namen
+ * ineinander stecken, trifft weder eine Sprachausgabe noch ein Test
+ * zuverlässig.
  *
- * Nur anzeigen und kopieren. Erzeugt und widerrufen wird der Zugang
- * weiter im CRM: er gehört dem Kunden, nicht dem einzelnen Vorgang, und
- * zwei Stellen zum Widerrufen sind eine zu viel.
+ * Nur anzeigen und kopieren — erzeugt und widerrufen wird der Zugang
+ * daneben, im selben Bereich. Er gehört dem Kunden und nicht dem
+ * einzelnen Vorgang; dieser Link führt trotzdem direkt auf das Projekt,
+ * über das gerade gesprochen wird.
  */
 export function Portallink({
   link,
@@ -41,7 +42,7 @@ export function Portallink({
       <input
         readOnly
         value={ziel}
-        aria-label="Portallink zu diesem Vorgang"
+        aria-label="Vorgangslink für den Kunden"
         onFocus={(e) => e.currentTarget.select()}
         className="num min-w-0 flex-1 rounded-input border border-transparent bg-sunk px-[11px] py-[8px] text-[11px] outline-0 focus:border-accent focus:bg-surface"
       />

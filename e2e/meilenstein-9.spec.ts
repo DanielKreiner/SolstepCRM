@@ -184,13 +184,31 @@ test("Der Kundenzeitstrahl zeigt die Aktivitäten im Backoffice", async ({
   const customerId = await kunde("Familie Brandstätter");
 
   await login(page, DEMO.gf);
-  await page.goto(`/crm/${customerId}`);
 
-  await expect(page.getByRole("heading", { name: /^Aktivitäten/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /^Aktivitäten/ })).toBeVisible();
+  /*
+   * Der Kundenzeitstrahl steht am Vorgang, seit das CRM weg ist. Über
+   * das Board mit Kundenfilter führt der Weg hinein — geprüft wird, dass
+   * er dort ankommt und die Aktivitäten trägt.
+   */
+  await page.goto(`/vorgaenge?kunde=${customerId}`);
+  await expect(page.getByText(/^Nur /).first()).toBeVisible({ timeout: 15_000 });
+
+  const { data: vorgang } = await admin()
+    .from("vorgang")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .eq("customer_id", customerId)
+    .limit(1)
+    .single();
+
+  await page.goto(`/vorgaenge/${vorgang!.id}`);
+  await page.getByRole("button", { name: /^Historie/ }).click();
+
+  const eintraege = await aktivitaeten(customerId);
+  expect(eintraege.length).toBeGreaterThan(0);
   await expect(
-    page.getByText("Laufen automatisch ein"),
-  ).toBeVisible();
+    page.getByText(String(eintraege[0]!.body).slice(0, 40)).first(),
+  ).toBeVisible({ timeout: 15_000 });
 });
 
 test("Die Serviceliste zeigt die Tickets", async ({ page }) => {

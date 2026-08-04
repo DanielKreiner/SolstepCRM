@@ -217,7 +217,7 @@ export default async function TicketPage({
             <Row label="Kunde">
               {customer ? (
                 <Link
-                  href={`/crm/${customer.id}`}
+                  href={`/vorgaenge?kunde=${customer.id}`}
                   className="text-accent-ink hover:underline"
                 >
                   {customer.name}

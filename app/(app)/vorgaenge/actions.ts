@@ -82,7 +82,24 @@ function frisch(id: string): void {
 /* ------------------------------------------------------------- ANLEGEN */
 
 const anlegenSchema = z.object({
-  customerId: z.string().uuid({ message: "Bitte einen Kunden wählen." }),
+  /*
+   * Entweder ein bestehender Kunde oder ein neuer Name. Mit dem CRM ist
+   * die Stelle weggefallen, an der man einen Kunden anlegen konnte — und
+   * eine Anfrage kommt nun einmal von jemandem, den es noch nicht gibt.
+   */
+  customerId: z.string().uuid().optional().or(z.literal("")),
+  kundeName: z.string().trim().max(120).optional().default(""),
+  kundeKontakt: z.string().trim().max(120).optional().default(""),
+  kundeEmail: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .default("")
+    .refine((v) => v === "" || z.string().email().safeParse(v).success, {
+      message: "Das ist keine gültige Mailadresse.",
+    }),
+  kundeTelefon: z.string().trim().max(60).optional().default(""),
   kwp: z.coerce.number().min(0).max(10000).optional(),
   speicherKwh: z.coerce.number().min(0).max(10000).optional(),
   adresse: z.string().trim().max(200).optional().default(""),
@@ -104,7 +121,49 @@ export async function vorgangAnlegen(
   }
   const d = parsed.data;
 
+  if (!d.customerId && d.kundeName.length < 2) {
+    return {
+      error: "Bitte einen Kunden wählen oder einen Namen eintragen.",
+      ok: null,
+    };
+  }
+
   const supabase = await createClient();
+
+  /*
+   * Neuer Kunde als Lead. Erst wenn ein Vorgang beauftragt wird, ist er
+   * ein Bestandskunde — den Wechsel macht niemand von Hand, sondern die
+   * Annahme.
+   */
+  let customerId = d.customerId || "";
+  if (!customerId) {
+    if (z1.me.perms.crm !== "write") {
+      return {
+        error: "Für neue Kunden fehlt deiner Rolle das Schreibrecht.",
+        ok: null,
+      };
+    }
+    const { data: neu, error: kFehler } = await supabase
+      .from("customer")
+      .insert({
+        company_id: z1.me.companyId,
+        name: d.kundeName,
+        type: "lead",
+        contact_person: d.kundeKontakt || null,
+        email: d.kundeEmail || null,
+        phone: d.kundeTelefon || null,
+        address: d.adresse || null,
+        zip: d.plz || null,
+        city: d.ort || null,
+      })
+      .select("id")
+      .single();
+
+    if (kFehler || !neu) {
+      return { error: `Kunde anlegen fehlgeschlagen: ${kFehler?.message}`, ok: null };
+    }
+    customerId = neu.id as string;
+  }
 
   const { data: nummer, error: nrFehler } = await supabase.rpc("next_number", {
     p_company: z1.me.companyId,
@@ -123,14 +182,14 @@ export async function vorgangAnlegen(
   const { data: kunde } = await supabase
     .from("customer")
     .select("address, zip, city")
-    .eq("id", d.customerId)
+    .eq("id", customerId)
     .maybeSingle();
 
   const { data: vorgang, error } = await supabase
     .from("vorgang")
     .insert({
       company_id: z1.me.companyId,
-      customer_id: d.customerId,
+      customer_id: customerId,
       number: nummer,
       phase: "anfrage",
       kwp: d.kwp && d.kwp > 0 ? d.kwp : null,

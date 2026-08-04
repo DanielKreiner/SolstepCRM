@@ -10,12 +10,16 @@ import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
 /*
- * Kunden, Leads und deren Anlagen.
+ * Kunden, deren Anlagen und der Portalzugang.
  *
- * Der Kunde ist die Wurzel des Datenmodells — an ihm hängen Angebote,
- * Aufträge, Rechnungen und der Portalzugang. Deshalb wird er nie gelöscht,
- * sondern nur auf `deleted_at` gesetzt: eine Rechnung ohne Kunden wäre nicht
- * mehr zuordenbar, und die Aufbewahrungspflicht gilt sieben Jahre
+ * Lag im CRM, das es nicht mehr gibt: ein eigener Reiter für Kundendaten
+ * war eine zweite Liste über dieselben Vorgänge. Gepflegt wird der Kunde
+ * jetzt dort, wo mit ihm gearbeitet wird.
+ *
+ * Der Kunde ist die Wurzel des Datenmodells — an ihm hängen Vorgänge,
+ * Rechnungen und der Portalzugang. Deshalb wird er nie gelöscht, sondern
+ * nur auf `deleted_at` gesetzt: eine Rechnung ohne Kunden wäre nicht mehr
+ * zuordenbar, und die Aufbewahrungspflicht gilt sieben Jahre
  * (CLAUDE.md 11, Löschkonzept).
  */
 
@@ -46,10 +50,15 @@ async function darfSchreiben(): Promise<
   { ok: true; me: Awaited<ReturnType<typeof requireMe>> } | { ok: false; status: AktionsStatus }
 > {
   const me = await requireMe();
+  /*
+   * Weiterhin das CRM-Recht und nicht das Pipeline-Recht: wer Vorgänge
+   * bearbeiten darf, darf damit nicht automatisch Kundenstammdaten
+   * ändern. Die Rollenmatrix bleibt, nur der Screen ist ein anderer.
+   */
   if (me.perms.crm !== "write") {
     return {
       ok: false,
-      status: { error: "Für das CRM fehlt deiner Rolle das Schreibrecht.", ok: null },
+      status: { error: "Für Kundendaten fehlt deiner Rolle das Schreibrecht.", ok: null },
     };
   }
   return { ok: true, me };
@@ -90,7 +99,6 @@ export async function createCustomer(
 
   if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
 
-  revalidatePath("/crm");
   revalidatePath("/vorgaenge");
   return { error: null, ok: `${data.name as string} angelegt.` };
 }
@@ -131,7 +139,7 @@ export async function updateCustomer(
 
   if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
 
-  revalidatePath("/crm");
+  revalidatePath("/vorgaenge");
   return { error: null, ok: "Gespeichert." };
 }
 
@@ -181,7 +189,7 @@ export async function archiveCustomer(
 
   if (error) return { error: `Archivieren fehlgeschlagen: ${error.message}`, ok: null };
 
-  revalidatePath("/crm");
+  revalidatePath("/vorgaenge");
   return { error: null, ok: "Kunde archiviert. Belege bleiben erhalten." };
 }
 
@@ -203,7 +211,7 @@ export async function restoreCustomer(
 
   if (error) return { error: `Fehlgeschlagen: ${error.message}`, ok: null };
 
-  revalidatePath("/crm");
+  revalidatePath("/vorgaenge");
   return { error: null, ok: "Kunde wieder aktiv." };
 }
 
@@ -261,7 +269,6 @@ export async function saveAnlage(
 
   if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
 
-  revalidatePath("/crm");
   revalidatePath("/vorgaenge");
   return { error: null, ok: "Anlage gespeichert." };
 }
@@ -281,7 +288,7 @@ export async function deleteAnlage(
   const { error } = await supabase.from("plant").delete().eq("id", id.data);
   if (error) return { error: `Löschen fehlgeschlagen: ${error.message}`, ok: null };
 
-  revalidatePath("/crm");
+  revalidatePath("/vorgaenge");
   return { error: null, ok: "Anlage gelöscht." };
 }
 
@@ -369,7 +376,7 @@ export async function createPortalAccess(
 
   if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
 
-  revalidatePath("/crm");
+  revalidatePath("/vorgaenge");
   return {
     error: null,
     /*
@@ -399,6 +406,6 @@ export async function revokePortalAccess(
 
   if (error) return { error: `Widerrufen fehlgeschlagen: ${error.message}`, ok: null };
 
-  revalidatePath("/crm");
+  revalidatePath("/vorgaenge");
   return { error: null, ok: "Zugang widerrufen. Der Link öffnet nichts mehr." };
 }

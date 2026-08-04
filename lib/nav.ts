@@ -23,13 +23,15 @@ export const NAV: NavGroup[] = [
       { label: "Cockpit", href: "/cockpit", icon: "cockpit", area: null },
       /*
        * Der Vorgang ist der Einstieg: ein Objekt von der Anfrage bis zur
-       * Schlussrechnung. Es gibt keinen zweiten Weg mehr daneben.
+       * Schlussrechnung. Es gibt keinen zweiten Weg mehr daneben — auch
+       * kein CRM: Kundenstammdaten, Anlage, Portalzugang und Historie
+       * stehen am Vorgang, ein Reiter dafür wäre eine zweite Liste über
+       * dieselben Daten.
        */
       { label: "Vorgänge", href: "/vorgaenge", icon: "pipelines", area: "pipelines" },
       { label: "Planung", href: "/planung", icon: "dispo", area: "pipelines" },
       { label: "Material", href: "/material", icon: "lager", area: "pipelines" },
       { label: "Offene Posten", href: "/offene-posten", icon: "rechnungen", area: "rechnungen" },
-      { label: "CRM", href: "/crm", icon: "crm", area: "crm" },
       /*
        * Service steht in der Navigation, obwohl es die dritte Pipeline ist.
        * Anliegen aus dem Kundenportal landeten sonst in einer Ansicht, die

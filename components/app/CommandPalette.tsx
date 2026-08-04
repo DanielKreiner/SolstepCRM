@@ -15,7 +15,7 @@ const KIND_LABEL: Record<string, string> = {
 
 const KIND_HREF: Record<string, (id: string) => string> = {
   vorgang: (id) => `/vorgaenge/${id}`,
-  customer: (id) => `/crm/${id}`,
+  customer: (id) => `/vorgaenge?kunde=${id}`,
   article: (id) => `/lager/${id}`,
 };
 

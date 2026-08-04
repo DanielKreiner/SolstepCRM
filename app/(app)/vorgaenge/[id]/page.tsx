@@ -7,7 +7,7 @@ import { Stepper } from "@/components/vorgang/Stepper";
 import { Positionen } from "@/components/vorgang/Positionen";
 import { Rechnungen } from "@/components/vorgang/Rechnungen";
 import { Chat } from "@/components/vorgang/Chat";
-import { Portallink } from "@/components/vorgang/Portallink";
+import { Kunde } from "@/components/vorgang/Kunde";
 import { Strom } from "@/components/vorgang/Strom";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
@@ -19,7 +19,6 @@ import { ausBytea, entschluesseln } from "@/lib/mail/crypto";
 import { chatLesen } from "@/lib/vorgang/chat";
 import { vorgangDetail } from "@/lib/vorgang/daten";
 import {
-  PHASE_LABEL,
   offenePflichtGates,
   summen,
   tageInPhase,
@@ -68,7 +67,14 @@ export default async function VorgangPage({
   const tage = tageInPhase(kopf.phaseSeit, new Date());
 
   const supabase = await createClient();
-  const [{ data: team }, { data: artikel }, { data: zugang }] = await Promise.all([
+  const [
+    { data: team },
+    { data: artikel },
+    { data: zugang },
+    { data: kundeRoh },
+    { data: anlageRoh },
+    { data: historie },
+  ] = await Promise.all([
     supabase.from("app_user").select("id, name").eq("active", true).order("name"),
     supabase
       .from("article")
@@ -77,12 +83,32 @@ export default async function VorgangPage({
       .order("name"),
     supabase
       .from("portal_access")
-      .select("token_enc")
+      .select("token_enc, expires_at, last_seen_at")
       .eq("customer_id", kopf.kundeId)
       .is("revoked_at", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("customer")
+      .select(
+        "id, name, type, contact_person, email, phone, address, zip, city, source, notes, deleted_at",
+      )
+      .eq("id", kopf.kundeId)
+      .maybeSingle(),
+    supabase
+      .from("plant")
+      .select("id, kwp, storage_kwh, modules, inverter, meter_point, commissioned_on")
+      .eq("customer_id", kopf.kundeId)
+      .order("kwp", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("contact_activity")
+      .select("id, kind, body, created_at")
+      .eq("customer_id", kopf.kundeId)
+      .order("created_at", { ascending: false })
+      .limit(25),
   ]);
 
   /*
@@ -183,17 +209,6 @@ export default async function VorgangPage({
               unter="Nummern aus dem Altbestand"
             />
           ) : null}
-        </div>
-
-        {/*
-          Der Portallink gehört hierher: wer mit dem Kunden telefoniert,
-          hat den Vorgang offen und nicht dessen Kundenakte.
-        */}
-        <div className="mt-4 border-t border-line pt-4">
-          <p className="mb-2 text-[11px] font-semibold tracking-[0.1em] text-faint uppercase">
-            Kundenportal
-          </p>
-          <Portallink link={portalLink} vorgangId={kopf.id} />
         </div>
 
         <Stepper phase={kopf.phase} />
@@ -395,22 +410,66 @@ export default async function VorgangPage({
             />
           ) : null}
 
-          <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-            <h2 className="mb-2 text-[15px] font-semibold">Kontakt</h2>
-            <dl className="flex flex-col gap-[7px] text-[13px]">
-              <Zeile label="Ansprechpartner">{kopf.kontakt ?? "—"}</Zeile>
-              <Zeile label="E-Mail">
-                <span className="num break-all">{kopf.email ?? "—"}</span>
-              </Zeile>
-              <Zeile label="Telefon">
-                <span className="num">{kopf.telefon ?? "—"}</span>
-              </Zeile>
-              <Zeile label="Zählpunkt">
-                <span className="num break-all">{kopf.zaehlpunkt ?? "—"}</span>
-              </Zeile>
-              <Zeile label="Phase">{PHASE_LABEL[kopf.phase]}</Zeile>
-            </dl>
-          </section>
+          {kundeRoh ? (
+            <Kunde
+              darfSchreiben={me.perms.crm === "write"}
+              kunde={{
+                id: kundeRoh.id as string,
+                name: kundeRoh.name as string,
+                type: kundeRoh.type as string,
+                contactPerson: (kundeRoh.contact_person as string | null) ?? null,
+                email: (kundeRoh.email as string | null) ?? null,
+                phone: (kundeRoh.phone as string | null) ?? null,
+                address: (kundeRoh.address as string | null) ?? null,
+                zip: (kundeRoh.zip as string | null) ?? null,
+                city: (kundeRoh.city as string | null) ?? null,
+                source: (kundeRoh.source as string | null) ?? null,
+                notes: (kundeRoh.notes as string | null) ?? null,
+                archiviert: kundeRoh.deleted_at !== null,
+              }}
+              anlage={
+                anlageRoh
+                  ? {
+                      id: anlageRoh.id as string,
+                      kwp: anlageRoh.kwp === null ? null : Number(anlageRoh.kwp),
+                      storageKwh:
+                        anlageRoh.storage_kwh === null
+                          ? null
+                          : Number(anlageRoh.storage_kwh),
+                      modules: (anlageRoh.modules as string | null) ?? null,
+                      inverter: (anlageRoh.inverter as string | null) ?? null,
+                      meterPoint: (anlageRoh.meter_point as string | null) ?? null,
+                      commissionedOn:
+                        (anlageRoh.commissioned_on as string | null) ?? null,
+                    }
+                  : null
+              }
+              portal={
+                zugang
+                  ? {
+                      gueltigBis: date(zugang.expires_at as string),
+                      zuletztGesehen: zugang.last_seen_at
+                        ? date(zugang.last_seen_at as string)
+                        : null,
+                      link: portalLink,
+                    }
+                  : null
+              }
+              vorgangId={kopf.id}
+              portalLink={portalLink}
+              historie={((historie ?? []) as unknown as {
+                id: string;
+                kind: string;
+                body: string | null;
+                created_at: string;
+              }[]).map((a) => ({
+                id: a.id,
+                kind: a.kind,
+                body: a.body,
+                createdAt: a.created_at,
+              }))}
+            />
+          ) : null}
         </div>
       </div>
     </>
@@ -439,17 +498,3 @@ function Kennwert({
   );
 }
 
-function Zeile({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex justify-between gap-3">
-      <dt className="shrink-0 text-muted">{label}</dt>
-      <dd className="min-w-0 text-right">{children}</dd>
-    </div>
-  );
-}

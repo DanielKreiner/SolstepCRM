@@ -64,10 +64,10 @@ function avatarFarbe(name: string): string {
 export default async function VorgaengePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; kunde?: string }>;
 }) {
   const me = await requireMe();
-  const { tab = "offen" } = await searchParams;
+  const { tab = "offen", kunde } = await searchParams;
   const supabase = await createClient();
 
   const [{ data: vorgaenge }, { data: werte }, { data: gates }, { data: kunden }] =
@@ -76,7 +76,8 @@ export default async function VorgaengePage({
         .from("vorgang")
         .select(
           `id, number, phase, phase_seit, kwp, ort, verloren_grund, verloren_am,
-           customer:customer_id ( name ), zustaendig:zustaendig_user_id ( name )`,
+           customer_id, customer:customer_id ( name ),
+           zustaendig:zustaendig_user_id ( name )`,
         )
         .order("phase_seit", { ascending: true }),
       supabase
@@ -119,6 +120,7 @@ export default async function VorgaengePage({
   type Zeile = {
     id: string;
     number: string;
+    customer_id: string;
     phase: Phase;
     phase_seit: string;
     kwp: string | null;
@@ -129,7 +131,18 @@ export default async function VorgaengePage({
     zustaendig: { name: string } | null;
   };
 
-  const alle = (vorgaenge ?? []) as unknown as Zeile[];
+  /*
+   * Filter auf einen Kunden. Er ersetzt die Kundenakte des alten CRM:
+   * wer wissen will, was bei diesem Kunden läuft, sieht dessen Vorgänge
+   * — und nicht eine zweite Liste daneben.
+   */
+  const alleRoh = (vorgaenge ?? []) as unknown as Zeile[];
+  const alle = kunde
+    ? alleRoh.filter((v) => v.customer_id === kunde)
+    : alleRoh;
+  const kundenName = kunde
+    ? (alleRoh.find((v) => v.customer_id === kunde)?.customer?.name ?? null)
+    : null;
   const offen = alle.filter((v) => v.phase !== "verloren");
   const verloren = alle.filter((v) => v.phase === "verloren");
   const jetzt = new Date();
@@ -141,7 +154,9 @@ export default async function VorgaengePage({
       <PageHeader
         title="Vorgänge"
         subtitle={[
-          "Ein Objekt von der Anfrage bis zur Schlussrechnung",
+          kundenName
+            ? `Nur ${kundenName}`
+            : "Ein Objekt von der Anfrage bis zur Schlussrechnung",
           `${offen.length} offen`,
           darfBetraege && pipeline > 0 ? `${eurShort(pipeline)} Pipeline` : null,
         ]
@@ -153,6 +168,14 @@ export default async function VorgaengePage({
               Offen und Verloren als Segment, nicht als zwei Knöpfe: es
               sind zwei Sichten auf dieselbe Liste, keine zwei Aktionen.
             */}
+            {kunde ? (
+              <Link
+                href="/vorgaenge"
+                className="rounded-pill border border-line bg-surface px-[15px] py-[8px] text-[12.5px] font-medium text-ink hover:bg-sunk hover:text-ink"
+              >
+                Filter aufheben
+              </Link>
+            ) : null}
             <nav className="flex gap-[3px] rounded-pill bg-surface p-1 shadow-soft">
               {(
                 [
@@ -162,7 +185,7 @@ export default async function VorgaengePage({
               ).map(([wert, label, anzahl]) => (
                 <Link
                   key={wert}
-                  href={`/vorgaenge?tab=${wert}`}
+                  href={`/vorgaenge?tab=${wert}${kunde ? `&kunde=${kunde}` : ""}`}
                   aria-current={tab === wert ? "page" : undefined}
                   className={[
                     "rounded-pill px-[17px] py-[10px] text-[13.5px] transition-colors",
