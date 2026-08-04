@@ -29,7 +29,20 @@ const KEY = "betrieb:laufend";
 
 export function Stempeluhr({ jobs, laufendSeit, laufendJob }: Props) {
   const [seit, setSeit] = useState<string | null>(laufendSeit);
-  const [jobId, setJobId] = useState<string>(laufendJob ?? jobs[0]?.id ?? "");
+  const [jobId, setJobId] = useState<string>(laufendJob ?? "");
+  const [suche, setSuche] = useState("");
+
+  /*
+   * Gedeckelt auf acht: mehr passt am Telefon ohnehin nicht auf den
+   * Schirm, und wer mehr sieht, sucht länger statt zu tippen.
+   */
+  const treffer = jobs
+    .filter((j) => {
+      const q = suche.trim().toLowerCase();
+      if (!q) return true;
+      return `${j.number} ${j.customer}`.toLowerCase().includes(q);
+    })
+    .slice(0, 8);
   const [art, setArt] = useState<string>("work");
   const [jetzt, setJetzt] = useState<number>(() => Date.now());
   const [meldung, setMeldung] = useState<string | null>(null);
@@ -105,19 +118,74 @@ export function Stempeluhr({ jobs, laufendSeit, laufendJob }: Props) {
             >
               Vorgang
             </label>
-            <select
+            {/*
+              Suche statt Auswahlfeld: ein Betrieb hat schnell dreissig
+              laufende Vorgänge, und ein Auswahlfeld am Telefon heisst
+              scrollen mit dem Handschuh. Tippen ist schneller und trifft.
+            */}
+            <input
               id="m-stempel-job"
-              value={jobId}
-              onChange={(e) => setJobId(e.target.value)}
+              type="search"
+              value={suche}
+              onChange={(e) => {
+                setSuche(e.target.value);
+                setJobId("");
+              }}
+              placeholder="Nummer, Kunde oder Ort"
+              autoComplete="off"
               className="min-h-[56px] w-full rounded-input border border-transparent bg-surface px-4 text-[15px] outline-0 focus:border-accent"
-            >
-              <option value="">— ohne Vorgang —</option>
-              {jobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.number} · {j.customer}
-                </option>
-              ))}
-            </select>
+            />
+
+            {jobId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setJobId("");
+                  setSuche("");
+                }}
+                className="flex min-h-[56px] cursor-pointer items-center justify-between gap-3 rounded-input border-2 border-accent bg-accent/8 px-4 text-left text-[15px]"
+              >
+                <span className="min-w-0">
+                  <span className="num block truncate font-semibold">
+                    {jobs.find((j) => j.id === jobId)?.number}
+                  </span>
+                  <span className="block truncate text-[13px] text-muted">
+                    {jobs.find((j) => j.id === jobId)?.customer}
+                  </span>
+                </span>
+                <span aria-hidden className="shrink-0 text-[17px] text-muted">
+                  ✕
+                </span>
+              </button>
+            ) : (
+              <ul className="flex flex-col gap-[6px]">
+                {treffer.map((j) => (
+                  <li key={j.id}>
+                    <button
+                      type="button"
+                      onClick={() => setJobId(j.id)}
+                      className="flex min-h-[56px] w-full cursor-pointer items-center rounded-input border border-line bg-surface px-4 text-left"
+                    >
+                      <span className="min-w-0">
+                        <span className="num block truncate text-[14px] font-semibold">
+                          {j.number}
+                        </span>
+                        <span className="block truncate text-[13px] text-muted">
+                          {j.customer}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+                {treffer.length === 0 ? (
+                  <li className="rounded-input bg-surface px-4 py-4 text-[13.5px] text-muted">
+                    {suche
+                      ? "Kein Vorgang gefunden — ohne Vorgang stempeln geht auch."
+                      : "Kein Vorgang zugeordnet."}
+                  </li>
+                ) : null}
+              </ul>
+            )}
           </div>
 
           <div className="flex gap-2">

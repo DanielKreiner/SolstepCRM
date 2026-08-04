@@ -153,17 +153,44 @@ export function pruefe(p: Pruefung): EinsatzKonflikt[] {
   }
 
   /* 3. Arbeitszeitregeln — aus der bestehenden Regel-Engine. */
+  const regeln = p.regeln ?? DEFAULT_RULES;
+
+  /*
+   * Die Pause rechnet die Planung selbst hinein.
+   *
+   * Vorher warnte jeder Einsatz über sechs Stunden mit „Pause fehlt" —
+   * bei einem Montagetag also immer. Wer eine Baustelle plant, gibt
+   * Beginn und Ende ein und nicht die Jausenzeit; die gesetzliche Pause
+   * ist eine Rechengrösse und keine Planungsentscheidung.
+   *
+   * Sie wird deshalb abgezogen, statt gemeldet zu werden: die
+   * Tageshöchstarbeitszeit misst damit die tatsächliche Arbeitszeit, und
+   * die Pausenwarnung entsteht gar nicht erst. Beim Stempeln bleibt es
+   * bei der echten Pause — dort ist sie eine Tatsache und keine Annahme.
+   */
+  const mitPause = (start: string, ende: string) => {
+    const min = (new Date(ende).getTime() - new Date(start).getTime()) / 60000;
+    return min > regeln.breakAfterMin ? regeln.breakMin : 0;
+  };
+
   const schichten: Shift[] = [
     ...p.bestand
       .filter((e) => e.id !== p.neu.id)
       .flatMap((e) =>
-        e.personen.map((uid) => ({ id: e.id, userId: uid, start: e.von, end: e.bis })),
+        e.personen.map((uid) => ({
+          id: e.id,
+          userId: uid,
+          start: e.von,
+          end: e.bis,
+          breakMin: mitPause(e.von, e.bis),
+        })),
       ),
     ...p.neu.personen.map((uid) => ({
       id: p.neu.id,
       userId: uid,
       start: p.neu.von,
       end: p.neu.bis,
+      breakMin: mitPause(p.neu.von, p.neu.bis),
     })),
   ];
 
@@ -174,13 +201,15 @@ export function pruefe(p: Pruefung): EinsatzKonflikt[] {
     kind: a.art,
   }));
 
-  for (const c of checkRoster(schichten, p.regeln ?? DEFAULT_RULES, abw)) {
+  for (const c of checkRoster(schichten, regeln, abw)) {
     /*
      * Abwesenheit und Überschneidung sind oben schon behandelt — mit
      * eigenem Text und der richtigen Stufe. Sie hier ein zweites Mal
      * durchzulassen hiesse, dieselbe Warnung doppelt anzuzeigen.
      */
     if (c.code === "abwesenheit" || c.code === "ueberschneidung") continue;
+    /* Die Pause ist eingerechnet — eine Warnung dazu wäre gegenstandslos. */
+    if (c.code === "pause") continue;
     if (!c.shiftIds.includes(p.neu.id)) continue;
 
     const regel = REGELBEZUG[c.code];

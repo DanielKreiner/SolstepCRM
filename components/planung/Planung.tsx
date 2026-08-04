@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Dialog, DialogFuss } from "@/components/ui/Dialog";
 import { Suchauswahl, type Option } from "@/components/ui/Suchauswahl";
 import { einsatzLoeschen, einsatzSpeichern, type PlanStatus } from "@/app/(app)/planung/actions";
+import { blockiert, pruefe } from "@/lib/einsatz/konflikte";
 import {
   Plantafel,
   type TafelAbw,
@@ -112,6 +113,8 @@ export function Planung({
           fahrzeuge={fahrzeuge}
           vorgaenge={vorgaenge}
           qualifikationen={qualifikationen}
+          bloecke={bloecke}
+          abwesenheiten={abwesenheiten}
           schliessen={() => setOffen(null)}
         />
       ) : null}
@@ -173,6 +176,8 @@ function EinsatzDialog({
   fahrzeuge,
   vorgaenge,
   qualifikationen,
+  bloecke,
+  abwesenheiten,
   schliessen,
 }: {
   tag: string;
@@ -181,6 +186,8 @@ function EinsatzDialog({
   fahrzeuge: { id: string; name: string; kennzeichen: string | null }[];
   vorgaenge: Option[];
   qualifikationen: { wert: string; text: string }[];
+  bloecke: TafelBlock[];
+  abwesenheiten: TafelAbw[];
   schliessen: () => void;
 }) {
   const [status, formAction] = useActionState<PlanStatus, FormData>(
@@ -189,17 +196,86 @@ function EinsatzDialog({
   );
   const [art, setArt] = useState<"auftrag" | "service" | "intern">("auftrag");
   const [ganztaegig, setGanztaegig] = useState(false);
+  const [gewaehlt, setGewaehlt] = useState<string[]>(userId ? [userId] : []);
+  const [fahrzeugId, setFahrzeugId] = useState("");
+  const [benoetigt, setBenoetigt] = useState<string[]>([]);
+  const [vonRoh, setVonRoh] = useState(`${tag}T07:00`);
+  const [bisRoh, setBisRoh] = useState(`${tag}T16:00`);
+  const [grund, setGrund] = useState("");
 
-  const warnungen = status.warnungen ?? [];
+  /*
+   * Ganztägig heisst 00:00 bis 23:59 — und dann hat eine Uhrzeit im Feld
+   * nichts verloren. Vorher standen beide Felder weiter mit Uhrzeit da,
+   * obwohl der Wert ignoriert wurde.
+   */
+  const von = ganztaegig ? `${vonRoh.slice(0, 10)}T00:00` : vonRoh;
+  const bis = ganztaegig ? `${bisRoh.slice(0, 10)}T23:59` : bisRoh;
+
+  /*
+   * Geprüft wird beim Tippen, nicht erst beim Absenden.
+   *
+   * Vorher kam die Warnung erst als Antwort des Servers zurück — dabei
+   * verlor das Formular die angekreuzten Personen, und beim zweiten
+   * Absenden landete nur noch einer im Einsatz. Dieselbe reine Funktion
+   * läuft jetzt hier; der Server prüft weiterhin selbst, weil man eine
+   * Oberfläche umgehen kann.
+   */
+  const konflikte = useMemo(() => {
+    if (!von || !bis || new Date(bis) <= new Date(von)) return [];
+    return pruefe({
+      neu: {
+        id: "neu",
+        von: new Date(von).toISOString(),
+        bis: new Date(bis).toISOString(),
+        personen: gewaehlt,
+        fahrzeugId: fahrzeugId || null,
+        titel: "dieser Einsatz",
+      },
+      bestand: bloecke.map((b) => ({
+        id: b.id,
+        von: b.von,
+        bis: b.bis,
+        personen: b.personen,
+        fahrzeugId: b.fahrzeugId,
+        titel: b.titel,
+      })),
+      personen: personen.map((p) => ({
+        id: p.id,
+        name: p.name,
+        qualifikationen: p.qualifikationen,
+      })),
+      abwesenheiten: abwesenheiten
+        .filter((a) => a.status === "approved")
+        .map((a) => ({ userId: a.userId, von: a.von, bis: a.bis, art: a.art })),
+      benoetigt,
+      fahrzeuge: fahrzeuge.map((f) => ({ id: f.id, name: f.name })),
+    });
+  }, [von, bis, gewaehlt, fahrzeugId, benoetigt, bloecke, personen, abwesenheiten, fahrzeuge]);
+
+  const hart = konflikte.filter((k) => k.stufe === "hart");
+  const weich = konflikte.filter((k) => k.stufe === "weich");
+  const gesperrt = blockiert(konflikte);
 
   /* Nach dem Speichern schliesst sich das Fenster von selbst. */
-  if (status.ok) {
-    schliessen();
+  if (status.ok) schliessen();
+
+  function umschalten(liste: string[], wert: string): string[] {
+    return liste.includes(wert) ? liste.filter((x) => x !== wert) : [...liste, wert];
   }
 
   return (
     <Dialog offen titel="Einsatz anlegen" breite="weit" schliessen={schliessen}>
       <form action={formAction}>
+        {/* Die Auswahl liegt im Zustand — die Felder reichen sie mit. */}
+        <input type="hidden" name="von" value={von} />
+        <input type="hidden" name="bis" value={bis} />
+        {gewaehlt.map((u) => (
+          <input key={u} type="hidden" name="personen" value={u} />
+        ))}
+        {benoetigt.map((q) => (
+          <input key={q} type="hidden" name="benoetigt" value={q} />
+        ))}
+
         <Beschriftung>Art</Beschriftung>
         <div className="mb-3 flex flex-wrap gap-2">
           {(
@@ -273,37 +349,51 @@ function EinsatzDialog({
           <div>
             <Beschriftung>Von</Beschriftung>
             <input
-              name="von"
-              type="datetime-local"
+              type={ganztaegig ? "date" : "datetime-local"}
               required
-              defaultValue={`${tag}T07:00`}
+              value={ganztaegig ? vonRoh.slice(0, 10) : vonRoh}
+              onChange={(e) =>
+                setVonRoh(
+                  ganztaegig ? `${e.target.value}T00:00` : e.target.value,
+                )
+              }
               className="num w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
             />
           </div>
           <div>
             <Beschriftung>Bis</Beschriftung>
             <input
-              name="bis"
-              type="datetime-local"
+              type={ganztaegig ? "date" : "datetime-local"}
               required
-              defaultValue={`${tag}T16:00`}
+              value={ganztaegig ? bisRoh.slice(0, 10) : bisRoh}
+              onChange={(e) =>
+                setBisRoh(
+                  ganztaegig ? `${e.target.value}T23:59` : e.target.value,
+                )
+              }
               className="num w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
             />
           </div>
         </div>
 
-        <Beschriftung>Wer fährt</Beschriftung>
+        <Beschriftung>
+          Wer fährt{gewaehlt.length ? ` — ${gewaehlt.length} gewählt` : ""}
+        </Beschriftung>
         <div className="mb-3 flex flex-wrap gap-2">
           {personen.map((p) => (
             <label
               key={p.id}
-              className="flex cursor-pointer items-center gap-2 rounded-pill border border-line bg-surface px-[13px] py-[7px] text-[12.5px] has-checked:border-accent has-checked:bg-accent/10"
+              className={[
+                "flex cursor-pointer items-center gap-2 rounded-pill border px-[13px] py-[7px] text-[12.5px] transition-colors",
+                gewaehlt.includes(p.id)
+                  ? "border-accent bg-accent/10"
+                  : "border-line bg-surface",
+              ].join(" ")}
             >
               <input
                 type="checkbox"
-                name="personen"
-                value={p.id}
-                defaultChecked={p.id === userId}
+                checked={gewaehlt.includes(p.id)}
+                onChange={() => setGewaehlt((l) => umschalten(l, p.id))}
                 className="h-[15px] w-[15px] accent-[var(--accent)]"
               />
               {p.name}
@@ -316,6 +406,8 @@ function EinsatzDialog({
             <Beschriftung>Fahrzeug</Beschriftung>
             <select
               name="fahrzeugId"
+              value={fahrzeugId}
+              onChange={(e) => setFahrzeugId(e.target.value)}
               className="w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
             >
               <option value="">— keines —</option>
@@ -344,12 +436,17 @@ function EinsatzDialog({
               {qualifikationen.map((q) => (
                 <label
                   key={q.wert}
-                  className="flex cursor-pointer items-center gap-2 rounded-pill border border-line bg-surface px-[13px] py-[7px] text-[12.5px] has-checked:border-accent has-checked:bg-accent/10"
+                  className={[
+                    "flex cursor-pointer items-center gap-2 rounded-pill border px-[13px] py-[7px] text-[12.5px] transition-colors",
+                    benoetigt.includes(q.wert)
+                      ? "border-accent bg-accent/10"
+                      : "border-line bg-surface",
+                  ].join(" ")}
                 >
                   <input
                     type="checkbox"
-                    name="benoetigt"
-                    value={q.wert}
+                    checked={benoetigt.includes(q.wert)}
+                    onChange={() => setBenoetigt((l) => umschalten(l, q.wert))}
                     className="h-[15px] w-[15px] accent-[var(--accent)]"
                   />
                   {q.text}
@@ -366,17 +463,28 @@ function EinsatzDialog({
           className="w-full resize-y rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
         />
 
-        {/* --------------------------------------------------- WARNUNGEN */}
-        {warnungen.length > 0 ? (
+        {/* ------------------------------------------------- KONFLIKTE */}
+        {hart.length > 0 ? (
+          <div className="mt-4 rounded-card border border-s-crit/40 bg-s-crit/8 p-4">
+            <p className="mb-1 text-[13px] font-semibold text-s-crit">
+              Nicht speicherbar
+            </p>
+            <ul className="flex flex-col gap-[4px] text-[12.5px]">
+              {hart.map((k, i) => (
+                <li key={i}>{k.text}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {weich.length > 0 ? (
           <div className="mt-4 rounded-card border border-s-warn/40 bg-s-warn/8 p-4">
             <p className="mb-2 text-[13px] font-semibold">
-              {warnungen.length === 1
-                ? "Eine Warnung"
-                : `${warnungen.length} Warnungen`}{" "}
-              — überstimmbar mit Begründung
+              {weich.length === 1 ? "Eine Warnung" : `${weich.length} Warnungen`} —
+              überstimmbar mit Begründung
             </p>
             <ul className="mb-3 flex flex-col gap-[6px]">
-              {warnungen.map((w, i) => (
+              {weich.map((w, i) => (
                 <li key={i} className="flex flex-wrap items-baseline gap-2 text-[12.5px]">
                   <span className="min-w-0 flex-1">{w.text}</span>
                   {w.regel ? (
@@ -393,6 +501,8 @@ function EinsatzDialog({
             <input
               name="trotzdem"
               required
+              value={grund}
+              onChange={(e) => setGrund(e.target.value)}
               placeholder="Warum trotzdem so planen?"
               className="w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13px] outline-0 focus:border-accent"
             />
@@ -406,7 +516,10 @@ function EinsatzDialog({
         ) : null}
 
         <DialogFuss abbrechen={schliessen}>
-          <Absenden label={warnungen.length ? "Trotzdem anlegen" : "Einsatz anlegen"} />
+          <Absenden
+            label={weich.length ? "Trotzdem anlegen" : "Einsatz anlegen"}
+            gesperrt={gesperrt}
+          />
         </DialogFuss>
       </form>
     </Dialog>
@@ -421,12 +534,13 @@ function Beschriftung({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Absenden({ label }: { label: string }) {
+function Absenden({ label, gesperrt }: { label: string; gesperrt: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || gesperrt}
+      title={gesperrt ? "Eine Person ist im Zeitraum abwesend." : ""}
       className="min-h-[40px] cursor-pointer rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-[22px] text-[13.5px] font-semibold text-white disabled:opacity-60"
     >
       {pending ? "…" : label}

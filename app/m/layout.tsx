@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { BRAND } from "@/lib/brand";
 import { requireMe } from "@/lib/session";
+import { markeLaden } from "@/lib/marke";
+import { createClient } from "@/lib/supabase/server";
+import { Akzentfarbe } from "@/components/app/Akzentfarbe";
 import { MobileNav } from "./MobileNav";
 import { OfflineBanner } from "./OfflineBanner";
 
@@ -28,9 +31,11 @@ export default async function MobileLayout({
   children: React.ReactNode;
 }) {
   const me = await requireMe();
+  const marke = await markeLaden(await createClient(), me.companyId);
 
   return (
     <div className="flex min-h-dvh flex-col bg-app">
+      <Akzentfarbe akzent={marke.akzentGesetzt ? marke.akzent : null} />
       <header className="flex items-center gap-3 px-4 pt-4 pb-2">
         <span
           aria-hidden

@@ -21,6 +21,8 @@ export type PortalSession = {
   companyName: string;
   /* Für den Kunden ist das Portal die Seite seines Elektrikers. */
   logoUrl: string | null;
+  /** Gesetzte Akzentfarbe des Betriebs, sonst null. */
+  akzent: string | null;
   accessId: string;
 };
 
@@ -75,6 +77,10 @@ export async function resolvePortal(
       "string"
         ? ((company.pdf_settings as Record<string, unknown>).logo_url as string)
         : null,
+    akzent: (() => {
+      const a = (company.pdf_settings as Record<string, unknown> | null)?.akzent;
+      return typeof a === "string" && /^#[0-9a-fA-F]{6}$/.test(a) ? a : null;
+    })(),
     accessId: access.id as string,
   };
 }
