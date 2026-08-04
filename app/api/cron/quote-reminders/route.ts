@@ -33,8 +33,8 @@ export async function GET(request: Request) {
 
       if (!offen?.length) continue;
 
+      /* Ohne Postfach wird trotzdem eingereiht — siehe lib/mail/resend.ts. */
       const postfach = await postfachVon(admin, mandant.id);
-      if (!postfach) continue;
 
       for (const v of offen) {
         const kunde = v.customer as unknown as {

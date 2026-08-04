@@ -84,6 +84,12 @@ export async function mahnen(
     return { ok: false, grund: "Für diesen Kunden ist keine Mailadresse hinterlegt." };
   }
 
+  /*
+   * Ohne eingehängtes Postfach wird trotzdem eingereiht — der Zusteller
+   * entscheidet später, worüber er sendet (lib/mail/resend.ts als
+   * Übergang). Vorher brach die Mahnung hier ab, und der Text wurde nie
+   * geschrieben.
+   */
   const { data: postfach } = await admin
     .from("mail_account")
     .select("id")
@@ -91,17 +97,13 @@ export async function mahnen(
     .eq("is_default", true)
     .maybeSingle();
 
-  if (!postfach) {
-    return { ok: false, grund: "Es ist kein Postfach eingerichtet." };
-  }
-
   const nummer = beleg.nummer ?? "ohne Nummer";
   const brutto = eur(Number(beleg.betrag_brutto ?? 0));
   const faellig = beleg.faellig_am ?? "—";
 
   const { error: mailErr } = await admin.from("mail_outbox").insert({
     company_id: beleg.company_id,
-    mail_account_id: postfach.id,
+    mail_account_id: postfach?.id ?? null,
     to_addrs: [kunde.email],
     subject: `${gewaehlt.label} zu Rechnung ${nummer}`,
     body_html: html(gewaehlt, nummer, brutto, faellig),

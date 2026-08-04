@@ -251,6 +251,8 @@ const aendernSchema = z.object({
   kalkStunden: z.coerce.number().min(0).optional(),
   ustSatz: z.coerce.number().min(0).max(30),
   istMaterial: z.enum(["ja", "nein"]).optional().default("nein"),
+  rabattProzent: z.coerce.number().min(0).max(100).optional().default(0),
+  optional: z.enum(["ja", "nein"]).optional().default("nein"),
 });
 
 export async function positionAendern(
@@ -281,6 +283,8 @@ export async function positionAendern(
       kalk_ek: d.kalkEk ?? null,
       kalk_stunden: d.kalkStunden ?? null,
       ist_material: d.istMaterial === "ja",
+      rabatt_prozent: d.rabattProzent,
+      optional: d.optional === "ja",
     })
     .eq("id", d.positionId)
     .eq("vorgang_id", d.vorgangId)
@@ -329,4 +333,264 @@ export async function positionLoeschen(
   await summeSchreiben(supabase, parsed.data.vorgangId);
   frisch(parsed.data.vorgangId);
   return { error: null, ok: "Position entfernt." };
+}
+
+/* ============================================================ GRUPPEN */
+
+/*
+ * Ein PV-Angebot ist keine Liste, sondern ein Paket. Der Kunde
+ * entscheidet über "PV-Anlage 9,3 kWp für 7205,93 €" und nicht über
+ * zwanzig Modulklemmen zu 3,10 €.
+ */
+
+const gruppeNeuSchema = z.object({
+  vorgangId: z.string().uuid(),
+  name: z.string().trim().min(2, "Name der Gruppe fehlt.").max(160),
+  beschreibung: z.string().trim().max(2000).optional().default(""),
+});
+
+export async function gruppeAnlegen(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = gruppeNeuSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const { data: letzte } = await supabase
+    .from("vorgang_gruppe")
+    .select("sort")
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null)
+    .order("sort", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await supabase.from("vorgang_gruppe").insert({
+    company_id: z1.me.companyId,
+    vorgang_id: d.vorgangId,
+    name: d.name,
+    beschreibung: d.beschreibung || null,
+    sort: Number(letzte?.sort ?? 0) + 10,
+  });
+
+  if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
+
+  frisch(d.vorgangId);
+  return { error: null, ok: `Gruppe „${d.name}" angelegt.` };
+}
+
+const gruppeAendernSchema = z.object({
+  vorgangId: z.string().uuid(),
+  gruppeId: z.string().uuid(),
+  name: z.string().trim().min(2, "Name der Gruppe fehlt.").max(160),
+  beschreibung: z.string().trim().max(2000).optional().default(""),
+  /* Leer heisst: die Positionen zählen sich selbst zusammen. */
+  paketPreis: z.string().trim().optional().default(""),
+  einzelpreiseVerstecken: z.enum(["ja", "nein"]).optional().default("nein"),
+});
+
+export async function gruppeAendern(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = gruppeAendernSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  let paket: number | null = null;
+  if (d.paketPreis !== "") {
+    const n = Number(d.paketPreis.replace(",", "."));
+    if (!Number.isFinite(n) || n < 0) {
+      return { error: "Der Paketpreis ist keine Zahl.", ok: null };
+    }
+    paket = n;
+  }
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const { data: geschrieben, error } = await supabase
+    .from("vorgang_gruppe")
+    .update({
+      name: d.name,
+      beschreibung: d.beschreibung || null,
+      paket_preis: paket,
+      einzelpreise_verstecken: d.einzelpreiseVerstecken === "ja",
+    })
+    .eq("id", d.gruppeId)
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null)
+    .select("id");
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+  if (!geschrieben?.length) {
+    return { error: "Diese Gruppe gehört zu einer festgeschriebenen Version.", ok: null };
+  }
+
+  await summeSchreiben(supabase, d.vorgangId);
+  frisch(d.vorgangId);
+  return { error: null, ok: "Gespeichert." };
+}
+
+const gruppeLoeschSchema = z.object({
+  vorgangId: z.string().uuid(),
+  gruppeId: z.string().uuid(),
+});
+
+/**
+ * Gruppe auflösen.
+ *
+ * Die Positionen bleiben und rutschen aus der Gruppe heraus — das
+ * erledigt `on delete set null` am Fremdschlüssel. Eine Gruppe zu
+ * löschen ist eine Gliederungsentscheidung und keine, die Leistungen
+ * aus dem Angebot nimmt.
+ */
+export async function gruppeAufloesen(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = gruppeLoeschSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "Eingabe fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, parsed.data.vorgangId);
+  if (sperre) return sperre;
+
+  const { error } = await supabase
+    .from("vorgang_gruppe")
+    .delete()
+    .eq("id", parsed.data.gruppeId)
+    .eq("vorgang_id", parsed.data.vorgangId)
+    .is("dokument_id", null);
+
+  if (error) return { error: `Löschen fehlgeschlagen: ${error.message}`, ok: null };
+
+  await summeSchreiben(supabase, parsed.data.vorgangId);
+  frisch(parsed.data.vorgangId);
+  return { error: null, ok: "Gruppe aufgelöst, die Positionen bleiben." };
+}
+
+const zuordnenSchema = z.object({
+  vorgangId: z.string().uuid(),
+  positionId: z.string().uuid(),
+  /* Leerstring heisst: raus aus jeder Gruppe. */
+  gruppeId: z.string().uuid().optional().or(z.literal("")),
+});
+
+export async function positionZuordnen(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = zuordnenSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "Eingabe fehlt.", ok: null };
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const { error } = await supabase
+    .from("vorgang_position")
+    .update({ gruppe_id: d.gruppeId || null })
+    .eq("id", d.positionId)
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null);
+
+  if (error) return { error: `Verschieben fehlgeschlagen: ${error.message}`, ok: null };
+
+  await summeSchreiben(supabase, d.vorgangId);
+  frisch(d.vorgangId);
+  return { error: null, ok: d.gruppeId ? "In die Gruppe verschoben." : "Aus der Gruppe genommen." };
+}
+
+/* ====================================================== ANGEBOTSKOPF */
+
+const kopfSchema = z.object({
+  vorgangId: z.string().uuid(),
+  ustSatz: z.coerce.number().min(0).max(30),
+  rabattProzent: z.coerce.number().min(0).max(100),
+  lieferungNetto: z.coerce.number().min(0),
+  titel: z.string().trim().max(200).optional().default(""),
+  einleitung: z.string().trim().max(4000).optional().default(""),
+  abschluss: z.string().trim().max(4000).optional().default(""),
+  gueltigBis: z.string().trim().optional().default(""),
+});
+
+/**
+ * Steuersatz, Rabatt, Lieferung und die Texte des Angebots.
+ *
+ * Der Steuersatz gilt für alle Positionen und die Lieferung: eine PV-
+ * Anlage nach Deutschland ist vollständig steuerfrei, eine nach
+ * Österreich vollständig mit 20 %. Ein Angebot mit gemischten Sätzen
+ * gibt es in diesem Geschäft nicht.
+ */
+export async function angebotskopfSpeichern(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = kopfSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const { error } = await supabase
+    .from("vorgang")
+    .update({
+      ust_satz: d.ustSatz,
+      rabatt_prozent: d.rabattProzent,
+      lieferung_netto: d.lieferungNetto,
+      angebot_titel: d.titel || null,
+      angebot_einleitung: d.einleitung || null,
+      angebot_abschluss: d.abschluss || null,
+      angebot_gueltig_bis: d.gueltigBis || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", d.vorgangId);
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+
+  /*
+   * Der Steuersatz steht zusätzlich an jeder Position, weil eine
+   * eingefrorene Angebotsversion ihn mitnehmen muss. Der Entwurf wird
+   * deshalb mitgezogen.
+   */
+  await supabase
+    .from("vorgang_position")
+    .update({ ust_satz: d.ustSatz })
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null);
+
+  await summeSchreiben(supabase, d.vorgangId);
+  frisch(d.vorgangId);
+  return { error: null, ok: "Gespeichert." };
 }

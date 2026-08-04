@@ -1,3 +1,4 @@
+import { resendVerfuegbar, sendeUeberResend } from "@/lib/mail/resend";
 import { minutenSchluessel, runCron } from "@/lib/cron";
 import {
   MAX_VERSUCHE,
@@ -54,27 +55,41 @@ export async function GET(request: Request) {
 
         if ((reserviert ?? []).length === 0) continue;
 
-        const { data: konto } = await admin
-          .from("mail_account")
-          .select(
-            "id, provider, address, display_name, smtp_host, smtp_port, smtp_secure, username, sent_folder, secret_enc",
-          )
-          .eq("id", zeile.mail_account_id)
-          .maybeSingle();
+        const { data: konto } = zeile.mail_account_id
+          ? await admin
+              .from("mail_account")
+              .select(
+                "id, provider, address, display_name, smtp_host, smtp_port, smtp_secure, username, sent_folder, secret_enc",
+              )
+              .eq("id", zeile.mail_account_id)
+              .maybeSingle()
+          : { data: null };
 
-        if (!konto) {
+        /*
+         * Ohne eingehängtes Postfach übernimmt der Übergangsweg über
+         * Resend (lib/mail/resend.ts). Er verschwindet mit der
+         * IMAP-Anbindung; bis dahin bliebe jede Mail sonst ungesendet
+         * in der Warteschlange liegen, und niemand sähe je den Text.
+         */
+        if (!konto && !resendVerfuegbar()) {
           await admin
             .from("mail_outbox")
-            .update({ status: "failed", last_error: "Postfach fehlt." })
+            .update({
+              status: "failed",
+              last_error:
+                "Kein Postfach eingehängt und kein Ersatzversand eingerichtet.",
+            })
             .eq("id", zeile.id);
           gescheitert++;
           continue;
         }
 
-        const ergebnis = await sendeUeberKonto(
-          konto as unknown as MailKonto,
-          zeile as unknown as Ausgang,
-        );
+        const ergebnis = konto
+          ? await sendeUeberKonto(
+              konto as unknown as MailKonto,
+              zeile as unknown as Ausgang,
+            )
+          : await sendeUeberResend(zeile as unknown as Ausgang);
 
         if (ergebnis.ok) {
           await admin
