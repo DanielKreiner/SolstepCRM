@@ -49,10 +49,18 @@ export function GateAmpel({
   vorgangId,
   gates,
   gesperrt,
+  berechnet = [],
 }: {
   vorgangId: string;
   gates: GateAnzeige[];
   gesperrt: boolean;
+  /**
+   * Gates, die sich aus Daten ergeben und deshalb nicht von Hand gesetzt
+   * werden. „Material" ist grün, wenn die Bedarfsliste gedeckt ist —
+   * ein Häkchen liesse sich setzen, ohne dass ein Dachhaken bestellt
+   * wäre, und dann steht das Team am Montag vor einem leeren Bus.
+   */
+  berechnet?: string[];
 }) {
   const [offen, setOffen] = useState<GateAnzeige | null>(null);
   const [status, formAction] = useActionState<AktionsStatus, FormData>(
@@ -132,22 +140,37 @@ export function GateAmpel({
             </p>
           )}
 
-          <form action={formAction} className="flex flex-col gap-2">
-            <input type="hidden" name="vorgangId" value={vorgangId} />
-            <input type="hidden" name="gateId" value={offen.id} />
+          {berechnet.includes(offen.key) ? (
+            <div className="rounded-input bg-sunk px-4 py-3 text-[12.5px] text-muted">
+              <p className="mb-2">
+                Dieses Gate wird gerechnet, nicht abgehakt: es steht auf grün,
+                sobald jede Position der Bedarfsliste gedeckt ist.
+              </p>
+              <a
+                href={`/vorgaenge/${vorgangId}?tab=material`}
+                className="font-semibold text-accent-ink hover:underline"
+              >
+                Zur Bedarfsliste
+              </a>
+            </div>
+          ) : (
+            <form action={formAction} className="flex flex-col gap-2">
+              <input type="hidden" name="vorgangId" value={vorgangId} />
+              <input type="hidden" name="gateId" value={offen.id} />
 
-            {(["erledigt", "laeuft", "nicht_noetig", "offen"] as GateStatus[]).map(
-              (s) => (
-                <Wahl
-                  key={s}
-                  wert={s}
-                  aktiv={offen.status === s}
-                  label={GATE_STATUS_LABEL[s]}
-                  hinweis={ERKLAERUNG[s]}
-                />
-              ),
-            )}
-          </form>
+              {(["erledigt", "laeuft", "nicht_noetig", "offen"] as GateStatus[]).map(
+                (s) => (
+                  <Wahl
+                    key={s}
+                    wert={s}
+                    aktiv={offen.status === s}
+                    label={GATE_STATUS_LABEL[s]}
+                    hinweis={ERKLAERUNG[s]}
+                  />
+                ),
+              )}
+            </form>
+          )}
 
           {offen.zustaendigName || offen.faelligAm ? (
             <p className="mt-4 border-t border-line pt-3 text-[11.5px] text-faint">

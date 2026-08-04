@@ -5,6 +5,8 @@ import { Aktionspanel } from "@/components/vorgang/Aktionen";
 import { GateAmpel } from "@/components/vorgang/GateAmpel";
 import { Stepper } from "@/components/vorgang/Stepper";
 import { AufnahmeBlock, type AufnahmePunkt } from "@/components/vorgang/Aufnahme";
+import { Bedarf } from "@/components/vorgang/Bedarf";
+import { Seriennummern } from "@/components/vorgang/Seriennummern";
 import { Positionen } from "@/components/vorgang/Positionen";
 import { Postausgang, type MailZeile } from "@/components/vorgang/Postausgang";
 import { Rechnungen } from "@/components/vorgang/Rechnungen";
@@ -20,6 +22,7 @@ import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { BRAND } from "@/lib/brand";
 import { ausBytea, entschluesseln } from "@/lib/mail/crypto";
+import { bedarfsListe, seriennummern } from "@/lib/material/daten";
 import { chatLesen } from "@/lib/vorgang/chat";
 import { vorgangDetail } from "@/lib/vorgang/daten";
 import {
@@ -52,6 +55,7 @@ const REITER = [
   "ueberblick",
   "aufnahme",
   "angebot",
+  "material",
   "kunde",
   "kommunikation",
   "belege",
@@ -85,7 +89,13 @@ export default async function VorgangPage({
     (r) =>
       (r !== "angebot" || darfAngebote) &&
       (r !== "belege" || darfRechnungen) &&
-      (r !== "kunde" || me.perms.crm !== "none"),
+      (r !== "kunde" || me.perms.crm !== "none") &&
+      /*
+       * Material sieht, wer den Vorgang führt oder das Lager macht — für
+       * den Vertrieb ist die Liste vor der Annahme leer und danach nicht
+       * seine Arbeit.
+       */
+      (r !== "material" || me.perms.pipelines !== "none" || me.perms.lager !== "none"),
   );
   const tab: ReiterKey = erlaubt.includes(tabRoh as ReiterKey)
     ? (tabRoh as ReiterKey)
@@ -137,6 +147,18 @@ export default async function VorgangPage({
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+
+  /*
+   * Gibt es eine Bedarfsliste, ist das Material-Gate gerechnet und darf
+   * nicht angeklickt werden.
+   */
+  const { count: bedarfZeilen } =
+    tab === "ueberblick"
+      ? await supabase
+          .from("vorgang_bedarf")
+          .select("id", { count: "exact", head: true })
+          .eq("vorgang_id", id)
+      : { count: 0 };
 
   return (
     <>
@@ -235,6 +257,7 @@ export default async function VorgangPage({
           termine={termine}
           team={(team ?? []) as { id: string; name: string }[]}
           darfSchreiben={darfSchreiben}
+          materialBerechnet={(bedarfZeilen ?? 0) > 0}
           angebotVersendet={Boolean(versand?.data?.angebot_versendet_am)}
           termin={
             einsatz
@@ -265,6 +288,14 @@ export default async function VorgangPage({
         />
       ) : null}
 
+      {tab === "material" ? (
+        <MaterialReiter
+          id={id}
+          companyId={me.companyId}
+          darfSchreiben={darfSchreiben || me.perms.lager === "write"}
+        />
+      ) : null}
+
       {tab === "kunde" ? <KundeReiter id={id} kundeId={kopf.kundeId} crm={me.perms.crm} /> : null}
 
       {tab === "kommunikation" ? (
@@ -288,6 +319,7 @@ const LABEL: Record<ReiterKey, string> = {
   ueberblick: "Überblick",
   aufnahme: "Aufnahme",
   angebot: "Angebot",
+  material: "Material",
   kunde: "Kunde",
   kommunikation: "Gespräch",
   belege: "Belege",
@@ -316,6 +348,7 @@ function Ueberblick({
   termine,
   team,
   darfSchreiben,
+  materialBerechnet,
   angebotVersendet,
   termin,
 }: {
@@ -326,6 +359,7 @@ function Ueberblick({
   termine: NonNullable<Detail>["termine"];
   team: { id: string; name: string }[];
   darfSchreiben: boolean;
+  materialBerechnet: boolean;
   angebotVersendet: boolean;
   termin: { von: string; bis: string; personen: string[] } | null;
 }) {
@@ -346,7 +380,12 @@ function Ueberblick({
                 <Pill tone="done">alle Pflicht-Gates durch</Pill>
               )}
             </div>
-            <GateAmpel vorgangId={kopf.id} gates={gates} gesperrt={!darfSchreiben} />
+            <GateAmpel
+              vorgangId={kopf.id}
+              gates={gates}
+              gesperrt={!darfSchreiben}
+              berechnet={materialBerechnet ? ["material"] : []}
+            />
           </section>
         ) : null}
 
@@ -398,6 +437,75 @@ function Ueberblick({
           />
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- MATERIAL */
+
+async function MaterialReiter({
+  id,
+  companyId,
+  darfSchreiben,
+}: {
+  id: string;
+  companyId: string;
+  darfSchreiben: boolean;
+}) {
+  const supabase = await createClient();
+  const [liste, stand, { data: artikel }] = await Promise.all([
+    bedarfsListe(supabase, { companyId, vorgangId: id }),
+    seriennummern(supabase, id),
+    /*
+     * Kleinmaterial fehlt in der Auswahl mit Absicht: Schrauben werden
+     * nicht gebucht, sie stecken in der Pauschale. Wer sie hier
+     * aufnehmen könnte, erzeugte eine Zeile, die nie gedeckt wird.
+     */
+    supabase
+      .from("article")
+      .select("id, sku, name, unit")
+      .eq("active", true)
+      .neq("typ", "nicht_bestandsgefuehrt")
+      .order("name")
+      .limit(600),
+  ]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Bedarf
+        vorgangId={id}
+        streng={liste.streng}
+        montageAb={liste.montageAb}
+        darfSchreiben={darfSchreiben}
+        zeilen={liste.zeilen.map((z) => ({
+          id: z.id,
+          sku: z.sku,
+          bezeichnung: z.bezeichnung,
+          menge: z.menge,
+          einheit: z.einheit,
+          herkunft: z.herkunft,
+          status: z.status,
+          aufVorgang: z.aufVorgang,
+          imLager: z.imLager,
+          bestellt: z.bestellt,
+          bestellungen: z.bestellungen,
+          liefertermin: z.liefertermin,
+          bereitgestellt: z.bereitgestellt,
+        }))}
+        artikel={((artikel ?? []) as unknown as {
+          id: string;
+          sku: string;
+          name: string;
+          unit: string;
+        }[]).map((a) => ({
+          id: a.id,
+          sku: a.sku,
+          name: a.name,
+          einheit: a.unit,
+        }))}
+      />
+
+      <Seriennummern vorgangId={id} stand={stand} darfSchreiben={darfSchreiben} />
     </div>
   );
 }

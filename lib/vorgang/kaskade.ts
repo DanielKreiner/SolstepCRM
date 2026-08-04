@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { anzahlung, summen } from "@/lib/vorgang/modell";
+import { bedarfVorbefuellen } from "@/lib/material/bedarf";
 
 /**
  * Die Annahme-Kaskade — an einer Stelle.
@@ -201,6 +202,16 @@ export async function kaskadeAusloesen(
     });
   }
 
+  /*
+   * Die Bedarfsliste — das, was tatsächlich gebraucht wird. Die
+   * Materialliste oben ist ein Beleg, das hier ist die Arbeitsgrundlage:
+   * Pakete aufgelöst, Pauschalen aussen vor, ab jetzt frei bearbeitbar.
+   */
+  const bedarf = await bedarfVorbefuellen(supabase, {
+    companyId,
+    vorgangId: d.vorgangId,
+  });
+
   /* --------------------------------------------------- 5. GATES */
   const { data: vorlagen } = await supabase
     .from("gate_template")
@@ -275,6 +286,7 @@ export async function kaskadeAusloesen(
     material.length > 0
       ? `Materialbedarf über ${material.length} Positionen, ${fmt(s.materialEk)} Einkauf.`
       : "Kein Material im Auftrag.",
+    bedarf.zeilen > 0 ? `Bedarfsliste mit ${bedarf.zeilen} Zeilen vorbefüllt.` : "",
     `${gates.length} Gates angelegt.`,
     `Soll: ${s.stunden.toLocaleString("de-AT")} h und ${fmt(s.materialEk)} Material.`,
     d.wunschZeitraum ? `Wunschzeitraum ${d.wunschZeitraum}.` : "",

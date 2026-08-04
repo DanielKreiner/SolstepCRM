@@ -508,6 +508,28 @@ export async function gateSetzen(
     };
   }
 
+  /*
+   * Das Material-Gate wird gerechnet, sobald es eine Bedarfsliste gibt.
+   * Von Hand gesetzt hiesse: jemand erklärt Material für vorhanden, das
+   * niemand bestellt hat — und am Montagetag steht das Team vor einem
+   * leeren Bus. Ohne Liste bleibt es von Hand setzbar; ein reines
+   * Pauschalangebot braucht keine Stückliste.
+   */
+  if ((g.key as string) === "material") {
+    const { count } = await supabase
+      .from("vorgang_bedarf")
+      .select("id", { count: "exact", head: true })
+      .eq("vorgang_id", d.vorgangId);
+
+    if ((count ?? 0) > 0) {
+      return {
+        error:
+          "Das Material-Gate ergibt sich aus der Bedarfsliste und lässt sich nicht von Hand setzen.",
+        ok: null,
+      };
+    }
+  }
+
   const z1 = { me };
 
   const neu: GateStatus = d.status ?? naechsterGateStatus(g.status as GateStatus);

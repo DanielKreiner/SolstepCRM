@@ -132,7 +132,7 @@ export async function positionAusArtikel(
   const { data: a } = await supabase
     .from("article")
     .select(
-      "id, sku, name, unit, purchase_price, sale_price, vat_rate, description, image_url, kalk_stunden_pro_einheit, ist_material",
+      "id, sku, name, unit, purchase_price, sale_price, vat_rate, description, image_url, kalk_stunden_pro_einheit, ist_material, ist_paket",
     )
     .eq("id", d.articleId)
     .maybeSingle();
@@ -166,6 +166,16 @@ export async function positionAusArtikel(
     kalk_ek: a.purchase_price,
     kalk_stunden: a.kalk_stunden_pro_einheit,
     ist_material: (a.ist_material as boolean | null) ?? true,
+    /*
+     * Der Positionstyp kommt aus dem Artikel, nicht aus einer Auswahl im
+     * Dialog: wer ein Paket anklickt, meint ein Paket. Beim Annehmen wird
+     * daraus die Stückliste — auf der Rechnung bleibt es eine Zeile.
+     */
+    pos_typ: a.ist_paket
+      ? "paket"
+      : (a.ist_material as boolean | null) === false
+        ? "leistung"
+        : "material",
     bild_url: a.image_url,
     beschreibung: a.description,
   });
