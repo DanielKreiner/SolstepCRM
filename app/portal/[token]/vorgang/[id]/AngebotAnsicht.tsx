@@ -43,6 +43,8 @@ export function AngebotAnsicht({
 }) {
   const [gewaehlt, setGewaehlt] = useState<Record<string, boolean>>({});
   const [upgrades, setUpgrades] = useState<Record<string, boolean>>({});
+  /* Kategorie-Upgrade: je Position das gewählte Produkt. */
+  const [wahl, setWahl] = useState<Record<string, string>>({});
   const [offen, setOffen] = useState<string | null>(null);
 
   const preis = useMemo(() => {
@@ -67,9 +69,16 @@ export function AngebotAnsicht({
    * das passiert erst serverseitig bei der Annahme, damit die Zahl im
    * Angebot und die im Auftrag dieselbe Herkunft haben.
    */
-  const upgradeAufpreis = positionen
-    .filter((p) => upgrades[p.id] && p.upgradeAufpreis !== null)
-    .reduce((s, p) => s + (p.upgradeAufpreis ?? 0), 0);
+  const upgradeAufpreis =
+    positionen
+      .filter((p) => upgrades[p.id] && p.upgradeAufpreis !== null)
+      .reduce((s, p) => s + (p.upgradeAufpreis ?? 0), 0) +
+    positionen.reduce((s, p) => {
+      const gewaehltId = wahl[p.id];
+      if (!gewaehltId) return s;
+      const k = p.upgradeAuswahl.find((x) => x.id === gewaehltId);
+      return s + (k?.aufpreis ?? 0);
+    }, 0);
 
   const gesamt = Math.round((preis.gesamt + upgradeAufpreis) * 100) / 100;
 
@@ -88,6 +97,17 @@ export function AngebotAnsicht({
         value={Object.entries(gewaehlt)
           .filter(([, an]) => an)
           .map(([id]) => id)
+          .join(",")}
+      />
+      {/* Kategorie-Upgrades als „positionId:artikelId" — die Position
+          allein sagt nicht, welches Produkt der Kunde wollte. */}
+      <input
+        type="hidden"
+        form={formularId}
+        name="kategorieUpgrades"
+        value={Object.entries(wahl)
+          .filter(([, aid]) => aid)
+          .map(([pid, aid]) => `${pid}:${aid}`)
           .join(",")}
       />
       <input
@@ -162,6 +182,10 @@ export function AngebotAnsicht({
                     preisZeigen={!g.einzelpreiseVerstecken}
                     offen={offen === p.id}
                     umschalten={() => setOffen(offen === p.id ? null : p.id)}
+                    kategorieWahl={wahl[p.id] ?? ""}
+                    setKategorieWahl={(id) =>
+                      setWahl((w) => ({ ...w, [p.id]: id }))
+                    }
                     upgradeAn={upgrades[p.id] === true}
                     upgradeUmschalten={() =>
                       setUpgrades((u) => ({ ...u, [p.id]: !u[p.id] }))
@@ -207,6 +231,8 @@ export function AngebotAnsicht({
                 preisZeigen
                 offen={offen === p.id}
                 umschalten={() => setOffen(offen === p.id ? null : p.id)}
+                kategorieWahl={wahl[p.id] ?? ""}
+                setKategorieWahl={(id) => setWahl((w) => ({ ...w, [p.id]: id }))}
                 upgradeAn={upgrades[p.id] === true}
                 upgradeUmschalten={() =>
                   setUpgrades((u) => ({ ...u, [p.id]: !u[p.id] }))
@@ -304,6 +330,8 @@ function Produkt({
   umschalten,
   upgradeAn,
   upgradeUmschalten,
+  kategorieWahl,
+  setKategorieWahl,
 }: {
   position: PortalPosition;
   preisZeigen: boolean;
@@ -311,6 +339,8 @@ function Produkt({
   umschalten: () => void;
   upgradeAn: boolean;
   upgradeUmschalten: () => void;
+  kategorieWahl: string;
+  setKategorieWahl: (id: string) => void;
 }) {
   const p = position;
   const hatDetails = Boolean(p.beschreibung || p.techSpecs?.length || p.datenblattUrl);
@@ -403,6 +433,37 @@ function Produkt({
         am Ende der Seite. Wer über die Batterie liest, entscheidet dort,
         ob es die grössere sein soll.
       */}
+      {/*
+        Kategorie-Upgrade: der Betrieb gibt die Kategorie vor, das
+        Produkt sucht der Kunde selbst aus. Als Liste und nicht als
+        Auswahlfeld — er soll die Preise nebeneinander sehen.
+      */}
+      {p.upgradeAuswahl.length > 0 ? (
+        <div className="mx-2 mb-2 rounded-card bg-panel p-3">
+          <p className="mb-2 text-[12.5px] font-semibold">
+            {p.upgradeText ?? "Grösser möglich"}
+          </p>
+          <div className="flex flex-col gap-[6px]">
+            <Wahlzeile
+              an={!kategorieWahl}
+              label="So wie angeboten"
+              aufpreis={null}
+              onClick={() => setKategorieWahl("")}
+            />
+            {p.upgradeAuswahl.map((k) => (
+              <Wahlzeile
+                key={k.id}
+                an={kategorieWahl === k.id}
+                label={k.name}
+                aufpreis={k.aufpreis}
+                bildUrl={k.bildUrl}
+                onClick={() => setKategorieWahl(k.id)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {p.upgradeAufpreis !== null ? (
         <label
           className={[
@@ -506,5 +567,57 @@ function Zeile({ label, wert }: { label: string; wert: string }) {
       <dt className="text-muted">{label}</dt>
       <dd className="num font-medium">{wert}</dd>
     </div>
+  );
+}
+
+/** Eine Wahlmöglichkeit beim Kategorie-Upgrade. */
+function Wahlzeile({
+  an,
+  label,
+  aufpreis,
+  bildUrl,
+  onClick,
+}: {
+  an: boolean;
+  label: string;
+  aufpreis: number | null;
+  bildUrl?: string | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={an}
+      className={[
+        "flex w-full cursor-pointer items-center gap-3 rounded-input border px-3 py-2 text-left text-[12.5px] transition-colors",
+        an ? "border-accent bg-accent-sunk" : "border-line bg-surface",
+      ].join(" ")}
+    >
+      <span
+        aria-hidden
+        className={[
+          "grid h-[16px] w-[16px] shrink-0 place-items-center rounded-pill border-2",
+          an ? "border-accent bg-accent" : "border-line-strong",
+        ].join(" ")}
+      >
+        {an ? <span className="h-[6px] w-[6px] rounded-pill bg-white" /> : null}
+      </span>
+      {bildUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={bildUrl}
+          alt=""
+          loading="lazy"
+          className="h-[28px] w-[28px] shrink-0 rounded-[7px] bg-panel object-contain"
+        />
+      ) : null}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {aufpreis !== null ? (
+        <span className="num shrink-0 font-semibold text-accent-ink">
+          + {eur(aufpreis)}
+        </span>
+      ) : null}
+    </button>
   );
 }

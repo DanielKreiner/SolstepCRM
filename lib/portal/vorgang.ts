@@ -67,6 +67,16 @@ export type PortalPosition = {
   upgradeName: string | null;
   upgradeAufpreis: number | null;
   upgradeText: string | null;
+  /**
+   * Bei einem Kategorie-Upgrade wählt der Kunde selbst aus mehreren
+   * Produkten. Leer heisst: es gibt keines oder es lohnt keines.
+   */
+  upgradeAuswahl: {
+    id: string;
+    name: string;
+    aufpreis: number;
+    bildUrl: string | null;
+  }[];
   bildUrl: string | null;
   beschreibung: string | null;
   datenblattUrl: string | null;
@@ -216,7 +226,7 @@ export async function portalVorgangDetail(
     .select(
       `id, gruppe_id, bezeichnung, menge, einheit, ep_netto, ust_satz,
        rabatt_prozent, optional, kunden_auswahl,
-       upgrade_article_id, upgrade_aufpreis, upgrade_text,
+       upgrade_article_id, upgrade_kategorie, upgrade_aufpreis, upgrade_text,
        bild_url, beschreibung, sort,
        artikel:article_id ( manufacturer, category, datasheet_url, tech_specs ),
        upgradeZiel:upgrade_article_id ( name )`,
@@ -263,6 +273,53 @@ export async function portalVorgangDetail(
       .eq("id", vorgangId)
       .is("angebot_gesehen_am", null)
       .then(() => undefined);
+  }
+
+  /*
+   * Kandidaten für Kategorie-Upgrades.
+   *
+   * Der Betrieb legt am Angebot nur die Kategorie fest — welches Produkt
+   * es wird, entscheidet der Kunde. Gezeigt wird, was teurer ist als das
+   * angebotene: ein „Upgrade" nach unten ist keines, und eines zum
+   * selben Preis auch nicht.
+   */
+  const kategorien = [
+    ...new Set(
+      ((positionen ?? []) as unknown as PosRoh[])
+        .map((p) => p.upgrade_kategorie)
+        .filter((k): k is string => Boolean(k)),
+    ),
+  ];
+
+  const { data: kandidaten } = kategorien.length
+    ? await admin
+        .from("article")
+        .select("id, name, category, sale_price, image_url")
+        .eq("company_id", session.companyId)
+        .eq("active", true)
+        .in("category", kategorien)
+        .order("sale_price")
+    : { data: [] };
+
+  const jeKategorie = new Map<
+    string,
+    { id: string; name: string; preis: number; bildUrl: string | null }[]
+  >();
+  for (const a of (kandidaten ?? []) as unknown as {
+    id: string;
+    name: string;
+    category: string;
+    sale_price: string;
+    image_url: string | null;
+  }[]) {
+    const l = jeKategorie.get(a.category) ?? [];
+    l.push({
+      id: a.id,
+      name: a.name,
+      preis: Number(a.sale_price),
+      bildUrl: a.image_url,
+    });
+    jeKategorie.set(a.category, l);
   }
 
   return {
@@ -338,6 +395,22 @@ export async function portalVorgangDetail(
       upgradeAufpreis:
         p.upgrade_aufpreis === null ? null : Number(p.upgrade_aufpreis),
       upgradeText: p.upgrade_text,
+      upgradeAuswahl: p.upgrade_kategorie
+        ? (jeKategorie.get(p.upgrade_kategorie) ?? [])
+            /*
+             * Der Aufpreis gilt je Stück und wird mit der Menge
+             * multipliziert — sonst wäre ein Modul-Upgrade bei zwanzig
+             * Modulen um den Faktor zwanzig zu billig ausgewiesen.
+             */
+            .filter((k) => k.preis > Number(p.ep_netto))
+            .map((k) => ({
+              id: k.id,
+              name: k.name,
+              aufpreis:
+                Math.round((k.preis - Number(p.ep_netto)) * Number(p.menge) * 100) / 100,
+              bildUrl: k.bildUrl,
+            }))
+        : [],
       datenblattUrl: p.artikel?.datasheet_url ?? null,
       techSpecs: p.artikel?.tech_specs ?? null,
       bezeichnung: p.bezeichnung,
@@ -389,7 +462,11 @@ export async function portalVorgangAnnehmen(
   vorgangId: string,
   name: string,
   ip: string | null,
-  auswahl: { optionen: string[]; upgrades: string[] } = {
+  auswahl: {
+    optionen: string[];
+    upgrades: string[];
+    kategorieUpgrades?: string[];
+  } = {
     optionen: [],
     upgrades: [],
   },
@@ -418,12 +495,24 @@ export async function portalVorgangAnnehmen(
    */
   const { data: optionen } = await admin
     .from("vorgang_position")
-    .select("id, upgrade_article_id, upgrade_aufpreis, menge, ep_netto")
+    .select("id, upgrade_article_id, upgrade_kategorie, upgrade_aufpreis, menge, ep_netto")
     .eq("vorgang_id", vorgangId)
     .is("dokument_id", null);
 
   const gewaehlt = new Set(auswahl.optionen);
   const upgradeWunsch = new Set(auswahl.upgrades);
+
+  /*
+   * Kategorie-Upgrades: der Kunde hat ein konkretes Produkt gewählt.
+   * Geprüft wird beim Anwenden gegen die Kategorie der Position — ein
+   * mitgeschickter Artikel aus einer anderen Kategorie wäre sonst eine
+   * Preisänderung von aussen.
+   */
+  const kategorieWahl = new Map<string, string>();
+  for (const eintrag of auswahl.kategorieUpgrades ?? []) {
+    const [pid, aid] = eintrag.split(":");
+    if (pid && aid) kategorieWahl.set(pid, aid);
+  }
 
   for (const p of optionen ?? []) {
     const id = p.id as string;
@@ -450,6 +539,44 @@ export async function portalVorgangAnnehmen(
      * brutto und stand im Angebot — der Nettoaufschlag folgt daraus, mit
      * demselben Steuersatz, den die Position trägt.
      */
+    const gewaehlterArtikel = kategorieWahl.get(id);
+    if (gewaehlterArtikel && p.upgrade_kategorie) {
+      const { data: ziel } = await admin
+        .from("article")
+        .select(
+          "id, name, category, sale_price, purchase_price, image_url, description, unit",
+        )
+        .eq("id", gewaehlterArtikel)
+        .eq("company_id", session.companyId)
+        .maybeSingle();
+
+      /*
+       * Nur aus der vorgesehenen Kategorie und nur teurer. Sonst könnte
+       * ein manipuliertes Formular die Position auf ein billigeres
+       * Produkt setzen und den Preis drücken.
+       */
+      if (
+        ziel &&
+        ziel.category === p.upgrade_kategorie &&
+        Number(ziel.sale_price) > Number(p.ep_netto)
+      ) {
+        await admin
+          .from("vorgang_position")
+          .update({
+            article_id: ziel.id,
+            bezeichnung: ziel.name as string,
+            ep_netto: ziel.sale_price,
+            kalk_ek: ziel.purchase_price,
+            einheit: (ziel.unit as string) ?? "Stk",
+            bild_url: ziel.image_url,
+            beschreibung: ziel.description,
+            kunden_auswahl: "upgrade",
+          })
+          .eq("id", id)
+          .eq("vorgang_id", vorgangId);
+      }
+    }
+
     if (upgradeWunsch.has(id) && p.upgrade_article_id && p.upgrade_aufpreis) {
       const { data: ziel } = await admin
         .from("article")
@@ -590,6 +717,7 @@ type PosRoh = {
   optional: boolean;
   kunden_auswahl: string;
   upgrade_article_id: string | null;
+  upgrade_kategorie: string | null;
   upgrade_aufpreis: string | null;
   upgrade_text: string | null;
   bild_url: string | null;

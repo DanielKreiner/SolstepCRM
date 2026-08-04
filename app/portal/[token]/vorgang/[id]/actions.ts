@@ -66,6 +66,8 @@ export async function vorgangAnnehmen(
     {
       optionen: ids(formData.get("gewaehlteOptionen")),
       upgrades: ids(formData.get("gewaehlteUpgrades")),
+      /* „positionId:artikelId" — welches Produkt der Kunde gewählt hat. */
+      kategorieUpgrades: ids(formData.get("kategorieUpgrades")),
     },
   );
 
