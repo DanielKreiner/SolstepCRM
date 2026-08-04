@@ -37,6 +37,14 @@ export type VorgangKopf = {
   altNummern: string | null;
   /** null, wenn die Rolle keine Beträge sehen darf. */
   angebotswertNetto: number | null;
+  /* Angebotsrahmen — Rabatt und Lieferung nur für Rollen mit Betragsrecht. */
+  ustSatz: number;
+  rabattProzent: number;
+  lieferungNetto: number;
+  angebotTitel: string | null;
+  angebotEinleitung: string | null;
+  angebotAbschluss: string | null;
+  angebotGueltigBis: string | null;
   auftragswertNetto: number | null;
   sollStunden: number | null;
   sollMaterialkosten: number | null;
@@ -80,8 +88,21 @@ export type DokumentZeile = {
   createdAt: string;
 };
 
+export type GruppeZeile = {
+  id: string;
+  name: string;
+  beschreibung: string | null;
+  sort: number;
+  /** Überschreibt die Summe der enthaltenen Positionen. */
+  paketPreis: number | null;
+  einzelpreiseVerstecken: boolean;
+};
+
 export type PositionZeile = {
   id: string;
+  gruppeId: string | null;
+  optional: boolean;
+  rabattProzent: number;
   sort: number;
   articleId: string | null;
   bezeichnung: string;
@@ -112,6 +133,7 @@ export type VorgangDetail = {
   events: EventZeile[];
   dokumente: DokumentZeile[];
   positionen: PositionZeile[];
+  gruppen: GruppeZeile[];
   termine: TerminZeile[];
 };
 
@@ -130,7 +152,8 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
     .select(
       `id, number, phase, phase_seit, customer_id, adresse, plz, ort, zaehlpunkt,
        kwp, speicher_kwh, anzahlung_prozent, verloren_grund, verloren_notiz,
-       zustaendig_user_id, wiedervorlage_am, alt_nummern,
+       zustaendig_user_id, wiedervorlage_am, alt_nummern, ust_satz,
+       angebot_titel, angebot_einleitung, angebot_abschluss, angebot_gueltig_bis,
        customer:customer_id ( id, name, contact_person, email, phone ),
        zustaendig:zustaendig_user_id ( name )`,
     )
@@ -139,11 +162,19 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
 
   if (!v) return null;
 
-  const [{ data: wert }, { data: gates }, { data: events }, { data: dokumente }, { data: positionen }, { data: termine }] =
+  const [
+    { data: wert },
+    { data: gates },
+    { data: events },
+    { data: dokumente },
+    { data: positionen },
+    { data: gruppen },
+    { data: termine },
+  ] =
     await Promise.all([
       supabase
         .from("v_vorgang_wert")
-        .select("angebotswert_netto, auftragswert_netto, soll_stunden, soll_materialkosten")
+        .select("angebotswert_netto, auftragswert_netto, soll_stunden, soll_materialkosten, rabatt_prozent, lieferung_netto")
         .eq("vorgang_id", id)
         .maybeSingle(),
       supabase
@@ -169,8 +200,14 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
       supabase
         .from("vorgang_position")
         .select(
-          "id, sort, article_id, bezeichnung, menge, einheit, ep_netto, ust_satz, kalk_stunden, kalk_ek, ist_material, bild_url, beschreibung",
+          "id, sort, gruppe_id, optional, rabatt_prozent, article_id, bezeichnung, menge, einheit, ep_netto, ust_satz, kalk_stunden, kalk_ek, ist_material, bild_url, beschreibung",
         )
+        .eq("vorgang_id", id)
+        .is("dokument_id", null)
+        .order("sort"),
+      supabase
+        .from("vorgang_gruppe")
+        .select("id, name, beschreibung, sort, paket_preis, einzelpreise_verstecken")
         .eq("vorgang_id", id)
         .is("dokument_id", null)
         .order("sort"),
@@ -217,6 +254,13 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
       wiedervorlageAm: (v.wiedervorlage_am as string | null) ?? null,
       altNummern: (v.alt_nummern as string | null) ?? null,
       angebotswertNetto: zahl(wert?.angebotswert_netto),
+      ustSatz: Number(v.ust_satz ?? 20),
+      rabattProzent: Number(wert?.rabatt_prozent ?? 0),
+      lieferungNetto: Number(wert?.lieferung_netto ?? 0),
+      angebotTitel: (v.angebot_titel as string | null) ?? null,
+      angebotEinleitung: (v.angebot_einleitung as string | null) ?? null,
+      angebotAbschluss: (v.angebot_abschluss as string | null) ?? null,
+      angebotGueltigBis: (v.angebot_gueltig_bis as string | null) ?? null,
       auftragswertNetto: zahl(wert?.auftragswert_netto),
       sollStunden: zahl(wert?.soll_stunden),
       sollMaterialkosten: zahl(wert?.soll_materialkosten),
@@ -263,6 +307,9 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
     })),
     positionen: ((positionen ?? []) as unknown as PositionRoh[]).map((p) => ({
       id: p.id,
+      gruppeId: p.gruppe_id,
+      optional: p.optional,
+      rabattProzent: Number(p.rabatt_prozent ?? 0),
       sort: p.sort,
       articleId: p.article_id,
       bezeichnung: p.bezeichnung,
@@ -275,6 +322,14 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
       istMaterial: p.ist_material,
       bildUrl: p.bild_url,
       beschreibung: p.beschreibung,
+    })),
+    gruppen: ((gruppen ?? []) as unknown as GruppeRoh[]).map((g) => ({
+      id: g.id,
+      name: g.name,
+      beschreibung: g.beschreibung,
+      sort: g.sort,
+      paketPreis: zahl(g.paket_preis),
+      einzelpreiseVerstecken: g.einzelpreise_verstecken,
     })),
     termine: ((termine ?? []) as unknown as TerminRoh[]).map((t) => ({
       id: t.id,
@@ -333,9 +388,21 @@ type DokumentRoh = {
   created_at: string;
 };
 
+type GruppeRoh = {
+  id: string;
+  name: string;
+  beschreibung: string | null;
+  sort: number;
+  paket_preis: string | null;
+  einzelpreise_verstecken: boolean;
+};
+
 type PositionRoh = {
   id: string;
   sort: number;
+  gruppe_id: string | null;
+  optional: boolean;
+  rabatt_prozent: string | null;
   article_id: string | null;
   bezeichnung: string;
   menge: string;

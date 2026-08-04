@@ -47,7 +47,7 @@ export default async function VorgangPage({
   const daten = await vorgangDetail(id);
   if (!daten) notFound();
 
-  const { kopf, gates, events, positionen, termine, dokumente } = daten;
+  const { kopf, gates, events, positionen, gruppen, termine, dokumente } = daten;
   const darfSchreiben = me.perms.pipelines === "write";
   const darfAngebote = me.perms.angebote !== "none";
   const darfRechnungen = me.perms.rechnungen !== "none";
@@ -258,6 +258,12 @@ export default async function VorgangPage({
             <Positionen
               vorgangId={kopf.id}
               positionen={positionen}
+              gruppen={gruppen}
+              rahmen={{
+                ustSatz: kopf.ustSatz,
+                rabattProzent: kopf.rabattProzent,
+                lieferungNetto: kopf.lieferungNetto,
+              }}
               gesperrt={editorGesperrt}
               gesperrtGrund={
                 kopf.phase === "verloren"
