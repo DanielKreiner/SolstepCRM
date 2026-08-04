@@ -30,7 +30,26 @@ export type ArtikelWerte = {
   vatRate: number;
   active: boolean;
   stock: number;
+  typ: string;
+  seriennummernpflichtig: boolean;
+  ean: string | null;
+  istPaket: boolean;
 };
+
+/*
+ * Der Typ entscheidet über den Materialfluss, damit der Monteur es nicht
+ * muss. Die Texte sagen deshalb, was passiert, nicht wie es heisst.
+ */
+const TYPEN = [
+  { wert: "stueckliste", text: "Stückliste — steht auf der Beladeliste" },
+  { wert: "vanstock", text: "Van-Stock — liegt im Fahrzeug, wird gemeldet" },
+  { wert: "nicht_bestandsgefuehrt", text: "Kleinmaterial — wird nie gebucht" },
+];
+
+const JA_NEIN = [
+  { wert: "nein", text: "nein" },
+  { wert: "ja", text: "ja" },
+];
 
 const EINHEITEN = [
   { wert: "Stk", text: "Stück" },
@@ -128,6 +147,38 @@ function Felder({ werte }: { werte?: ArtikelWerte | undefined }) {
         label="Steuersatz"
         wert={String(werte?.vatRate ?? 20)}
         optionen={STEUER}
+      />
+      <Auswahl
+        id={`${p}-typ`}
+        name="typ"
+        label="Materialfluss"
+        wert={werte?.typ ?? "stueckliste"}
+        optionen={TYPEN}
+        hinweis="Kleinmaterial läuft über die Pauschale, nicht über den Bestand"
+      />
+      <Eingabe
+        id={`${p}-ean`}
+        name="ean"
+        label="EAN / Barcode"
+        mono
+        hinweis="ermöglicht den Scan beim Beladen"
+        wert={werte?.ean ?? ""}
+      />
+      <Auswahl
+        id={`${p}-serie`}
+        name="seriennummernpflichtig"
+        label="Seriennummer erfassen"
+        wert={werte?.seriennummernpflichtig ? "ja" : "nein"}
+        optionen={JA_NEIN}
+        hinweis="Wechselrichter und Speicher: ja"
+      />
+      <Auswahl
+        id={`${p}-paket`}
+        name="istPaket"
+        label="Paket mit Stückliste"
+        wert={werte?.istPaket ? "ja" : "nein"}
+        optionen={JA_NEIN}
+        hinweis="eine Zeile im Angebot, viele Teile im Lager"
       />
     </>
   );

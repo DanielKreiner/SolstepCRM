@@ -7,6 +7,7 @@ const LABEL: Record<QueueItem["kind"], string> = {
   time_start: "Einstempeln",
   time_stop: "Ausstempeln",
   stock_move: "Material",
+  material: "Material",
 };
 
 /*

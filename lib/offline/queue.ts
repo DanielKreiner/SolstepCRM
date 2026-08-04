@@ -14,7 +14,11 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
  * alle Buchungen eines Tages auf den Zeitpunkt des Wiedereinbuchens.
  */
 
-export type QueueKind = "time_start" | "time_stop" | "stock_move";
+export type QueueKind =
+  | "time_start"
+  | "time_stop"
+  | "stock_move"
+  | "material";
 
 export type QueueItem = {
   id: string;

@@ -86,10 +86,11 @@ export default async function LagerPage({
       )
       .order("created_at", { ascending: false })
       .limit(60),
+    /* Offene Bestellungen im neuen Bestellwesen — purchase_order ist Altbestand. */
     supabase
-      .from("purchase_order")
+      .from("bestellung")
       .select("id", { count: "exact", head: true })
-      .not("status", "in", "(received,cancelled)"),
+      .in("status", ["entwurf", "bestellt", "teilgeliefert"]),
   ]);
 
   const rows = (articles ?? []) as unknown as Article[];
@@ -132,7 +133,7 @@ export default async function LagerPage({
         actions={
           <>
             {me.perms.lager === "write" ? <ArtikelAnlegen /> : null}
-            <LinkButton href="/lager/bestellungen" variant="ghost">
+            <LinkButton href="/bestellungen" variant="ghost">
               Bestellvorschlag
             </LinkButton>
             {unterMindest.length > 0 ? (
@@ -164,7 +165,7 @@ export default async function LagerPage({
           pille={unterMindest.length > 0 ? "nachbestellen" : "Bestand gedeckt"}
           ton={unterMindest.length > 0 ? "kritisch" : "gut"}
           notiz="Vorschlag im Reiter Bestellungen"
-          href="/lager/bestellungen"
+          href="/bestellungen"
         />
         <KpiKarte
           label="Reserviert"
@@ -176,7 +177,7 @@ export default async function LagerPage({
           label="Offene Bestellungen"
           wert={offeneBestellungen ?? 0}
           notiz="bestellt, noch nicht eingetroffen"
-          href="/lager/bestellungen"
+          href="/bestellungen"
         />
       </div>
 
@@ -193,7 +194,7 @@ export default async function LagerPage({
           {
             key: "bestellungen",
             label: "Bestellungen",
-            href: "/lager/bestellungen",
+            href: "/bestellungen",
             anzahl: offeneBestellungen ?? 0,
           },
         ]}
@@ -220,7 +221,7 @@ export default async function LagerPage({
               .join(" · ")}
           </span>
           <Link
-            href="/lager/bestellungen"
+            href="/bestellungen"
             className="ml-auto text-[12.5px] font-medium"
           >
             Zum Bestellvorschlag

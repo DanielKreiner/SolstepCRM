@@ -465,11 +465,25 @@ function Rund({
   );
 }
 
-function Beschriftung({ children }: { children: React.ReactNode }) {
+/*
+ * Die Beschriftung ist ein echtes <label> und kein <p>: ohne die
+ * Verbindung zum Feld hat das Feld gar keinen zugänglichen Namen — für
+ * Screenreader wie für jeden Test, der es über sein Label sucht.
+ */
+function Beschriftung({
+  fuer,
+  children,
+}: {
+  fuer?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <p className="mt-3 mb-[6px] text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
+    <label
+      {...(fuer ? { htmlFor: fuer } : {})}
+      className="mt-3 mb-[6px] block text-[11px] font-semibold tracking-[0.08em] text-muted uppercase"
+    >
       {children}
-    </p>
+    </label>
   );
 }
 
@@ -710,8 +724,9 @@ function EigenesFenster({
           Positionsdatensatz gibt es keine Spalte dafür. Ein Feld, dessen
           Inhalt beim Speichern verschwindet, ist schlimmer als keines.
         */}
-        <Beschriftung>Einheit</Beschriftung>
+        <Beschriftung fuer="eigen-einheit">Einheit</Beschriftung>
         <input
+          id="eigen-einheit"
           name="einheit"
           list="einheiten-liste"
           defaultValue="Stk"
@@ -723,16 +738,18 @@ function EigenesFenster({
           ))}
         </datalist>
 
-        <Beschriftung>Bezeichnung — Pflicht</Beschriftung>
+        <Beschriftung fuer="eigen-bezeichnung">Bezeichnung — Pflicht</Beschriftung>
         <input
+          id="eigen-bezeichnung"
           name="bezeichnung"
           required
           placeholder="z. B. Gerüst Aufbau 2 Tage"
           className="w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
         />
 
-        <Beschriftung>Beschreibung — optional</Beschriftung>
+        <Beschriftung fuer="eigen-beschreibung">Beschreibung — optional</Beschriftung>
         <textarea
+          id="eigen-beschreibung"
           name="beschreibung"
           rows={3}
           placeholder="Erscheint beim Kunden unter der Position."
@@ -776,10 +793,12 @@ function Zahl({
   wert: string;
   schritt: string;
 }) {
+  const id = `zahl-${name}`;
   return (
     <div>
-      <Beschriftung>{label}</Beschriftung>
+      <Beschriftung fuer={id}>{label}</Beschriftung>
       <input
+        id={id}
         name={name}
         type="number"
         step={schritt}

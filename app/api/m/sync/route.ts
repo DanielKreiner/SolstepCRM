@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { entnahmeBuchen, rueckgabeBuchen } from "@/lib/material/buchen";
 import { createClient } from "@/lib/supabase/server";
 import { getMe } from "@/lib/session";
 
@@ -23,7 +24,7 @@ const PLAUSIBEL_MIN = 15;
 const schema = z.object({
   clientUuid: z.string().uuid(),
   clientTs: z.string().datetime(),
-  kind: z.enum(["time_start", "time_stop", "stock_move"]),
+  kind: z.enum(["time_start", "time_stop", "stock_move", "material"]),
   payload: z.record(z.string(), z.unknown()),
 });
 
@@ -35,6 +36,21 @@ const timeStart = z.object({
 
 const timeStop = z.object({
   entryId: z.string().uuid().nullable().optional(),
+});
+
+/*
+ * Materialbuchung aus der Beladeliste. Sie geht denselben Weg wie die
+ * Zeitbuchung — zuerst in die Warteschlange, dann zum Server: ein
+ * Monteur auf einem Dach ohne Netz soll abhaken können, ohne darüber
+ * nachzudenken (CLAUDE.md Abschnitt 8).
+ */
+const material = z.object({
+  vorgangId: z.string().uuid(),
+  artikelId: z.string().uuid(),
+  menge: z.coerce.number().positive(),
+  art: z.enum(["entnahme", "rueckgabe"]).default("entnahme"),
+  lagerortId: z.string().uuid().nullable().optional(),
+  einsatzId: z.string().uuid().nullable().optional(),
 });
 
 const stockMove = z.object({
@@ -121,6 +137,39 @@ export async function POST(request: Request) {
       );
     }
     return NextResponse.json({ ok: true, flagged });
+  }
+
+  if (kind === "material") {
+    const p = material.safeParse(payload);
+    if (!p.success) {
+      return NextResponse.json({ error: "Buchung unvollständig." }, { status: 400 });
+    }
+
+    const ergebnis =
+      p.data.art === "rueckgabe"
+        ? await rueckgabeBuchen(supabase, {
+            companyId: me.companyId,
+            userId: me.id,
+            vorgangId: p.data.vorgangId,
+            artikelId: p.data.artikelId,
+            menge: p.data.menge,
+            clientUuid,
+          })
+        : await entnahmeBuchen(supabase, {
+            companyId: me.companyId,
+            userId: me.id,
+            vorgangId: p.data.vorgangId,
+            artikelId: p.data.artikelId,
+            menge: p.data.menge,
+            vonLagerortId: p.data.lagerortId ?? null,
+            einsatzId: p.data.einsatzId ?? null,
+            clientUuid,
+          });
+
+    if (!ergebnis.ok) {
+      return NextResponse.json({ error: ergebnis.grund }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, flagged: false });
   }
 
   const p = stockMove.safeParse(payload);

@@ -45,6 +45,14 @@ const artikelSchema = z.object({
   purchasePrice: z.coerce.number().min(0).max(10000000).default(0),
   salePrice: z.coerce.number().min(0).max(10000000).default(0),
   vatRate: z.coerce.number().min(0).max(30).default(20),
+  /*
+   * Der Materialfluss. Steht am Artikel, damit ihn niemand auf der
+   * Baustelle entscheiden muss.
+   */
+  typ: z.enum(["stueckliste", "vanstock", "nicht_bestandsgefuehrt"]).default("stueckliste"),
+  ean: z.string().trim().max(40).optional().or(z.literal("")),
+  seriennummernpflichtig: z.enum(["ja", "nein"]).default("nein"),
+  istPaket: z.enum(["ja", "nein"]).default("nein"),
 });
 
 /**
@@ -91,6 +99,10 @@ export async function createArticle(
       sale_price: d.salePrice,
       vat_rate: d.vatRate,
       active: true,
+      typ: d.typ,
+      ean: leerZuNull(d.ean),
+      seriennummernpflichtig: d.seriennummernpflichtig === "ja",
+      ist_paket: d.istPaket === "ja",
     })
     .select("id, sku")
     .single();
@@ -139,6 +151,10 @@ export async function updateArticle(
       purchase_price: d.purchasePrice,
       sale_price: d.salePrice,
       vat_rate: d.vatRate,
+      typ: d.typ,
+      ean: leerZuNull(d.ean),
+      seriennummernpflichtig: d.seriennummernpflichtig === "ja",
+      ist_paket: d.istPaket === "ja",
     })
     .eq("id", id.data);
 
@@ -281,7 +297,7 @@ export async function saveSupplier(
 
   if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
 
-  revalidatePath("/lager/bestellungen");
+  revalidatePath("/bestellungen");
   return { error: null, ok: `${d.name} gespeichert.` };
 }
 
@@ -322,6 +338,157 @@ export async function saveArticleSupplier(
   if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
 
   revalidatePath(`/lager/${d.articleId}`);
-  revalidatePath("/lager/bestellungen");
+  revalidatePath("/bestellungen");
   return { error: null, ok: "Lieferantenpreis gespeichert." };
+}
+
+/* ------------------------------------------------------- STÜCKLISTEN */
+
+/**
+ * Ein Teil zur Stückliste eines Pakets hinzufügen.
+ *
+ * Das Paket ist die Verkaufszeile — „PV-Anlage 10 kWp komplett". Was
+ * dahinter steckt, interessiert den Kunden nicht, das Lager aber sehr:
+ * aus dieser Liste entsteht beim Annehmen der Bedarf.
+ */
+export async function stuecklisteHinzufuegen(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const parsed = z
+    .object({
+      paketId: z.string().uuid(),
+      artikelId: z.string().uuid(),
+      menge: z.coerce.number().gt(0, "Menge muss größer als null sein."),
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  if (d.paketId === d.artikelId) {
+    return { error: "Ein Paket kann sich nicht selbst enthalten.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("artikel_stueckliste").insert({
+    company_id: zugang.me.companyId,
+    paket_id: d.paketId,
+    artikel_id: d.artikelId,
+    menge: d.menge,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        error: "Der Artikel steht schon in der Stückliste. Ändere dort die Menge.",
+        ok: null,
+      };
+    }
+    return { error: `Fehlgeschlagen: ${error.message}`, ok: null };
+  }
+
+  revalidatePath(`/lager/${d.paketId}`);
+  return { error: null, ok: "Zur Stückliste hinzugefügt." };
+}
+
+export async function stuecklisteEntfernen(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const parsed = z
+    .object({ id: z.string().uuid(), paketId: z.string().uuid() })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "Eingabe fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("artikel_stueckliste")
+    .delete()
+    .eq("id", parsed.data.id);
+
+  if (error) return { error: `Fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath(`/lager/${parsed.data.paketId}`);
+  return { error: null, ok: "Aus der Stückliste entfernt." };
+}
+
+/* --------------------------------------------------------- VAN-STOCK */
+
+/**
+ * Min- und Sollmenge eines Artikels auf einem Fahrzeug.
+ *
+ * Ohne Mindestmenge gibt es keine Nachfüll-Liste — und ohne die merkt
+ * niemand, dass das Kabel alle ist, bevor er auf dem Dach steht.
+ */
+export async function vanstockRegel(
+  _prev: AktionsStatus,
+  formData: FormData,
+): Promise<AktionsStatus> {
+  const zugang = await darfSchreiben();
+  if (!zugang.ok) return zugang.status;
+
+  const parsed = z
+    .object({
+      artikelId: z.string().uuid(),
+      lagerortId: z.string().uuid(),
+      min: z.coerce.number().min(0).max(1000000),
+      max: z.string().optional().default(""),
+    })
+    .safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const maxWert = d.max.trim() === "" ? null : Number(d.max.replace(",", "."));
+  if (maxWert !== null && (!Number.isFinite(maxWert) || maxWert < d.min)) {
+    return {
+      error: "Die Sollmenge darf nicht unter der Mindestmenge liegen.",
+      ok: null,
+    };
+  }
+
+  const supabase = await createClient();
+
+  /*
+   * Ohne Mindestmenge und ohne Sollmenge wird der Artikel auf diesem
+   * Fahrzeug nicht mehr geführt — die Regel verschwindet, statt als
+   * Nullzeile stehen zu bleiben.
+   */
+  if (d.min === 0 && maxWert === null) {
+    await supabase
+      .from("vanstock_regel")
+      .delete()
+      .eq("artikel_id", d.artikelId)
+      .eq("lagerort_id", d.lagerortId);
+
+    revalidatePath(`/lager/${d.artikelId}`);
+    return { error: null, ok: "Nicht mehr geführt." };
+  }
+
+  const { error } = await supabase.from("vanstock_regel").upsert(
+    {
+      company_id: zugang.me.companyId,
+      artikel_id: d.artikelId,
+      lagerort_id: d.lagerortId,
+      min_menge: d.min,
+      max_menge: maxWert,
+    },
+    { onConflict: "lagerort_id,artikel_id" },
+  );
+
+  if (error) return { error: `Fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath(`/lager/${d.artikelId}`);
+  revalidatePath("/material");
+  return { error: null, ok: "Gesetzt." };
 }

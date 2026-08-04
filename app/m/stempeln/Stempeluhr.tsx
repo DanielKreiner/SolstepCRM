@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { enqueue, flush } from "@/lib/offline/queue";
+import { Verbrauch, type VanArtikel } from "./Verbrauch";
 
 type Job = { id: string; number: string; customer: string };
 
@@ -10,6 +11,9 @@ type Props = {
   /** Laufender Eintrag laut Server beim Seitenaufruf. */
   laufendSeit: string | null;
   laufendJob: string | null;
+  /** Das Fahrzeug des heutigen Einsatzes samt seinem Van-Stock. */
+  fahrzeug: { name: string; lagerortId: string; artikel: VanArtikel[] } | null;
+  einsatzId: string | null;
 };
 
 const ARTEN = [
@@ -27,10 +31,22 @@ const ARTEN = [
  */
 const KEY = "betrieb:laufend";
 
-export function Stempeluhr({ jobs, laufendSeit, laufendJob }: Props) {
+export function Stempeluhr({
+  jobs,
+  laufendSeit,
+  laufendJob,
+  fahrzeug,
+  einsatzId,
+}: Props) {
   const [seit, setSeit] = useState<string | null>(laufendSeit);
   const [jobId, setJobId] = useState<string>(laufendJob ?? "");
   const [suche, setSuche] = useState("");
+  /*
+   * Nach dem Ausstempeln die Verbrauchsmeldung. Sie steht hier und nicht
+   * auf einer eigenen Seite: wer die Uhr stoppt, hat das Handy schon in
+   * der Hand — eine Minute später sitzt er im Auto.
+   */
+  const [verbrauchFuer, setVerbrauchFuer] = useState<string | null>(null);
 
   /*
    * Gedeckelt auf acht: mehr passt am Telefon ohnehin nicht auf den
@@ -83,9 +99,29 @@ export function Stempeluhr({ jobs, laufendSeit, laufendJob }: Props) {
     setSeit(null);
     window.localStorage.removeItem(KEY);
     setMeldung("Ausgestempelt.");
+    /*
+     * Nur wenn es etwas zu melden gibt: ohne Fahrzeug oder ohne
+     * Van-Stock wäre das Fenster eine leere Frage.
+     */
+    if (jobId && fahrzeug && fahrzeug.artikel.length > 0) {
+      setVerbrauchFuer(jobId);
+    }
     window.dispatchEvent(new Event("betrieb:queue"));
     void flush().then(() =>
       window.dispatchEvent(new Event("betrieb:queue")),
+    );
+  }
+
+  if (verbrauchFuer && fahrzeug) {
+    return (
+      <Verbrauch
+        vorgangId={verbrauchFuer}
+        lagerortId={fahrzeug.lagerortId}
+        fahrzeug={fahrzeug.name}
+        artikel={fahrzeug.artikel}
+        einsatzId={einsatzId}
+        schliessen={() => setVerbrauchFuer(null)}
+      />
     );
   }
 

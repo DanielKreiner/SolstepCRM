@@ -10,8 +10,17 @@ import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { ArtikelBearbeiten, LieferantenpreisForm } from "../ArtikelForms";
 import { StockMoveForm } from "../StockMoveForm";
+import { Stueckliste } from "../Stueckliste";
+import { Vanstock } from "../Vanstock";
 
 export const metadata: Metadata = { title: "Artikel" };
+
+type StuecklistenRoh = {
+  id: string;
+  artikel_id: string;
+  menge: string;
+  artikel: { sku: string; name: string; unit: string } | null;
+};
 
 type MoveRow = {
   id: string;
@@ -46,7 +55,7 @@ export default async function ArtikelPage({
   const { data: article } = await supabase
     .from("article")
     .select(
-      "id, sku, name, manufacturer, category, unit, stock, min_stock, location_code, purchase_price, sale_price, vat_rate, active",
+      "id, sku, name, manufacturer, category, unit, stock, min_stock, location_code, purchase_price, sale_price, vat_rate, active, typ, seriennummernpflichtig, ean, ist_paket",
     )
     .eq("id", id)
     .maybeSingle();
@@ -72,6 +81,47 @@ export default async function ArtikelPage({
       .limit(100),
     supabase.from("supplier").select("id, name").order("name"),
   ]);
+
+  /*
+   * Die Stückliste nur laden, wenn der Artikel ein Paket ist — für die
+   * anderen vierhundertneunundsechzig wäre es eine Abfrage ohne Zweck.
+   */
+  const istPaket = Boolean(article.ist_paket);
+  const istVanstock = article.typ === "vanstock";
+
+  /* Min und Max je Fahrzeug — nur für Artikel, die im Bus mitfahren. */
+  const [{ data: fahrzeugOrte }, { data: regeln }, { data: bestandJeOrt }] =
+    istVanstock
+      ? await Promise.all([
+          supabase
+            .from("lagerort")
+            .select("id, name")
+            .eq("art", "fahrzeug")
+            .eq("aktiv", true)
+            .order("sort"),
+          supabase
+            .from("vanstock_regel")
+            .select("lagerort_id, min_menge, max_menge")
+            .eq("artikel_id", id),
+          supabase.from("v_bestand").select("lagerort_id, menge").eq("artikel_id", id),
+        ])
+      : [{ data: null }, { data: null }, { data: null }];
+  const [{ data: teile }, { data: kandidaten }] = istPaket
+    ? await Promise.all([
+        supabase
+          .from("artikel_stueckliste")
+          .select("id, artikel_id, menge, sort, artikel:artikel_id ( sku, name, unit )")
+          .eq("paket_id", id)
+          .order("sort"),
+        supabase
+          .from("article")
+          .select("id, sku, name, unit")
+          .eq("active", true)
+          .eq("ist_paket", false)
+          .order("name")
+          .limit(600),
+      ])
+    : [{ data: null }, { data: null }];
 
   const rows = (moves ?? []) as unknown as MoveRow[];
   const lieferantenOptionen = (lieferanten ?? []).map((l) => ({
@@ -188,11 +238,73 @@ export default async function ArtikelPage({
               vatRate: Number(article.vat_rate ?? 20),
               active: Boolean(article.active),
               stock: Number(article.stock ?? 0),
+              typ: (article.typ as string | null) ?? "stueckliste",
+              seriennummernpflichtig: Boolean(article.seriennummernpflichtig),
+              ean: (article.ean as string | null) ?? null,
+              istPaket: istPaket,
             }}
           />
           <LieferantenpreisForm
             articleId={article.id as string}
             lieferanten={lieferantenOptionen}
+          />
+        </div>
+      ) : null}
+
+      {istPaket ? (
+        <div className="mb-4">
+          <Stueckliste
+            paketId={article.id as string}
+            darfSchreiben={darfSchreiben}
+            zeilen={((teile ?? []) as unknown as StuecklistenRoh[]).map((t) => ({
+              id: t.id,
+              artikelId: t.artikel_id,
+              sku: t.artikel?.sku ?? "—",
+              name: t.artikel?.name ?? "Artikel",
+              menge: Number(t.menge),
+              einheit: t.artikel?.unit ?? "Stk",
+            }))}
+            kandidaten={((kandidaten ?? []) as unknown as {
+              id: string;
+              sku: string;
+              name: string;
+              unit: string;
+            }[]).map((k) => ({
+              id: k.id,
+              sku: k.sku,
+              name: k.name,
+              einheit: k.unit,
+            }))}
+          />
+        </div>
+      ) : null}
+
+      {istVanstock && (fahrzeugOrte ?? []).length > 0 ? (
+        <div className="mb-4">
+          <Vanstock
+            artikelId={article.id as string}
+            einheit={article.unit as string}
+            zeilen={((fahrzeugOrte ?? []) as unknown as {
+              id: string;
+              name: string;
+            }[]).map((o) => {
+              const regel = ((regeln ?? []) as unknown as {
+                lagerort_id: string;
+                min_menge: string;
+                max_menge: string | null;
+              }[]).find((r) => r.lagerort_id === o.id);
+              const da = ((bestandJeOrt ?? []) as unknown as {
+                lagerort_id: string;
+                menge: string;
+              }[]).find((b) => b.lagerort_id === o.id);
+              return {
+                lagerortId: o.id,
+                fahrzeug: o.name,
+                min: Number(regel?.min_menge ?? 0),
+                max: regel?.max_menge == null ? null : Number(regel.max_menge),
+                bestand: Number(da?.menge ?? 0),
+              };
+            })}
           />
         </div>
       ) : null}
