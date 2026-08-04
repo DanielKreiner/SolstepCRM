@@ -143,13 +143,19 @@ export async function einreihen(
 
   const { data: firma } = await admin
     .from("company")
-    .select("name, zip, city, pdf_settings")
+    .select("name, zip, city, phone, email, pdf_settings")
     .eq("id", auftrag.companyId)
     .maybeSingle();
 
+  /*
+   * Die Fusszeile fällt auf die gepflegten Firmendaten zurück, wenn der
+   * Betrieb keinen eigenen Text gesetzt hat — Name, Ort, Telefon, Mail.
+   */
   const marke = markeAus(firma?.pdf_settings, firma?.name as string | undefined, [
     firma?.zip as string | null,
     firma?.city as string | null,
+    firma?.phone as string | null,
+    firma?.email as string | null,
   ]);
 
   const { data, error } = await admin

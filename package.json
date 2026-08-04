@@ -64,6 +64,7 @@
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.5",
     "eslint-config-next": "15.5.22",
+    "pdf-lib": "^1.17.1",
     "supabase": "2.110.0",
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.1",

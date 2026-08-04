@@ -18,6 +18,12 @@ export type Marke = {
   firma: string;
   logoUrl: string | null;
   akzent: string;
+  /**
+   * Hat der Betrieb selbst eine Farbe gesetzt? Die Oberfläche färbt sich
+   * nur dann um — sonst gälte der Standard als bewusste Wahl, und ein
+   * späterer Wechsel des Hausakzents käme bei niemandem mehr an.
+   */
+  akzentGesetzt: boolean;
   fusszeile: string | null;
 };
 
@@ -47,6 +53,7 @@ export function markeAus(
      * anderes hineinschreiben können.
      */
     akzent: /^#[0-9a-fA-F]{6}$/.test(akzent) ? akzent : STANDARD_AKZENT,
+    akzentGesetzt: /^#[0-9a-fA-F]{6}$/.test(akzent),
     fusszeile:
       typeof s.fusszeile === "string" && s.fusszeile
         ? s.fusszeile
@@ -59,12 +66,16 @@ export async function markeLaden(
   client: SupabaseClient,
   companyId?: string,
 ): Promise<Marke> {
-  let abfrage = client.from("company").select("name, zip, city, pdf_settings");
+  let abfrage = client
+    .from("company")
+    .select("name, zip, city, phone, email, pdf_settings");
   if (companyId) abfrage = abfrage.eq("id", companyId);
 
   const { data } = await abfrage.limit(1).maybeSingle();
   return markeAus(data?.pdf_settings, data?.name as string | undefined, [
     data?.zip as string | null,
     data?.city as string | null,
+    data?.phone as string | null,
+    data?.email as string | null,
   ]);
 }

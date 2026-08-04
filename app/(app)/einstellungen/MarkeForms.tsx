@@ -11,6 +11,7 @@ import {
   type ChecklisteState,
 } from "./checkliste-actions";
 import { CHECKLISTE_TYPEN as TYPEN } from "@/lib/vorgang/checkliste";
+import { firmendatenSpeichern, type FirmaState } from "./firma-actions";
 
 const LEER = { error: null, ok: null };
 
@@ -504,6 +505,136 @@ function Feld({
         defaultValue={wert}
         required={pflicht}
         className="w-full rounded-input border border-line bg-surface px-[11px] py-[9px] text-[13px] outline-0 focus:border-accent"
+      />
+    </div>
+  );
+}
+
+/* ======================================================= FIRMENDATEN */
+
+export type Firmendaten = {
+  name: string;
+  rechtsform: string;
+  address: string;
+  zip: string;
+  city: string;
+  country: string;
+  uid_nr: string;
+  firmenbuch_nr: string;
+  firmenbuch_gericht: string;
+  email: string;
+  phone: string;
+  website: string;
+  iban: string;
+  bic: string;
+};
+
+/**
+ * Die Firmendaten, die auf jedem Beleg landen.
+ *
+ * Einiges davon ist keine Kür: Firma, Rechtsform, Sitz, Firmenbuch-
+ * beziehungsweise Handelsregisternummer und das Gericht gehören auf
+ * jeden Geschäftsbrief, die UID zusätzlich auf jede Rechnung. Deshalb
+ * steht das hier zusammen und nicht verstreut.
+ */
+export function FirmaForm({ werte }: { werte: Firmendaten }) {
+  const [status, formAction] = useActionState<FirmaState, FormData>(
+    firmendatenSpeichern,
+    LEER,
+  );
+
+  return (
+    <form action={formAction}>
+      <p className="-mt-1 mb-4 text-[12.5px] text-muted">
+        Diese Angaben stehen auf Angebot, Auftragsbestätigung und Rechnung
+        sowie in der Fusszeile jeder Mail. Firmenbuchnummer, Gericht und UID
+        sind auf Geschäftsbriefen und Rechnungen vorgeschrieben.
+      </p>
+
+      <Gruppe titel="Firma">
+        <F name="name" label="Firmenname" wert={werte.name} pflicht breit />
+        <F name="rechtsform" label="Rechtsform" wert={werte.rechtsform} platz="GmbH" />
+        <F name="country" label="Land" wert={werte.country} platz="Österreich" />
+      </Gruppe>
+
+      <Gruppe titel="Anschrift">
+        <F name="address" label="Strasse und Nummer" wert={werte.address} breit />
+        <F name="zip" label="PLZ" wert={werte.zip} />
+        <F name="city" label="Ort" wert={werte.city} />
+      </Gruppe>
+
+      <Gruppe titel="Erreichbarkeit">
+        <F name="phone" label="Telefon" wert={werte.phone} platz="+43 732 000000" />
+        <F name="email" label="E-Mail" wert={werte.email} platz="office@betrieb.at" />
+        <F name="website" label="Website" wert={werte.website} platz="www.betrieb.at" breit />
+      </Gruppe>
+
+      <Gruppe titel="Register und Steuer">
+        <F name="uid_nr" label="UID" wert={werte.uid_nr} platz="ATU12345678" />
+        <F name="firmenbuch_nr" label="Firmenbuchnummer" wert={werte.firmenbuch_nr} platz="FN 123456a" />
+        <F
+          name="firmenbuch_gericht"
+          label="Firmenbuchgericht"
+          wert={werte.firmenbuch_gericht}
+          platz="Landesgericht Linz"
+          breit
+        />
+      </Gruppe>
+
+      <Gruppe titel="Bankverbindung">
+        <F name="iban" label="IBAN" wert={werte.iban} breit />
+        <F name="bic" label="BIC" wert={werte.bic} />
+      </Gruppe>
+
+      <div className="mt-4">
+        <Absenden label="Speichern" />
+      </div>
+      <Meldung status={status} />
+    </form>
+  );
+}
+
+function Gruppe({ titel, children }: { titel: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-5">
+      <p className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
+        {titel}
+      </p>
+      <div className="grid gap-2 sm:grid-cols-3">{children}</div>
+    </div>
+  );
+}
+
+function F({
+  name,
+  label,
+  wert,
+  platz,
+  pflicht = false,
+  breit = false,
+}: {
+  name: string;
+  label: string;
+  wert: string;
+  platz?: string;
+  pflicht?: boolean;
+  breit?: boolean;
+}) {
+  return (
+    <div className={breit ? "sm:col-span-2" : ""}>
+      <label
+        htmlFor={`fd-${name}`}
+        className="mb-[5px] block text-[11.5px] font-medium text-muted"
+      >
+        {label}
+      </label>
+      <input
+        id={`fd-${name}`}
+        name={name}
+        defaultValue={wert}
+        required={pflicht}
+        placeholder={platz}
+        className="w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13px] outline-0 focus:border-accent"
       />
     </div>
   );

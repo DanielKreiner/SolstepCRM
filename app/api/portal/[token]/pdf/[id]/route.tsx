@@ -1,6 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
 import { VorgangPdf, type BelegArt, type VorgangPdfData } from "@/lib/pdf/vorgang";
+import { markeAus } from "@/lib/marke";
 import { resolvePortal } from "@/lib/portal/data";
 import { portalVorgangDetail } from "@/lib/portal/vorgang";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -47,9 +48,14 @@ export async function GET(
   const admin = createAdminClient();
   const { data: firma } = await admin
     .from("company")
-    .select("name, address, zip, city, uid_nr, iban")
+    .select("name, rechtsform, address, zip, city, country, uid_nr, firmenbuch_nr, firmenbuch_gericht, email, phone, website, iban, bic, pdf_settings")
     .eq("id", session.companyId)
     .maybeSingle();
+
+  const marke = markeAus(firma?.pdf_settings, firma?.name as string | undefined, [
+    firma?.zip as string | null,
+    firma?.city as string | null,
+  ]);
 
   const anz = daten.dokumente.find((d) => d.typ === "anzahlungsrechnung");
 
@@ -60,13 +66,35 @@ export async function GET(
     erstelltAm: new Date().toISOString(),
     gueltigBis: null,
     faelligAm: dok?.faelligAm ?? null,
+    marke: { logoUrl: daten.firma?.logoUrl ?? null, akzent: marke.akzent },
+    texte: {
+      titel: daten.texte.titel,
+      einleitung: daten.texte.einleitung,
+      abschluss: daten.texte.abschluss,
+    },
+    gruppen: daten.gruppen.map((g) => ({
+      id: g.id,
+      name: g.name,
+      beschreibung: g.beschreibung,
+      paketPreis: g.paketPreis,
+      einzelpreiseVerstecken: g.einzelpreiseVerstecken,
+    })),
+    rahmen: daten.rahmen,
     firma: {
       name: (firma?.name as string) ?? "",
+      rechtsform: (firma?.rechtsform as string | null) ?? null,
       adresse: (firma?.address as string | null) ?? null,
       plz: (firma?.zip as string | null) ?? null,
       ort: (firma?.city as string | null) ?? null,
+      land: (firma?.country as string | null) ?? null,
       uid: (firma?.uid_nr as string | null) ?? null,
+      firmenbuchNr: (firma?.firmenbuch_nr as string | null) ?? null,
+      firmenbuchGericht: (firma?.firmenbuch_gericht as string | null) ?? null,
+      telefon: (firma?.phone as string | null) ?? null,
+      email: (firma?.email as string | null) ?? null,
+      website: (firma?.website as string | null) ?? null,
       iban: (firma?.iban as string | null) ?? null,
+      bic: (firma?.bic as string | null) ?? null,
     },
     kunde: {
       name: session.customerName,
@@ -83,11 +111,19 @@ export async function GET(
     },
     positionen: daten.positionen.map((p, i) => ({
       pos: (i + 1) * 10,
+      gruppeId: p.gruppeId,
       text: p.bezeichnung,
+      beschreibung: p.beschreibung,
       menge: p.menge,
       einheit: p.einheit,
       epNetto: p.epNetto,
       ustSatz: p.ustSatz,
+      rabattProzent: p.rabattProzent,
+      /*
+       * Was der Kunde abgewählt hat, ist für ihn keine Option mehr,
+       * sondern nicht dabei. Gewähltes zählt wie eine feste Position.
+       */
+      optional: p.optional && p.kundenAuswahl !== "gewaehlt",
       ...(p.bildUrl?.startsWith("https://") ? { bildUrl: p.bildUrl } : {}),
     })),
     abzugBrutto:

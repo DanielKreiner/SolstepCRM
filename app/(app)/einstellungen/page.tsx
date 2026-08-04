@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Abschnitt } from "@/components/ui/Abschnitt";
-import { ChecklisteForm, MarkeForm } from "./MarkeForms";
+import { ChecklisteForm, FirmaForm, MarkeForm } from "./MarkeForms";
 import { ausJson } from "@/lib/rules/zeitregeln";
 import { KpiKarte } from "@/components/ui/KpiKarte";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -48,6 +48,7 @@ const KIND_LABEL: Record<string, string> = {
  */
 const BEREICHE = [
   ["rechte", "Rollen und Rechte"],
+  ["firma", "Firmendaten"],
   ["erscheinungsbild", "Erscheinungsbild"],
   ["checklisten", "Checklisten"],
   ["standorte", "Standorte"],
@@ -118,7 +119,7 @@ export default async function EinstellungenPage({
     supabase
       .from("company")
       .select(
-        "name, uid_nr, address, zip, city, country, iban, status, plan, seats, time_settings, pdf_settings",
+        "name, uid_nr, address, zip, city, country, iban, bic, rechtsform, firmenbuch_nr, firmenbuch_gericht, email, phone, website, status, plan, seats, time_settings, pdf_settings",
       )
       .maybeSingle(),
     supabase
@@ -255,6 +256,36 @@ export default async function EinstellungenPage({
         </nav>
 
         <div className="min-w-0">
+          {bereich === "firma" ? (
+            <Abschnitt titel="Firmendaten">
+              {darfSchreiben ? (
+                <FirmaForm
+                  werte={{
+                    name: (company?.name as string) ?? "",
+                    rechtsform: (company?.rechtsform as string | null) ?? "",
+                    address: (company?.address as string | null) ?? "",
+                    zip: (company?.zip as string | null) ?? "",
+                    city: (company?.city as string | null) ?? "",
+                    country: (company?.country as string | null) ?? "",
+                    uid_nr: (company?.uid_nr as string | null) ?? "",
+                    firmenbuch_nr: (company?.firmenbuch_nr as string | null) ?? "",
+                    firmenbuch_gericht:
+                      (company?.firmenbuch_gericht as string | null) ?? "",
+                    email: (company?.email as string | null) ?? "",
+                    phone: (company?.phone as string | null) ?? "",
+                    website: (company?.website as string | null) ?? "",
+                    iban: (company?.iban as string | null) ?? "",
+                    bic: (company?.bic as string | null) ?? "",
+                  }}
+                />
+              ) : (
+                <p className="text-[13px] text-muted">
+                  Für Einstellungen fehlt deiner Rolle das Schreibrecht.
+                </p>
+              )}
+            </Abschnitt>
+          ) : null}
+
           {bereich === "erscheinungsbild" ? (
             <Abschnitt titel="Erscheinungsbild">
               <p className="-mt-1 mb-4 text-[12.5px] text-muted">

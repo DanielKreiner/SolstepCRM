@@ -1,3 +1,4 @@
+import { Akzentfarbe } from "@/components/app/Akzentfarbe";
 import { Sidebar } from "@/components/app/Sidebar";
 import { Topbar } from "@/components/app/Topbar";
 import type { Me } from "@/lib/session";
@@ -106,6 +107,7 @@ export async function Shell({
 
   return (
     <div className="flex h-dvh gap-[10px] overflow-hidden bg-app p-[10px] sm:gap-[14px] sm:p-[14px]">
+      <Akzentfarbe akzent={marke.akzentGesetzt ? marke.akzent : null} />
       <div className="hidden md:flex">
         <Sidebar
           companyName={me.company.name}
