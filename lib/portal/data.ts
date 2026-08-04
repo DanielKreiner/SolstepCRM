@@ -19,6 +19,8 @@ export type PortalSession = {
   companyId: string;
   customerName: string;
   companyName: string;
+  /* Für den Kunden ist das Portal die Seite seines Elektrikers. */
+  logoUrl: string | null;
   accessId: string;
 };
 
@@ -51,7 +53,7 @@ export async function resolvePortal(
       .maybeSingle(),
     admin
       .from("company")
-      .select("id, name")
+      .select("id, name, pdf_settings")
       .eq("id", access.company_id)
       .maybeSingle(),
   ]);
@@ -68,6 +70,11 @@ export async function resolvePortal(
     companyId: company.id as string,
     customerName: customer.name as string,
     companyName: company.name as string,
+    logoUrl:
+      typeof (company.pdf_settings as Record<string, unknown> | null)?.logo_url ===
+      "string"
+        ? ((company.pdf_settings as Record<string, unknown>).logo_url as string)
+        : null,
     accessId: access.id as string,
   };
 }

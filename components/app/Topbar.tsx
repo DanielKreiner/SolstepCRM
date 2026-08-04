@@ -12,6 +12,7 @@ type Props = {
   unread: number;
   nav: {
     companyName: string;
+    logoUrl: string | null;
     locationName: string;
     visibleAreas: string[];
     badges?: Record<string, number>;

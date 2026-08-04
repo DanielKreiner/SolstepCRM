@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { NAV, isActive } from "@/lib/nav";
-import { BRAND, BRAND_MARK } from "@/lib/brand";
+import { Firmenlogo } from "@/components/ui/Firmenlogo";
 
 type Props = {
   companyName: string;
+  logoUrl: string | null;
   locationName: string;
   /** Bereiche, die diese Rolle mindestens lesen darf. */
   visibleAreas: string[];
@@ -16,6 +17,7 @@ type Props = {
 
 export function Sidebar({
   companyName,
+  logoUrl,
   locationName,
   visibleAreas,
   badges = {},
@@ -26,15 +28,8 @@ export function Sidebar({
   return (
     <aside className="flex w-[var(--sidebar-w)] shrink-0 flex-col overflow-hidden rounded-panel bg-surface shadow-soft">
       <div className="flex items-center gap-[11px] px-5 pt-[22px] pb-2">
-        <span
-          aria-hidden
-          className="flex h-8 w-8 items-center justify-center rounded-[11px] bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-[15px] font-bold text-white"
-        >
-          {BRAND_MARK}
-        </span>
-        <span className="text-[19px] font-bold tracking-[-0.025em]">
-          {BRAND.name}
-        </span>
+        {/* Der Betrieb sieht seinen Betrieb, nicht unsere Produktmarke. */}
+        <Firmenlogo logoUrl={logoUrl} firma={companyName} hoehe={32} />
       </div>
 
       <div className="mx-[14px] mt-[14px] mb-1 flex items-center gap-[10px] rounded-input bg-sunk px-[11px] py-[10px] text-left">

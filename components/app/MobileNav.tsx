@@ -18,6 +18,7 @@ import { Sidebar } from "./Sidebar";
  */
 export function MobileNav(props: {
   companyName: string;
+  logoUrl: string | null;
   locationName: string;
   visibleAreas: string[];
   badges?: Record<string, number>;

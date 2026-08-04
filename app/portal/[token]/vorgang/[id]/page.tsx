@@ -107,6 +107,8 @@ export default async function PortalVorgangPage({
       token={token}
       vorgangId={v.id}
       bereich={bereich}
+      firma={session.companyName}
+      logoUrl={session.logoUrl}
       kundeName={session.customerName}
       nummer={v.nummer}
       adresse={[v.adresse, v.ort].filter(Boolean).join(", ") || null}

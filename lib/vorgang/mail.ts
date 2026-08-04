@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BRAND } from "@/lib/brand";
 import { ausBytea, entschluesseln } from "@/lib/mail/crypto";
+import { markeAus, type Marke } from "@/lib/marke";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /*
@@ -30,51 +31,6 @@ export type MailArt =
   | "termin"
   | "auftrag"
   | "sonstiges";
-
-/**
- * Das Markenbild des Mandanten (CLAUDE.md 6.4, company.pdf_settings).
- *
- * Für den Kunden ist die Mail Post von seinem Elektriker und nicht von
- * dieser Software. Also steht das Logo des Betriebs darin, seine Farbe
- * und seine Adresse — nicht unsere.
- */
-export type Marke = {
-  firma: string;
-  logoUrl: string | null;
-  akzent: string;
-  fusszeile: string | null;
-};
-
-const STANDARD_AKZENT = "#E8952B";
-
-export async function markeLaden(
-  admin: SupabaseClient,
-  companyId: string,
-): Promise<Marke> {
-  const { data } = await admin
-    .from("company")
-    .select("name, address, zip, city, pdf_settings")
-    .eq("id", companyId)
-    .maybeSingle();
-
-  const s = (data?.pdf_settings ?? {}) as Record<string, unknown>;
-  const akzent = typeof s.akzent === "string" ? s.akzent : "";
-
-  return {
-    firma: (data?.name as string) ?? BRAND.name,
-    logoUrl: typeof s.logo_url === "string" && s.logo_url ? s.logo_url : null,
-    /*
-     * Nur echte Hexfarben durchlassen. Der Wert landet direkt in einem
-     * style-Attribut — ein Freitextfeld darf dort nichts anderes
-     * hineinschreiben können.
-     */
-    akzent: /^#[0-9a-fA-F]{6}$/.test(akzent) ? akzent : STANDARD_AKZENT,
-    fusszeile:
-      typeof s.fusszeile === "string" && s.fusszeile
-        ? s.fusszeile
-        : [data?.name, data?.zip, data?.city].filter(Boolean).join(" · ") || null,
-  };
-}
 
 export type Empfaenger = { name: string; email: string };
 
@@ -185,7 +141,16 @@ export async function einreihen(
     .limit(1)
     .maybeSingle();
 
-  const marke = await markeLaden(admin, auftrag.companyId);
+  const { data: firma } = await admin
+    .from("company")
+    .select("name, zip, city, pdf_settings")
+    .eq("id", auftrag.companyId)
+    .maybeSingle();
+
+  const marke = markeAus(firma?.pdf_settings, firma?.name as string | undefined, [
+    firma?.zip as string | null,
+    firma?.city as string | null,
+  ]);
 
   const { data, error } = await admin
     .from("mail_outbox")

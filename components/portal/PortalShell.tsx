@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/ui/Icon";
-import { BRAND, BRAND_MARK } from "@/lib/brand";
+import { Firmenlogo } from "@/components/ui/Firmenlogo";
 import { initials } from "@/lib/format";
 import { PHASEN, phaseIndex, type Phase } from "@/lib/vorgang/modell";
 
@@ -45,12 +45,14 @@ export type PortalNavEintrag = {
 export function PortalRahmen({
   kundeName,
   firmaName,
+  logoUrl,
   titel,
   unter,
   children,
 }: {
   kundeName: string;
   firmaName: string;
+  logoUrl: string | null;
   titel: string;
   unter: string;
   children: React.ReactNode;
@@ -58,11 +60,8 @@ export function PortalRahmen({
   return (
     <div className="flex min-h-dvh flex-col gap-[14px] bg-app p-[10px] sm:p-[14px]">
       <header className="flex shrink-0 flex-wrap items-center gap-3 rounded-[22px] bg-surface px-4 py-3 shadow-soft">
-        <span
-          aria-hidden
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-[15px] font-bold text-white"
-        >
-          {BRAND_MARK}
+        <span className="shrink-0">
+          <Firmenlogo logoUrl={logoUrl} firma={firmaName} hoehe={30} mitName={false} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">
@@ -96,6 +95,8 @@ export function PortalShell({
   vorgangId,
   bereich,
   nav,
+  firma,
+  logoUrl,
   kundeName,
   nummer,
   adresse,
@@ -110,6 +111,8 @@ export function PortalShell({
   vorgangId: string;
   bereich: PortalBereich;
   nav: PortalNavEintrag[];
+  firma: string;
+  logoUrl: string | null;
   kundeName: string;
   nummer: string;
   adresse: string | null;
@@ -128,18 +131,14 @@ export function PortalShell({
       {/* ------------------------------------------------------ SIDEBAR */}
       <aside className="hidden w-[246px] shrink-0 flex-col gap-3 md:flex">
         <div className="flex flex-1 flex-col rounded-panel bg-surface shadow-soft">
-          <div className="flex items-center gap-[11px] px-5 pt-[22px] pb-5">
-            <span
-              aria-hidden
-              className="flex h-8 w-8 items-center justify-center rounded-[11px] bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-[15px] font-bold text-white"
-            >
-              {BRAND_MARK}
-            </span>
-            <span>
-              <span className="block text-[17px] leading-tight font-bold tracking-[-0.025em]">
-                {BRAND.name}
-              </span>
-              <span className="block text-[11.5px] text-muted">Kundenportal</span>
+          <div className="px-5 pt-[22px] pb-5">
+            {/*
+              Das Logo des Betriebs, nicht unseres: für den Kunden ist
+              das hier die Seite seines Elektrikers.
+            */}
+            <Firmenlogo logoUrl={logoUrl} firma={firma} hoehe={30} />
+            <span className="mt-[6px] block text-[11.5px] text-muted">
+              Kundenportal
             </span>
           </div>
 

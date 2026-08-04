@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/app/Sidebar";
 import { Topbar } from "@/components/app/Topbar";
 import type { Me } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { markeLaden } from "@/lib/marke";
 
 /*
  * Gemeinsamer Rahmen für Backoffice und Mitarbeiter-Selfservice.
@@ -27,6 +28,7 @@ export async function Shell({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
+  const marke = await markeLaden(supabase, me.companyId);
 
   /*
    * Zaehler in der Navigation. In der Vorlage traegt fast jeder Eintrag
@@ -107,6 +109,7 @@ export async function Shell({
       <div className="hidden md:flex">
         <Sidebar
           companyName={me.company.name}
+          logoUrl={marke.logoUrl}
           locationName={location?.name ?? "Alle Standorte"}
           visibleAreas={visibleAreas}
           badges={navBadges}
@@ -120,6 +123,7 @@ export async function Shell({
           unread={unread ?? 0}
           nav={{
             companyName: me.company.name,
+            logoUrl: marke.logoUrl,
             locationName: location?.name ?? "Alle Standorte",
             visibleAreas,
             badges: navBadges,

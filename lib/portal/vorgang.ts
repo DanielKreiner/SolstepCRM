@@ -136,6 +136,8 @@ export type PortalDetail = {
     plz: string | null;
     ort: string | null;
     iban: string | null;
+    /* Für den Kunden ist das hier die Seite seines Elektrikers. */
+    logoUrl: string | null;
   } | null;
   /** Angenommen? Dann steht das Angebot fest. */
   angenommen: boolean;
@@ -195,7 +197,7 @@ export async function portalVorgangDetail(
         .order("von"),
       admin
         .from("company")
-        .select("name, address, zip, city, iban")
+        .select("name, address, zip, city, iban, pdf_settings")
         .eq("id", session.companyId)
         .maybeSingle(),
     ]);
@@ -364,6 +366,11 @@ export async function portalVorgangDetail(
           plz: (firma.zip as string | null) ?? null,
           ort: (firma.city as string | null) ?? null,
           iban: (firma.iban as string | null) ?? null,
+          logoUrl:
+            typeof (firma.pdf_settings as Record<string, unknown> | null)?.logo_url ===
+            "string"
+              ? ((firma.pdf_settings as Record<string, unknown>).logo_url as string)
+              : null,
         }
       : null,
   };

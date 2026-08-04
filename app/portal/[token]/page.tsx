@@ -80,6 +80,7 @@ export default async function PortalPage({
     <PortalRahmen
       kundeName={session.customerName}
       firmaName={session.companyName}
+      logoUrl={session.logoUrl}
       titel="Ihr Kundenportal"
       unter="Wählen Sie ein Projekt, um Fortschritt, Angebot und Dokumente zu sehen."
     >
