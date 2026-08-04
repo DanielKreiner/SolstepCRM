@@ -134,6 +134,15 @@ export async function angebotSenden(
   }
 
   /*
+   * Die verschickte Fassung einfrieren.
+   *
+   * Vorher las das Portal den lebenden Entwurf: wer nach dem Versand
+   * eine Position änderte, änderte still auch das, was der Kunde vor
+   * sich hatte. Jetzt ist eine Version genau das, was rausging.
+   */
+  const fassung = await fassungEinfrieren(admin, z1.me.companyId, vorgangId, kunde.nummer);
+
+  /*
    * Erst nach der Mail den Zeitstempel setzen. Andersherum stünde am
    * Vorgang „versendet", ohne dass je etwas rausgegangen wäre.
    */
@@ -146,7 +155,9 @@ export async function angebotSenden(
     company_id: z1.me.companyId,
     vorgang_id: vorgangId,
     typ: "angebot",
-    titel: erneut ? "Angebot erneut versendet" : "Angebot versendet",
+    titel: erneut
+      ? `Angebot erneut versendet — Fassung ${fassung}`
+      : `Angebot versendet — Fassung ${fassung}`,
     body: `An ${kunde.empfaenger.email}`,
     kunde_sichtbar: true,
     created_by: z1.me.id,
@@ -156,9 +167,125 @@ export async function angebotSenden(
   return {
     error: null,
     ok: erneut
-      ? `Noch einmal an ${kunde.empfaenger.email} eingereiht.`
+      ? `Fassung ${fassung} an ${kunde.empfaenger.email} eingereiht.`
       : `An ${kunde.empfaenger.email} eingereiht — geht mit dem nächsten Versandlauf raus.`,
   };
+}
+
+/**
+ * Den aktuellen Entwurf als neue Fassung festhalten.
+ *
+ * Kopiert und nicht verschoben: der Entwurf bleibt bearbeitbar, sonst
+ * stünde der Editor nach dem Senden leer da. Die Gruppen werden
+ * mitkopiert und die Positionen auf die Kopien umgehängt — sonst zeigte
+ * die eingefrorene Fassung auf Gruppen, die jemand später umbenennt.
+ */
+async function fassungEinfrieren(
+  admin: ReturnType<typeof mailClient>,
+  companyId: string,
+  vorgangId: string,
+  nummer: string,
+): Promise<number> {
+  const { data: letzte } = await admin
+    .from("vorgang_dokument")
+    .select("version")
+    .eq("vorgang_id", vorgangId)
+    .eq("typ", "angebot")
+    .not("version", "is", null)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const version = ((letzte?.version as number | null) ?? 0) + 1;
+
+  const { data: dok } = await admin
+    .from("vorgang_dokument")
+    .insert({
+      company_id: companyId,
+      vorgang_id: vorgangId,
+      typ: "angebot",
+      version,
+      dateiname: `Angebot ${nummer} Fassung ${version}`,
+      kunde_sichtbar: true,
+    })
+    .select("id")
+    .single();
+
+  if (!dok) return version;
+
+  const { data: gruppen } = await admin
+    .from("vorgang_gruppe")
+    .select("id, name, beschreibung, sort, paket_preis, einzelpreise_verstecken")
+    .eq("vorgang_id", vorgangId)
+    .is("dokument_id", null);
+
+  const abbildung = new Map<string, string>();
+  for (const g of (gruppen ?? []) as unknown as {
+    id: string;
+    name: string;
+    beschreibung: string | null;
+    sort: number;
+    paket_preis: string | null;
+    einzelpreise_verstecken: boolean;
+  }[]) {
+    const { data: neu } = await admin
+      .from("vorgang_gruppe")
+      .insert({
+        company_id: companyId,
+        vorgang_id: vorgangId,
+        dokument_id: dok.id as string,
+        name: g.name,
+        beschreibung: g.beschreibung,
+        sort: g.sort,
+        paket_preis: g.paket_preis,
+        einzelpreise_verstecken: g.einzelpreise_verstecken,
+      })
+      .select("id")
+      .single();
+    if (neu) abbildung.set(g.id, neu.id as string);
+  }
+
+  /*
+   * Spalten einzeln und nicht mit "*": gp_netto ist eine berechnete
+   * Spalte, und Postgres weist jeden Insert zurück, der sie mitschickt.
+   * Genau daran ist die erste Fassung still gescheitert — sie hatte
+   * Gruppen, aber keine einzige Position, und der Kunde hätte ein leeres
+   * Angebot vor sich gehabt.
+   */
+  const FELDER =
+    "company_id, vorgang_id, sort, article_id, bezeichnung, beschreibung, " +
+    "menge, einheit, ep_netto, ust_satz, rabatt_prozent, optional, " +
+    "kunden_auswahl, kalk_ek, kalk_stunden, ist_material, bild_url, " +
+    "gruppe_id, upgrade_article_id, upgrade_kategorie, upgrade_aufpreis, upgrade_text";
+
+  const { data: positionen } = await admin
+    .from("vorgang_position")
+    .select(FELDER)
+    .eq("vorgang_id", vorgangId)
+    .is("dokument_id", null);
+
+  const kopien = ((positionen ?? []) as unknown as Record<string, unknown>[]).map(
+    (p) => ({
+      ...p,
+      dokument_id: dok.id as string,
+      gruppe_id: p.gruppe_id ? (abbildung.get(p.gruppe_id as string) ?? null) : null,
+    }),
+  );
+
+  if (kopien.length > 0) {
+    const { error } = await admin.from("vorgang_position").insert(kopien);
+    /*
+     * Eine Fassung ohne Positionen wäre schlimmer als keine: der Kunde
+     * sähe ein leeres Angebot. Dann lieber das Dokument wieder weg und
+     * der Aufrufer merkt es an der Versionsnummer.
+     */
+    if (error) {
+      await admin.from("vorgang_dokument").delete().eq("id", dok.id as string);
+      throw new Error(`Fassung konnte nicht eingefroren werden: ${error.message}`);
+    }
+  }
+
+  return version;
 }
 
 /**

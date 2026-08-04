@@ -19,6 +19,7 @@ export function Versand({
   vorgangId,
   versendetAm,
   gesehenAm,
+  fassung,
   anzahlPositionen,
   kundeMail,
   hatPortal,
@@ -27,6 +28,8 @@ export function Versand({
   vorgangId: string;
   versendetAm: string | null;
   gesehenAm: string | null;
+  /** Nummer der zuletzt verschickten Fassung. */
+  fassung: number | null;
   anzahlPositionen: number;
   kundeMail: string | null;
   hatPortal: boolean;
@@ -58,7 +61,9 @@ export function Versand({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="text-[15px] font-semibold">An den Kunden</h2>
         {versendetAm ? (
-          <Pill tone="done">versendet {kurz(versendetAm)}</Pill>
+          <Pill tone="done">
+            Fassung {fassung ?? 1} versendet {kurz(versendetAm)}
+          </Pill>
         ) : (
           <Pill tone="neutral">Entwurf</Pill>
         )}
@@ -83,8 +88,13 @@ export function Versand({
         <div className="flex flex-wrap items-center gap-2">
           <form action={senden}>
             <input type="hidden" name="vorgangId" value={vorgangId} />
+            {/*
+              Nach dem Senden ist der Editor weiter offen. Wer etwas
+              ändert und erneut sendet, erzeugt die nächste Fassung —
+              der Kunde sieht sie genau dann und keine Sekunde früher.
+            */}
             <Knopf
-              label={versendetAm ? "Erneut senden" : "Angebot senden"}
+              label={versendetAm ? `Als Fassung ${(fassung ?? 1) + 1} senden` : "Angebot senden"}
               haupt={!versendetAm}
             />
           </form>

@@ -420,6 +420,18 @@ async function AngebotReiter({
   gesehenAm: string | null;
 }) {
   const supabase = await createClient();
+
+  /* Welche Fassung liegt beim Kunden — die letzte verschickte. */
+  const { data: letzteFassung } = await supabase
+    .from("vorgang_dokument")
+    .select("version")
+    .eq("vorgang_id", id)
+    .eq("typ", "angebot")
+    .not("version", "is", null)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const fassung = (letzteFassung?.version as number | null) ?? null;
   const [{ data: artikel }, { data: vorlagenRoh }, { data: kunde }, { count: portale }] =
     await Promise.all([
       supabase
@@ -459,6 +471,7 @@ async function AngebotReiter({
         vorgangId={id}
         versendetAm={versendetAm}
         gesehenAm={gesehenAm}
+        fassung={fassung}
         anzahlPositionen={positionen.length}
         kundeMail={(kunde?.email as string | null) ?? null}
         hatPortal={(portale ?? 0) > 0}

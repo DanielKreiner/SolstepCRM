@@ -151,6 +151,8 @@ export type PortalDetail = {
   } | null;
   /** Angenommen? Dann steht das Angebot fest. */
   angenommen: boolean;
+  /** Die Fassung, die der Kunde sieht. Null bei Altbestand. */
+  fassung: number | null;
   /**
    * Ist das Angebot überhaupt schon abgeschickt? Ist es das nicht, gibt
    * es keine Positionen — und der Kunde bekommt einen Satz statt einer
@@ -195,7 +197,7 @@ export async function portalVorgangDetail(
       admin
         .from("vorgang_dokument")
         .select(
-          "id, typ, nummer, dateiname, betrag_brutto, status, faellig_am, bezahlt_am, created_at",
+          "id, typ, nummer, version, dateiname, betrag_brutto, status, faellig_am, bezahlt_am, created_at",
         )
         .eq("vorgang_id", vorgangId)
         .eq("kunde_sichtbar", true)
@@ -217,9 +219,22 @@ export async function portalVorgangDetail(
    * soll das sehen, was gilt — nach der Annahme ist das die eingefrorene
    * Fassung an der Auftragsbestätigung.
    */
-  const ab = ((dokumente ?? []) as unknown as { id: string; typ: string }[]).find(
-    (d) => d.typ === "ab",
-  );
+  const dokListe = (dokumente ?? []) as unknown as {
+    id: string;
+    typ: string;
+    version?: number | null;
+  }[];
+
+  const ab = dokListe.find((d) => d.typ === "ab");
+
+  /*
+   * Die neueste verschickte Fassung. Sie ist das, was der Kunde in
+   * Händen hält — nicht der Entwurf, an dem im Büro gerade weiter
+   * gearbeitet wird. Sonst ändert sich sein Angebot, während er es liest.
+   */
+  const fassung = dokListe
+    .filter((d) => d.typ === "angebot" && d.version !== null)
+    .sort((a, b) => (b.version ?? 0) - (a.version ?? 0))[0];
 
   const posAbfrage = admin
     .from("vorgang_position")
@@ -251,11 +266,20 @@ export async function portalVorgangDetail(
    */
   const angebotOffen = ab !== undefined || v.angebot_versendet_am !== null;
 
+  /*
+   * Nach der Annahme gilt die eingefrorene Fassung an der AB, davor die
+   * neueste verschickte. Nur wenn es beides nicht gibt — Altbestand vor
+   * der Versionierung — bleibt der Entwurf als Rückfall.
+   */
+  const quelle = ab?.id ?? fassung?.id ?? null;
+
   const [{ data: positionen }, { data: gruppen }] = angebotOffen
     ? await Promise.all([
-        ab ? posAbfrage.eq("dokument_id", ab.id) : posAbfrage.is("dokument_id", null),
-        ab
-          ? gruppenAbfrage.eq("dokument_id", ab.id)
+        quelle
+          ? posAbfrage.eq("dokument_id", quelle)
+          : posAbfrage.is("dokument_id", null),
+        quelle
+          ? gruppenAbfrage.eq("dokument_id", quelle)
           : gruppenAbfrage.is("dokument_id", null),
       ])
     : [{ data: [] }, { data: [] }];
@@ -325,6 +349,7 @@ export async function portalVorgangDetail(
   return {
     vorgang: abbilden(v as unknown as Roh),
     angenommen: Boolean(ab),
+    fassung: (fassung?.version as number | null) ?? null,
     angebotVersendet: angebotOffen,
     schritte: ((schritte ?? []) as unknown as {
       id: string;

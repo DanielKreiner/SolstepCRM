@@ -61,6 +61,7 @@ export default async function PortalVorgangPage({
     ansprechpartner,
     angenommen,
     angebotVersendet,
+    fassung,
   } = daten;
 
 
@@ -93,9 +94,13 @@ export default async function PortalVorgangPage({
     },
     angebot: {
       titel: texte.titel ?? (angenommen ? "Ihr Auftrag" : "Ihr Angebot"),
-      unter: texte.gueltigBis
-        ? `Gültig bis ${date(texte.gueltigBis)}`
-        : "Ihre Anlage im Detail",
+      unter: [
+        texte.gueltigBis ? `Gültig bis ${date(texte.gueltigBis)}` : null,
+        /* Ab Fassung 2 wissenswert: es gab davor eine andere. */
+        fassung && fassung > 1 ? `Fassung ${fassung}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || "Ihre Anlage im Detail",
     },
     dokumente: { titel: "Dokumente", unter: "Alles zum Nachlesen und Herunterladen" },
     anliegen: { titel: "Anliegen", unter: "Schreiben Sie uns — wir antworten hier" },
