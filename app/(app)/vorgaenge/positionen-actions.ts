@@ -594,3 +594,147 @@ export async function angebotskopfSpeichern(
   frisch(d.vorgangId);
   return { error: null, ok: "Gespeichert." };
 }
+
+/* =========================================================== UPGRADES */
+
+const upgradeSchema = z.object({
+  vorgangId: z.string().uuid(),
+  positionId: z.string().uuid(),
+  /* Entweder ein konkretes Produkt oder eine ganze Kategorie — nicht beides. */
+  upgradeArticleId: z.string().uuid().optional().or(z.literal("")),
+  upgradeKategorie: z.string().trim().max(80).optional().default(""),
+  /* Leer heisst: aus der Preisdifferenz rechnen. */
+  upgradeAufpreis: z.string().trim().optional().default(""),
+  upgradeText: z.string().trim().max(500).optional().default(""),
+});
+
+/**
+ * Ein Upgrade an eine Position hängen.
+ *
+ * Zwei Formen, weil es zwei Gespräche gibt: „statt der 9er die 12er
+ * Batterie" ist ein konkretes Produkt, „einen grösseren Speicher, such
+ * dir was aus" ist eine Kategorie.
+ *
+ * Der Aufpreis ist brutto und das, was der Kunde sieht. Leer gelassen
+ * rechnet ihn die Aktion aus der Verkaufspreisdifferenz mal Menge mal
+ * Steuersatz — genau einmal, beim Einrichten. Danach steht er fest:
+ * ein Angebot darf sich nicht ändern, weil jemand einen Artikelpreis
+ * anhebt.
+ */
+export async function upgradeSetzen(
+  _prev: PosStatus,
+  formData: FormData,
+): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = upgradeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const artikelId = d.upgradeArticleId || null;
+  const kategorie = d.upgradeKategorie || null;
+
+  if (artikelId && kategorie) {
+    return {
+      error: "Entweder ein Produkt oder eine Kategorie — nicht beides.",
+      ok: null,
+    };
+  }
+
+  /* Beides leer heisst: Upgrade entfernen. */
+  if (!artikelId && !kategorie) {
+    const { error } = await supabase
+      .from("vorgang_position")
+      .update({
+        upgrade_article_id: null,
+        upgrade_kategorie: null,
+        upgrade_aufpreis: null,
+        upgrade_text: null,
+      })
+      .eq("id", d.positionId)
+      .eq("vorgang_id", d.vorgangId)
+      .is("dokument_id", null);
+
+    if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+    frisch(d.vorgangId);
+    return { error: null, ok: "Upgrade entfernt." };
+  }
+
+  let aufpreis: number | null = null;
+  if (d.upgradeAufpreis !== "") {
+    const n = Number(d.upgradeAufpreis.replace(",", "."));
+    if (!Number.isFinite(n) || n < 0) {
+      return { error: "Der Aufpreis ist keine Zahl.", ok: null };
+    }
+    aufpreis = n;
+  }
+
+  const { data: pos } = await supabase
+    .from("vorgang_position")
+    .select("menge, ep_netto, ust_satz")
+    .eq("id", d.positionId)
+    .eq("vorgang_id", d.vorgangId)
+    .maybeSingle();
+
+  if (!pos) return { error: "Position nicht gefunden.", ok: null };
+
+  /*
+   * Aufpreis aus der Differenz — nur bei einem konkreten Produkt. Bei
+   * einer Kategorie steht erst bei der Wahl des Kunden fest, worauf er
+   * upgradet; dort wird dann gerechnet.
+   */
+  if (aufpreis === null && artikelId) {
+    const { data: ziel } = await supabase
+      .from("article")
+      .select("sale_price, name")
+      .eq("id", artikelId)
+      .maybeSingle();
+
+    if (!ziel) return { error: "Das Upgrade-Produkt gibt es nicht mehr.", ok: null };
+
+    const differenz = Number(ziel.sale_price) - Number(pos.ep_netto);
+    if (differenz <= 0) {
+      return {
+        error: `${ziel.name as string} ist nicht teurer als die Position — dafür braucht es kein Upgrade.`,
+        ok: null,
+      };
+    }
+    const brutto = differenz * Number(pos.menge) * (1 + Number(pos.ust_satz) / 100);
+    aufpreis = Math.round((brutto + Number.EPSILON) * 100) / 100;
+  }
+
+  if (aufpreis === null) {
+    return {
+      error: "Bei einem Kategorie-Upgrade braucht es einen Aufpreis.",
+      ok: null,
+    };
+  }
+
+  const { data: geschrieben, error } = await supabase
+    .from("vorgang_position")
+    .update({
+      upgrade_article_id: artikelId,
+      upgrade_kategorie: kategorie,
+      upgrade_aufpreis: aufpreis,
+      upgrade_text: d.upgradeText || null,
+    })
+    .eq("id", d.positionId)
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null)
+    .select("id");
+
+  if (error) return { error: `Speichern fehlgeschlagen: ${error.message}`, ok: null };
+  if (!geschrieben?.length) {
+    return { error: "Diese Position gehört zu einer festgeschriebenen Version.", ok: null };
+  }
+
+  frisch(d.vorgangId);
+  return { error: null, ok: "Upgrade gespeichert." };
+}

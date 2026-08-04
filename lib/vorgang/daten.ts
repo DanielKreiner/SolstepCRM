@@ -103,6 +103,10 @@ export type PositionZeile = {
   gruppeId: string | null;
   optional: boolean;
   rabattProzent: number;
+  upgradeArticleId: string | null;
+  upgradeKategorie: string | null;
+  upgradeAufpreis: number | null;
+  upgradeText: string | null;
   sort: number;
   articleId: string | null;
   bezeichnung: string;
@@ -200,7 +204,7 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
       supabase
         .from("vorgang_position")
         .select(
-          "id, sort, gruppe_id, optional, rabatt_prozent, article_id, bezeichnung, menge, einheit, ep_netto, ust_satz, kalk_stunden, kalk_ek, ist_material, bild_url, beschreibung",
+          "id, sort, gruppe_id, optional, rabatt_prozent, upgrade_article_id, upgrade_kategorie, upgrade_aufpreis, upgrade_text, article_id, bezeichnung, menge, einheit, ep_netto, ust_satz, kalk_stunden, kalk_ek, ist_material, bild_url, beschreibung",
         )
         .eq("vorgang_id", id)
         .is("dokument_id", null)
@@ -310,6 +314,10 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
       gruppeId: p.gruppe_id,
       optional: p.optional,
       rabattProzent: Number(p.rabatt_prozent ?? 0),
+      upgradeArticleId: p.upgrade_article_id,
+      upgradeKategorie: p.upgrade_kategorie,
+      upgradeAufpreis: zahl(p.upgrade_aufpreis),
+      upgradeText: p.upgrade_text,
       sort: p.sort,
       articleId: p.article_id,
       bezeichnung: p.bezeichnung,
@@ -403,6 +411,10 @@ type PositionRoh = {
   gruppe_id: string | null;
   optional: boolean;
   rabatt_prozent: string | null;
+  upgrade_article_id: string | null;
+  upgrade_kategorie: string | null;
+  upgrade_aufpreis: string | null;
+  upgrade_text: string | null;
   article_id: string | null;
   bezeichnung: string;
   menge: string;

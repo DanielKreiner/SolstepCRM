@@ -16,6 +16,7 @@ import {
   positionFrei,
   positionLoeschen,
   positionZuordnen,
+  upgradeSetzen,
 } from "@/app/(app)/vorgaenge/positionen-actions";
 
 export type GruppeAnzeige = {
@@ -33,6 +34,10 @@ export type PositionAnzeige = {
   gruppeId: string | null;
   optional: boolean;
   rabattProzent: number;
+  upgradeArticleId: string | null;
+  upgradeKategorie: string | null;
+  upgradeAufpreis: number | null;
+  upgradeText: string | null;
   bezeichnung: string;
   menge: number;
   einheit: string;
@@ -57,6 +62,7 @@ export function Positionen({
   gruppen,
   rahmen,
   artikel,
+  kategorien,
   gesperrt,
   gesperrtGrund,
 }: {
@@ -65,6 +71,8 @@ export function Positionen({
   gruppen: GruppeAnzeige[];
   rahmen: { ustSatz: number; rabattProzent: number; lieferungNetto: number };
   artikel: Option[];
+  /** Kategorien des Artikelstamms — für Kategorie-Upgrades. */
+  kategorien: string[];
   gesperrt: boolean;
   gesperrtGrund: string | null;
 }) {
@@ -125,6 +133,8 @@ export function Positionen({
             gruppe={g}
             positionen={drin}
             gruppenWahl={gruppenWahl}
+            artikel={artikel}
+            kategorien={kategorien}
             gesperrt={gesperrt}
             netto={berechne(
               preisPositionen,
@@ -151,6 +161,8 @@ export function Positionen({
                 position={p}
                 nummer={(i + 1) * 10}
                 gruppenWahl={gruppenWahl}
+                artikel={artikel}
+                kategorien={kategorien}
                 gesperrt={gesperrt}
               />
             ))}
@@ -246,12 +258,16 @@ function Zeile({
   position,
   nummer,
   gruppenWahl,
+  artikel,
+  kategorien,
   gesperrt,
 }: {
   vorgangId: string;
   position: PositionAnzeige;
   nummer: number;
   gruppenWahl: { wert: string; text: string }[];
+  artikel: Option[];
+  kategorien: string[];
   gesperrt: boolean;
 }) {
   const [offen, setOffen] = useState(false);
@@ -302,6 +318,14 @@ function Zeile({
             optional
           </span>
         ) : null}
+        {position.upgradeAufpreis !== null ? (
+          <span
+            className="num shrink-0 rounded-pill bg-s-warn/14 px-[8px] py-px text-[10px] font-semibold text-accent-ink"
+            title="Der Kunde kann auf ein besseres Produkt wechseln"
+          >
+            +{eur(position.upgradeAufpreis)}
+          </span>
+        ) : null}
 
         <span className="num shrink-0 text-[13.5px] font-semibold">{eur(zeile)}</span>
       </button>
@@ -309,6 +333,8 @@ function Zeile({
       {offen && !gesperrt ? (
         <ZeileBearbeiten
           gruppenWahl={gruppenWahl}
+          artikel={artikel}
+          kategorien={kategorien}
           vorgangId={vorgangId}
           position={position}
           schliessen={() => setOffen(false)}
@@ -322,11 +348,15 @@ function ZeileBearbeiten({
   vorgangId,
   position,
   gruppenWahl,
+  artikel,
+  kategorien,
   schliessen,
 }: {
   vorgangId: string;
   position: PositionAnzeige;
   gruppenWahl: { wert: string; text: string }[];
+  artikel: Option[];
+  kategorien: string[];
   schliessen: () => void;
 }) {
   const [status, formAction] = useActionState<AktionsStatus, FormData>(
@@ -458,6 +488,14 @@ function ZeileBearbeiten({
           <Meldung status={zuordStatus} />
         </form>
       ) : null}
+
+      <UpgradeForm
+        vorgangId={vorgangId}
+        position={position}
+        artikel={artikel}
+        kategorien={kategorien}
+        praefix={p}
+      />
 
       <form action={loeschAction} className="mt-2">
         <input type="hidden" name="vorgangId" value={vorgangId} />
@@ -633,6 +671,8 @@ function GruppenBlock({
   gruppe,
   positionen,
   gruppenWahl,
+  artikel,
+  kategorien,
   netto,
   gesperrt,
 }: {
@@ -640,6 +680,8 @@ function GruppenBlock({
   gruppe: GruppeAnzeige;
   positionen: PositionAnzeige[];
   gruppenWahl: { wert: string; text: string }[];
+  artikel: Option[];
+  kategorien: string[];
   netto: number;
   gesperrt: boolean;
 }) {
@@ -765,6 +807,8 @@ function GruppenBlock({
               position={pos}
               nummer={(i + 1) * 10}
               gruppenWahl={gruppenWahl}
+              artikel={artikel}
+              kategorien={kategorien}
               gesperrt={gesperrt}
             />
           ))}
@@ -879,6 +923,132 @@ function RahmenForm({
 
       <div className="mt-3">
         <Klein label="Speichern" />
+      </div>
+      <Meldung status={status} />
+    </form>
+  );
+}
+
+/* ----------------------------------------------------------- UPGRADE */
+
+/**
+ * Ein Upgrade an einer Position.
+ *
+ * Zwei Formen, weil es zwei Gespräche gibt: „statt der 9er die 12er
+ * Batterie" ist ein konkretes Produkt, „einen grösseren Speicher, such
+ * dir was aus" ist eine Kategorie.
+ *
+ * Der Aufpreis ist brutto — das ist die Zahl, die der Kunde sieht. Leer
+ * gelassen rechnet die Aktion ihn aus der Preisdifferenz; danach steht
+ * er fest, damit ein späterer Artikelpreis kein liegendes Angebot ändert.
+ */
+function UpgradeForm({
+  vorgangId,
+  position,
+  artikel,
+  kategorien,
+  praefix,
+}: {
+  vorgangId: string;
+  position: PositionAnzeige;
+  artikel: Option[];
+  kategorien: string[];
+  praefix: string;
+}) {
+  const [offen, setOffen] = useState(false);
+  const [status, formAction] = useActionState<AktionsStatus, FormData>(
+    upgradeSetzen,
+    LEER,
+  );
+  const hat = position.upgradeAufpreis !== null;
+
+  if (!offen) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOffen(true)}
+        className="mt-2 cursor-pointer border-0 bg-transparent text-[11.5px] font-medium text-accent-ink underline"
+      >
+        {hat ? "Upgrade ändern" : "Upgrade anbieten"}
+      </button>
+    );
+  }
+
+  return (
+    <form action={formAction} className="mt-2 grid gap-2 rounded-input bg-sunk p-3">
+      <input type="hidden" name="vorgangId" value={vorgangId} />
+      <input type="hidden" name="positionId" value={position.id} />
+
+      <p className="text-[11.5px] text-muted">
+        Der Kunde sieht das Upgrade im Portal und kann es statt dieser
+        Position wählen.
+      </p>
+
+      <Suchauswahl
+        name="upgradeArticleId"
+        label="Statt dessen dieses Produkt"
+        breit
+        platzhalter="Produkt suchen — leer lassen für eine Kategorie"
+        optionen={artikel}
+        wert={position.upgradeArticleId}
+      />
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div>
+          <label
+            htmlFor={`${praefix}-ukat`}
+            className="mb-[5px] block text-[11.5px] font-medium text-muted"
+          >
+            oder ganze Kategorie
+          </label>
+          <select
+            id={`${praefix}-ukat`}
+            name="upgradeKategorie"
+            defaultValue={position.upgradeKategorie ?? ""}
+            className="w-full rounded-input border border-transparent bg-surface px-[11px] py-[8px] text-[12.5px] outline-0 focus:border-accent"
+          >
+            <option value="">—</option>
+            {kategorien.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <Feld
+          praefix={praefix}
+          label="Aufpreis brutto"
+          name="upgradeAufpreis"
+          wert={position.upgradeAufpreis ?? ""}
+          typ="number"
+          schritt="0.01"
+        />
+      </div>
+
+      <Feld
+        praefix={praefix}
+        label="Text zum Upgrade"
+        name="upgradeText"
+        wert={position.upgradeText ?? ""}
+        spalten="sm:col-span-2"
+      />
+
+      <p className="text-[11px] text-faint">
+        Aufpreis leer lassen: wird aus der Preisdifferenz gerechnet — nur
+        bei einem konkreten Produkt. Produkt und Kategorie beide leer
+        entfernt das Upgrade.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Klein label="Speichern" />
+        <button
+          type="button"
+          onClick={() => setOffen(false)}
+          className="cursor-pointer border-0 bg-transparent text-[12px] text-muted underline"
+        >
+          Schliessen
+        </button>
       </div>
       <Meldung status={status} />
     </form>

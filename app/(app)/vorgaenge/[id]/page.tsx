@@ -80,7 +80,7 @@ export default async function VorgangPage({
     supabase.from("app_user").select("id, name").eq("active", true).order("name"),
     supabase
       .from("article")
-      .select("id, sku, name, sale_price, image_url, modul_wp")
+      .select("id, sku, name, category, sale_price, image_url, modul_wp")
       .eq("active", true)
       .order("name"),
     supabase
@@ -305,6 +305,13 @@ export default async function VorgangPage({
                 zusatz: `${a.sku as string} · ${eur(a.sale_price)}`,
                 ...(a.image_url ? { bild: a.image_url as string } : {}),
               }))}
+              kategorien={[
+                ...new Set(
+                  (artikel ?? [])
+                    .map((a) => a.category as string | null)
+                    .filter((k): k is string => Boolean(k)),
+                ),
+              ].sort()}
             />
             </>
           ) : null}
