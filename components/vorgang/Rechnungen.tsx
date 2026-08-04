@@ -188,6 +188,14 @@ function Beleg({
         </form>
       ) : null}
 
+      {/*
+        Die Rückmeldung steht ausserhalb des Formulars: mit der Zahlung
+        wechselt der Beleg auf „bezahlt", und der ganze Block
+        verschwindet — samt seiner eigenen Bestätigung. Dieselbe Falle
+        wie beim Angebotsversand und beim Wareneingang.
+      */}
+      <Meldung status={zahlung} />
+
       {darfSchreiben && beleg.status === "versendet" ? (
         zahlungOffen ? (
           <form action={zahlungAction} className="mt-3 border-t border-line pt-3">
@@ -245,7 +253,6 @@ function Beleg({
               </button>
             </div>
 
-            <Meldung status={zahlung} />
           </form>
         ) : (
           <button

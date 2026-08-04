@@ -202,6 +202,7 @@ export function PortalChat({
       {!offen ? (
         <button
           type="button"
+          data-testid="portal-chat-oeffnen"
           onClick={() => setOffen(true)}
           className="mt-4 min-h-[44px] w-full cursor-pointer rounded-pill border border-line bg-panel px-6 text-[13.5px] font-semibold text-ink"
         >
@@ -221,6 +222,7 @@ export function PortalChat({
           </label>
           <textarea
             id="pk-body"
+            data-testid="portal-chat-text"
             name="body"
             rows={3}
             placeholder="Was möchten Sie uns sagen?"
@@ -231,7 +233,10 @@ export function PortalChat({
             <DateiFeld id="pk-anhang" label="Bild anhängen" />
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div
+            className="mt-3 flex flex-wrap items-center gap-2"
+            data-testid="portal-chat-senden"
+          >
             <Absenden label="Senden" />
             <button
               type="button"

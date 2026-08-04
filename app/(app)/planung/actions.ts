@@ -171,6 +171,25 @@ export async function einsatzSpeichern(
     id = data.id as string;
   }
 
+  /*
+   * Ein terminierter Auftrag ist in der Montage — nicht mehr bloss
+   * beauftragt. Vor dem Planungsumbau hat der Knopf im Vorgang die Phase
+   * mitgeschaltet; seit die Terminierung in der Tafel passiert, muss sie
+   * es hier tun. Sonst bleibt der Vorgang für immer in „beauftragt", und
+   * die Schlussrechnung findet ihn nie.
+   */
+  if (felder.vorgang_id && felder.art === "auftrag") {
+    await supabase
+      .from("vorgang")
+      .update({
+        phase: "montage",
+        phase_seit: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", felder.vorgang_id)
+      .eq("phase", "beauftragt");
+  }
+
   if (d.personen.length > 0) {
     const { error } = await supabase.from("einsatz_person").insert(
       d.personen.map((u) => ({

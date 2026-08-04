@@ -195,6 +195,7 @@ function Schreiben({ vorgangId }: { vorgangId: string }) {
         <button
           type="button"
           role="switch"
+          data-testid="chat-intern"
           aria-checked={intern}
           onClick={() => setIntern((i) => !i)}
           className="flex items-center gap-2 rounded-pill border border-line px-4 py-[9px] text-[12.5px] font-medium"
