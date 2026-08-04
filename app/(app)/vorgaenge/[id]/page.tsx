@@ -114,7 +114,7 @@ export default async function VorgangPage({
     tab === "ueberblick"
       ? supabase.from("app_user").select("id, name").eq("active", true).order("name")
       : Promise.resolve({ data: null }),
-    tab === "angebot" || tab === "kommunikation"
+    tab === "angebot" || tab === "kommunikation" || tab === "ueberblick"
       ? supabase
           .from("vorgang")
           .select("angebot_versendet_am, angebot_gesehen_am")
@@ -220,6 +220,7 @@ export default async function VorgangPage({
           termine={termine}
           team={(team ?? []) as { id: string; name: string }[]}
           darfSchreiben={darfSchreiben}
+          angebotVersendet={Boolean(versand?.data?.angebot_versendet_am)}
         />
       ) : null}
 
@@ -287,6 +288,7 @@ function Ueberblick({
   termine,
   team,
   darfSchreiben,
+  angebotVersendet,
 }: {
   kopf: Kopf;
   gates: NonNullable<Detail>["gates"];
@@ -295,6 +297,7 @@ function Ueberblick({
   termine: NonNullable<Detail>["termine"];
   team: { id: string; name: string }[];
   darfSchreiben: boolean;
+  angebotVersendet: boolean;
 }) {
   const naechsterTermin = termine.find((t) => new Date(t.bis) >= new Date());
 
@@ -328,6 +331,7 @@ function Ueberblick({
           darfSchreiben={darfSchreiben}
           verlorenGrund={kopf.verlorenGrund}
           anzahlungProzent={kopf.anzahlungProzent}
+          angebotVersendet={angebotVersendet}
           team={team}
         />
 

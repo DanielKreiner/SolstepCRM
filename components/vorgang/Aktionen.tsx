@@ -83,6 +83,7 @@ export function Aktionspanel({
   darfSchreiben,
   verlorenGrund,
   anzahlungProzent,
+  angebotVersendet,
   team,
 }: {
   vorgangId: string;
@@ -92,6 +93,8 @@ export function Aktionspanel({
   darfSchreiben: boolean;
   verlorenGrund: string | null;
   anzahlungProzent: number;
+  /** Ist das Angebot beim Kunden? Sonst kann er im Portal nichts annehmen. */
+  angebotVersendet: boolean;
   team: { id: string; name: string }[];
 }) {
   if (phase === "verloren") {
@@ -131,6 +134,7 @@ export function Aktionspanel({
         vorgangId={vorgangId}
         anzahlungProzent={anzahlungProzent}
         darfSchreiben={darfSchreiben}
+        angebotVersendet={angebotVersendet}
       />
     );
   }
@@ -403,10 +407,12 @@ function AnnahmePanel({
   vorgangId,
   anzahlungProzent,
   darfSchreiben,
+  angebotVersendet,
 }: {
   vorgangId: string;
   anzahlungProzent: number;
   darfSchreiben: boolean;
+  angebotVersendet: boolean;
 }) {
   const [offen, setOffen] = useState(false);
   const [status, formAction] = useActionState<AktionsStatus, FormData>(
@@ -421,6 +427,21 @@ function AnnahmePanel({
         Die Annahme löst Auftragsbestätigung, Anzahlung, Materialliste und
         Gates aus — in einem Zug, ohne Positionen neu zu erfassen.
       </p>
+
+      {/*
+        Hier fehlte der Hinweis, und genau daran ist es hängengeblieben:
+        das Angebot war ein Entwurf, im Portal stand nichts, und niemand
+        sah warum. Der Knopf hier bleibt trotzdem bedienbar — der Betrieb
+        darf eine telefonische Zusage erfassen, auch ohne verschicktes PDF.
+      */}
+      {!angebotVersendet ? (
+        <p className="mb-4 rounded-input bg-s-warn/12 px-4 py-3 text-[12.5px] text-accent-ink">
+          Das Angebot ist noch ein Entwurf. Der Kunde sieht es im Portal
+          nicht und kann dort auch nicht annehmen — dafür im Reiter
+          „Angebot“ auf <strong className="font-semibold">Angebot senden</strong>{" "}
+          drücken.
+        </p>
+      ) : null}
 
       {!offen ? (
         <>

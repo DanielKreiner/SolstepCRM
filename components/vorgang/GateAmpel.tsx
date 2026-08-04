@@ -1,6 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
+import { Dialog } from "@/components/ui/Dialog";
 import { GATE_STATUS_LABEL, type GateStatus } from "@/lib/vorgang/modell";
 import { LEER, Meldung, type AktionsStatus } from "@/components/ui/Formular";
 import { gateSetzen } from "@/app/(app)/vorgaenge/actions";
@@ -24,12 +26,24 @@ const TON: Record<GateStatus, { klasse: string; zeichen: string }> = {
   nicht_noetig: { klasse: "bg-sunk text-faint", zeichen: "–" },
 };
 
+const ERKLAERUNG: Record<GateStatus, string> = {
+  offen: "Noch nichts passiert.",
+  laeuft: "Ist angestossen, aber noch nicht bestätigt.",
+  erledigt: "Fertig und bestätigt. Gibt die Terminierung frei.",
+  nicht_noetig: "Fällt bei diesem Auftrag weg — zählt wie erledigt.",
+};
+
 /**
- * Gate-Ampel im Kopf: kompakt, ein Klick schaltet weiter.
+ * Die Gates eines Vorgangs.
  *
- * Die Reihenfolge ist offen → läuft → erledigt → nicht nötig. Kein
- * Auswahlmenü, weil ein Gate im Alltag genau einen Weg geht und jeder
- * Klick weniger ein Griff weniger mit dem Handschuh am Tablet ist.
+ * Vorher schaltete ein Klick zum nächsten Zustand weiter. Von „offen" auf
+ * „erledigt" waren das zwei Klicks über „läuft" hinweg — und ein Klick zu
+ * viel setzte ein Gate ungewollt weiter, ohne dass jemand gefragt wurde.
+ * Ein Gate hält die Montage auf; das ist keine Sache für einen
+ * Streifklick.
+ *
+ * Jetzt öffnet ein Klick ein Fenster mit den vier Zuständen. Ein Griff
+ * für den, der weiss was er will, und eine Rückfrage für alle anderen.
  */
 export function GateAmpel({
   vorgangId,
@@ -40,6 +54,7 @@ export function GateAmpel({
   gates: GateAnzeige[];
   gesperrt: boolean;
 }) {
+  const [offen, setOffen] = useState<GateAnzeige | null>(null);
   const [status, formAction] = useActionState<AktionsStatus, FormData>(
     gateSetzen,
     LEER,
@@ -47,19 +62,20 @@ export function GateAmpel({
 
   if (gates.length === 0) return null;
 
+  /* Nach dem Speichern schliesst sich das Fenster von selbst. */
+  if (status.ok && offen) setOffen(null);
+
   return (
     <div>
-      <form action={formAction} className="flex flex-wrap gap-[6px]">
-        <input type="hidden" name="vorgangId" value={vorgangId} />
+      <div className="flex flex-wrap gap-[6px]">
         {gates.map((g) => {
           const t = TON[g.status];
           return (
             <button
               key={g.id}
-              type="submit"
-              name="gateId"
-              value={g.id}
+              type="button"
               disabled={gesperrt}
+              onClick={() => setOffen(g)}
               title={
                 gesperrt
                   ? "Gates ändert nur, wer Vorgänge schreiben darf."
@@ -87,14 +103,121 @@ export function GateAmpel({
               ) : null}
               <span className="sr-only">
                 {GATE_STATUS_LABEL[g.status]}
-                {gesperrt ? "" : " — klicken schaltet weiter"}
+                {gesperrt ? "" : " — klicken öffnet die Auswahl"}
               </span>
             </button>
           );
         })}
-      </form>
+      </div>
 
       <Meldung status={status} />
+
+      {offen ? (
+        <Dialog offen titel={offen.label} schliessen={() => setOffen(null)}>
+          <p className="mb-1 text-[13px] text-muted">
+            Steht auf{" "}
+            <strong className="font-semibold text-ink">
+              {GATE_STATUS_LABEL[offen.status]}
+            </strong>
+            .{offen.meta ? ` ${offen.meta}` : ""}
+          </p>
+          {offen.blocking ? (
+            <p className="mb-4 text-[12.5px] text-accent-ink">
+              Pflicht-Gate — die Montage lässt sich erst terminieren, wenn es
+              durch ist.
+            </p>
+          ) : (
+            <p className="mb-4 text-[12.5px] text-faint">
+              Kein Pflicht-Gate. Hält die Terminierung nicht auf.
+            </p>
+          )}
+
+          <form action={formAction} className="flex flex-col gap-2">
+            <input type="hidden" name="vorgangId" value={vorgangId} />
+            <input type="hidden" name="gateId" value={offen.id} />
+
+            {(["erledigt", "laeuft", "nicht_noetig", "offen"] as GateStatus[]).map(
+              (s) => (
+                <Wahl
+                  key={s}
+                  wert={s}
+                  aktiv={offen.status === s}
+                  label={GATE_STATUS_LABEL[s]}
+                  hinweis={ERKLAERUNG[s]}
+                />
+              ),
+            )}
+          </form>
+
+          {offen.zustaendigName || offen.faelligAm ? (
+            <p className="mt-4 border-t border-line pt-3 text-[11.5px] text-faint">
+              {offen.zustaendigName ? `Zuständig ${offen.zustaendigName}` : ""}
+              {offen.zustaendigName && offen.faelligAm ? " · " : ""}
+              {offen.faelligAm ? `fällig ${offen.faelligAm}` : ""}
+            </p>
+          ) : null}
+        </Dialog>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Ein Zustand als ganze Zeile.
+ *
+ * Ein Knopf und kein Auswahlfeld mit Bestätigen: der Griff soll einer
+ * bleiben. Die Erklärung steht daneben, damit „nicht nötig" nicht mit
+ * „offen" verwechselt wird — der Unterschied entscheidet, ob die Montage
+ * losgeht.
+ */
+function Wahl({
+  wert,
+  aktiv,
+  label,
+  hinweis,
+}: {
+  wert: GateStatus;
+  aktiv: boolean;
+  label: string;
+  hinweis: string;
+}) {
+  const { pending } = useFormStatus();
+  const t = TON[wert];
+
+  return (
+    <button
+      type="submit"
+      name="status"
+      value={wert}
+      disabled={pending || aktiv}
+      aria-current={aktiv ? "true" : undefined}
+      className={[
+        "flex w-full items-start gap-3 rounded-card border px-4 py-3 text-left transition-colors",
+        aktiv
+          ? "cursor-default border-line bg-panel"
+          : "cursor-pointer border-line bg-surface hover:border-accent hover:bg-accent/6",
+      ].join(" ")}
+    >
+      <span
+        aria-hidden
+        className={[
+          "mt-[1px] grid h-[22px] w-[22px] shrink-0 place-items-center rounded-pill text-[12px] font-bold",
+          t.klasse,
+        ].join(" ")}
+      >
+        {t.zeichen || "○"}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[13.5px] font-semibold">
+          {label}
+          {aktiv ? (
+            <span className="ml-2 text-[11px] font-normal text-faint">
+              steht schon so
+            </span>
+          ) : null}
+        </span>
+        <span className="block text-[12px] text-muted">{hinweis}</span>
+      </span>
+    </button>
   );
 }
