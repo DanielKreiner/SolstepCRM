@@ -5,6 +5,7 @@ import { Aktionspanel } from "@/components/vorgang/Aktionen";
 import { GateAmpel } from "@/components/vorgang/GateAmpel";
 import { Stepper } from "@/components/vorgang/Stepper";
 import { Positionen } from "@/components/vorgang/Positionen";
+import { Schnellbau } from "@/components/vorgang/Schnellbau";
 import { Rechnungen } from "@/components/vorgang/Rechnungen";
 import { Chat } from "@/components/vorgang/Chat";
 import { Kunde } from "@/components/vorgang/Kunde";
@@ -70,6 +71,7 @@ export default async function VorgangPage({
   const [
     { data: team },
     { data: artikel },
+    { data: vorlagenRoh },
     { data: zugang },
     { data: kundeRoh },
     { data: anlageRoh },
@@ -78,8 +80,13 @@ export default async function VorgangPage({
     supabase.from("app_user").select("id, name").eq("active", true).order("name"),
     supabase
       .from("article")
-      .select("id, sku, name, sale_price, image_url")
+      .select("id, sku, name, sale_price, image_url, modul_wp")
       .eq("active", true)
+      .order("name"),
+    supabase
+      .from("angebot_vorlage")
+      .select("id, name, beschreibung, ziel_kwp, ist_standard")
+      .order("ist_standard", { ascending: false })
       .order("name"),
     supabase
       .from("portal_access")
@@ -255,6 +262,28 @@ export default async function VorgangPage({
           ) : null}
 
           {darfAngebote ? (
+            <>
+            {!editorGesperrt ? (
+              <Schnellbau
+                vorgangId={kopf.id}
+                module={(artikel ?? [])
+                  .filter((a) => a.modul_wp !== null)
+                  .map((a) => ({
+                    wert: a.id as string,
+                    text: a.name as string,
+                    zusatz: `${a.modul_wp as number} Wp · ${eur(a.sale_price)}`,
+                    ...(a.image_url ? { bild: a.image_url as string } : {}),
+                  }))}
+                vorlagen={(vorlagenRoh ?? []).map((v) => ({
+                  id: v.id as string,
+                  name: v.name as string,
+                  beschreibung: (v.beschreibung as string | null) ?? null,
+                  zielKwp: v.ziel_kwp === null ? null : Number(v.ziel_kwp),
+                  istStandard: v.ist_standard as boolean,
+                }))}
+              />
+            ) : null}
+
             <Positionen
               vorgangId={kopf.id}
               positionen={positionen}
@@ -277,6 +306,7 @@ export default async function VorgangPage({
                 ...(a.image_url ? { bild: a.image_url as string } : {}),
               }))}
             />
+            </>
           ) : null}
 
           <Chat
