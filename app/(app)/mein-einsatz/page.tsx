@@ -27,11 +27,17 @@ export default async function MeinEinsatzPage() {
   const grenze = new Date();
   grenze.setDate(grenze.getDate() - 1);
 
+  /*
+   * Einsätze statt Termine: dadurch stehen hier auch Servicetage und
+   * interne Einsätze („Lager aufräumen"). Vorher sah der Monteur nur,
+   * was an einem Auftrag hing — der Rest seines Tages fehlte.
+   */
   const { data: zuordnungen } = await supabase
-    .from("vorgang_termin_person")
+    .from("einsatz_person")
     .select(
-      `termin:termin_id (
-         id, art, von, bis, sub_text, notiz,
+      `einsatz:einsatz_id (
+         id, art, titel, von, bis, ganztaegig, sub_text, notiz,
+         personen:einsatz_person ( user:user_id ( id, name ) ),
          vorgang:vorgang_id (
            id, number, phase, adresse, plz, ort, kwp, speicher_kwh, zaehlpunkt,
            customer:customer_id ( name, contact_person, phone )
@@ -41,9 +47,12 @@ export default async function MeinEinsatzPage() {
     .eq("user_id", me.id);
 
   type Zeile = {
-    termin: {
+    einsatz: {
       id: string;
       art: string;
+      titel: string | null;
+      ganztaegig: boolean;
+      personen: { user: { id: string; name: string } | null }[] | null;
       von: string;
       bis: string;
       sub_text: string | null;
@@ -68,8 +77,12 @@ export default async function MeinEinsatzPage() {
   };
 
   const termine = ((zuordnungen ?? []) as unknown as Zeile[])
-    .map((z) => z.termin)
-    .filter((t): t is NonNullable<Zeile["termin"]> => Boolean(t?.vorgang))
+    .map((z) => z.einsatz)
+    /*
+     * Auch ohne Vorgang: ein interner Einsatz hat keinen, gehört dem
+     * Monteur aber genauso in den Tag.
+     */
+    .filter((t): t is NonNullable<Zeile["einsatz"]> => Boolean(t))
     /* Was vorgestern zu Ende war, hilft heute niemandem. */
     .filter((t) => new Date(t.bis) >= grenze)
     .sort((a, b) => a.von.localeCompare(b.von));
@@ -80,7 +93,9 @@ export default async function MeinEinsatzPage() {
   const kommend = termine.filter((t) => t.von.slice(0, 10) > heute);
 
   /* Material je Vorgang — was auf die Baustelle mitgehört. */
-  const ids = termine.map((t) => t.vorgang!.id);
+  const ids = termine
+    .map((t) => t.vorgang?.id)
+    .filter((x): x is string => Boolean(x));
   const { data: material } = ids.length
     ? await supabase
         .from("vorgang_position")
@@ -143,6 +158,12 @@ export default async function MeinEinsatzPage() {
   );
 }
 
+const ART_EINSATZ: Record<string, string> = {
+  auftrag: "Auftrag",
+  service: "Service",
+  intern: "Intern",
+};
+
 function Block({
   titel,
   termine,
@@ -152,6 +173,10 @@ function Block({
   titel: string;
   termine: {
     id: string;
+    art: string;
+    titel: string | null;
+    ganztaegig: boolean;
+    personen: { user: { id: string; name: string } | null }[] | null;
     von: string;
     bis: string;
     sub_text: string | null;
@@ -179,25 +204,43 @@ function Block({
       <h2 className="mb-2 text-[15px] font-semibold">{titel}</h2>
       <ul className="flex flex-col gap-3">
         {termine.map((t) => {
-          const v = t.vorgang!;
-          const liste = material.get(v.id) ?? [];
-          const adresse = [v.adresse, [v.plz, v.ort].filter(Boolean).join(" ")]
-            .filter(Boolean)
-            .join(", ");
+          const v = t.vorgang;
+          const liste = v ? (material.get(v.id) ?? []) : [];
+          const adresse = v
+            ? [v.adresse, [v.plz, v.ort].filter(Boolean).join(" ")]
+                .filter(Boolean)
+                .join(", ")
+            : "";
+
+          /* Wer sonst noch dabei ist — ohne einen selbst. */
+          const kollegen = (t.personen ?? [])
+            .map((p) => p.user?.name)
+            .filter((n): n is string => Boolean(n));
 
           return (
             <li key={t.id} className="rounded-[20px] bg-surface p-5 shadow-soft">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="num text-[13px] font-semibold">{v.number}</span>
+                <span className="num text-[13px] font-semibold">
+                  {v?.number ?? ART_EINSATZ[t.art] ?? "Einsatz"}
+                </span>
                 {heute ? <Pill tone="doing">läuft</Pill> : null}
+                {!v ? <Pill tone="neutral">{ART_EINSATZ[t.art] ?? t.art}</Pill> : null}
                 <span className="num ml-auto text-[12px] text-muted">
-                  {date(t.von)} {time(t.von)} – {date(t.bis)} {time(t.bis)}
+                  {t.ganztaegig
+                    ? `${date(t.von)} ganztägig`
+                    : `${date(t.von)} ${time(t.von)} – ${date(t.bis)} ${time(t.bis)}`}
                 </span>
               </div>
 
               <p className="mt-2 text-[17px] leading-snug font-semibold tracking-[-0.02em]">
-                {v.customer?.name ?? "—"}
+                {v?.customer?.name ?? t.titel ?? "Einsatz"}
               </p>
+
+              {kollegen.length > 1 ? (
+                <p className="mt-1 text-[12.5px] text-muted">
+                  Mit dabei: {kollegen.join(", ")}
+                </p>
+              ) : null}
 
               {/*
                 Die Adresse ist das Wichtigste auf diesem Screen und
@@ -205,33 +248,46 @@ function Block({
                 Handy tippt niemand eine Adresse ab.
               */}
               {adresse ? (
-                <a
-                  href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(adresse)}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="mt-1 inline-block text-[14px] text-accent-ink underline"
-                >
-                  {adresse}
-                </a>
-              ) : (
+                /*
+                 * geo:-Verweis mit Textadresse: Android und iOS öffnen
+                 * damit die installierte Navigation statt einer Website.
+                 * Der zweite Link bleibt für den Rechner.
+                 */
+                <span className="mt-1 flex flex-wrap items-center gap-3">
+                  <a
+                    href={`geo:0,0?q=${encodeURIComponent(adresse)}`}
+                    className="text-[14px] text-accent-ink underline"
+                  >
+                    {adresse}
+                  </a>
+                  <a
+                    href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(adresse)}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="rounded-pill border border-line px-[11px] py-[4px] text-[11.5px] font-medium text-ink hover:bg-sunk hover:text-ink"
+                  >
+                    Karte
+                  </a>
+                </span>
+              ) : v ? (
                 <p className="mt-1 text-[13px] text-muted">Keine Adresse hinterlegt.</p>
-              )}
+              ) : null}
 
               <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[12.5px]">
-                {v.kwp ? (
+                {v?.kwp ? (
                   <span className="num">
                     <span className="text-muted">Anlage </span>
                     {num(v.kwp, "kWp")}
                     {v.speicher_kwh ? ` + ${num(v.speicher_kwh, "kWh")}` : ""}
                   </span>
                 ) : null}
-                {v.customer?.contact_person ? (
+                {v?.customer?.contact_person ? (
                   <span>
                     <span className="text-muted">Vor Ort </span>
                     {v.customer.contact_person}
                   </span>
                 ) : null}
-                {v.customer?.phone ? (
+                {v?.customer?.phone ? (
                   <a href={`tel:${v.customer.phone}`} className="num text-accent-ink underline">
                     {v.customer.phone}
                   </a>
