@@ -201,7 +201,7 @@ test("Der Kundenzeitstrahl zeigt die Aktivitäten im Backoffice", async ({
     .limit(1)
     .single();
 
-  await page.goto(`/vorgaenge/${vorgang!.id}`);
+  await page.goto(`/vorgaenge/${vorgang!.id}?tab=kunde`);
   await page.getByRole("button", { name: /^Historie/ }).click();
 
   const eintraege = await aktivitaeten(customerId);

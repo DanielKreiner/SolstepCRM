@@ -85,7 +85,7 @@ test("Kunde beim Vorgang anlegen, am Vorgang ändern und archivieren", async ({
     .single();
 
   // --- Ändern, am Vorgang ---
-  await page.goto(`/vorgaenge/${vorgang!.id}`);
+  await page.goto(`/vorgaenge/${vorgang!.id}?tab=kunde`);
   await page.getByRole("button", { name: "Stammdaten ändern" }).click();
 
   /*
@@ -156,7 +156,7 @@ test("Ein Kunde mit laufendem Vorgang lässt sich nicht archivieren", async ({
   expect(offener, "Seed hat keinen offenen Vorgang").toBeTruthy();
 
   await login(page, DEMO.gf);
-  await page.goto(`/vorgaenge/${offener!.id as string}`);
+  await page.goto(`/vorgaenge/${offener!.id as string}?tab=kunde`);
   await page.getByRole("button", { name: "Stammdaten ändern" }).click();
 
   page.on("dialog", (d) => void d.accept());

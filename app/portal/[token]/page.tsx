@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { PortalRahmen } from "@/components/portal/PortalShell";
 import { Pill } from "@/components/ui/Pill";
 import { dateShort, dateTime, eur, num } from "@/lib/format";
 import {
@@ -76,14 +77,12 @@ export default async function PortalPage({
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-[820px] px-4 py-8">
-      <header className="mb-6">
-        <p className="text-[13px] text-muted">{session.companyName}</p>
-        <h1 className="text-[28px] font-bold tracking-[-0.025em]">
-          {session.customerName}
-        </h1>
-      </header>
-
+    <PortalRahmen
+      kundeName={session.customerName}
+      firmaName={session.companyName}
+      titel="Ihr Kundenportal"
+      unter="Wählen Sie ein Projekt, um Fortschritt, Angebot und Dokumente zu sehen."
+    >
       {anlage ? (
         <section className="mb-6 rounded-[20px] bg-surface p-5 shadow-soft">
           <h2 className="mb-3 text-[15px] font-semibold">Ihre Anlage</h2>
@@ -268,7 +267,7 @@ export default async function PortalPage({
       <footer className="border-t border-line pt-4 text-[11.5px] text-faint">
         Dieser Zugang ist persönlich. Bitte den Link nicht weitergeben.
       </footer>
-    </main>
+    </PortalRahmen>
   );
 }
 

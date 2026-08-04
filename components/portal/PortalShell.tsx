@@ -34,6 +34,63 @@ export type PortalNavEintrag = {
   anzahl?: number;
 };
 
+/**
+ * Der Rahmen ohne Vorgangsnavigation.
+ *
+ * Für die Einstiegsseite: dort gibt es noch kein Projekt, also auch
+ * keine Bereiche, zwischen denen man wechseln könnte. Gleicher Hinter-
+ * grund, gleiche Kopfleiste, gleiche Flächen — damit der Kunde nicht
+ * den Eindruck bekommt, zwei verschiedene Sachen vor sich zu haben.
+ */
+export function PortalRahmen({
+  kundeName,
+  firmaName,
+  titel,
+  unter,
+  children,
+}: {
+  kundeName: string;
+  firmaName: string;
+  titel: string;
+  unter: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-dvh flex-col gap-[14px] bg-app p-[10px] sm:p-[14px]">
+      <header className="flex shrink-0 flex-wrap items-center gap-3 rounded-[22px] bg-surface px-4 py-3 shadow-soft">
+        <span
+          aria-hidden
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-[15px] font-bold text-white"
+        >
+          {BRAND_MARK}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold tracking-[-0.01em]">
+            {kundeName}
+          </span>
+          <span className="block truncate text-[12px] text-muted">{firmaName}</span>
+        </span>
+        <span
+          aria-hidden
+          className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-pill bg-s-done text-[12px] font-semibold text-white"
+        >
+          {initials(kundeName)}
+        </span>
+      </header>
+
+      <main className="flex-1 rounded-panel bg-panel px-4 pt-[26px] pb-8 shadow-soft sm:px-[26px]">
+        <div className="mx-auto w-full max-w-[1100px]">
+          <h1 className="text-[25px] leading-[1.1] font-bold tracking-[-0.03em] sm:text-[30px]">
+            {titel}
+          </h1>
+          <p className="mt-[5px] mb-5 text-[13.5px] text-muted">{unter}</p>
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export function PortalShell({
   token,
   vorgangId,

@@ -120,6 +120,12 @@ test("2 — Positionen im Vorgang zusammenstellen, ohne Seitenwechsel", async ({
     .limit(1)
     .single();
 
+  /*
+   * Die Phase wird im Überblick geschaltet, gebaut wird im Angebot.
+   * Genau der Weg, den ein Bearbeiter auch geht.
+   */
+  await page.goto(`/vorgaenge/${zustand.vorgangId}?tab=angebot`);
+
   const form = page.locator("form", { hasText: "Artikel übernehmen" });
   await suchwahl(form, "Artikel", artikel!.name as string);
   await form.getByLabel("Menge").fill("22");
@@ -495,7 +501,7 @@ test("10 — Schlussrechnung, Zahlung und die Offene-Posten-Liste", async ({
   });
 
   /* ---- Schlussrechnung erstellen ---- */
-  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}?tab=belege`);
   await page.getByRole("button", { name: "Schlussrechnung erstellen" }).click();
 
   /*
@@ -744,6 +750,39 @@ test("15 — Der Kunde sieht seinen Vorgang im Portal und nimmt an", async ({
   /* --------------------------------------------- Portallink erzeugen */
   await login(page, DEMO.gf);
   const token = await portalToken(page, zustand.kundeId!);
+
+  /*
+   * Das Angebot abschicken. Vorher ist es ein Entwurf, und das Portal
+   * liefert dem Kunden keine Positionen — was auch so sein soll. Der
+   * Knopf ist damit hier mitgeprüft, an der einzigen Stelle, an der
+   * Kunde, Mailadresse und Portalzugang zusammen vorliegen.
+   */
+  await page.goto(`/vorgaenge/${neu!.id}?tab=angebot`);
+  await page.getByRole("button", { name: /^(Angebot senden|Erneut senden)$/ }).click();
+  await expect
+    .poll(
+      async () => {
+        const { data } = await db
+          .from("vorgang")
+          .select("angebot_versendet_am")
+          .eq("id", neu!.id)
+          .single();
+        return data?.angebot_versendet_am ?? null;
+      },
+      { timeout: 20_000 },
+    )
+    .not.toBeNull();
+
+  /* Und im Postausgang steht eine Mail mit dem Link ins Portal. */
+  const { data: post } = await db
+    .from("mail_outbox")
+    .select("art, body_text")
+    .eq("vorgang_id", neu!.id)
+    .eq("art", "angebot")
+    .limit(1)
+    .maybeSingle();
+  expect(post, "Angebotsmail fehlt im Postausgang").not.toBeNull();
+  expect(String(post!.body_text)).toContain(`/vorgang/${neu!.id}?bereich=angebot`);
 
   await page.context().clearCookies();
   await page.goto(`/portal/${token}`);

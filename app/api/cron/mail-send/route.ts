@@ -84,12 +84,38 @@ export async function GET(request: Request) {
           continue;
         }
 
-        const ergebnis = konto
+        let ergebnis = konto
           ? await sendeUeberKonto(
               konto as unknown as MailKonto,
               zeile as unknown as Ausgang,
             )
           : await sendeUeberResend(zeile as unknown as Ausgang);
+
+        /*
+         * Ein Postfach, dessen Zugangsdaten sich nicht mehr öffnen
+         * lassen, ist kaputt und wird es ohne Eingriff bleiben. Dann
+         * darf es nicht auch noch jede Mail mit sich reissen: das Konto
+         * wird stillgelegt, damit lib/vorgang/mail.ts es nicht mehr
+         * anhängt, und diese eine Mail geht über den Ersatzweg raus.
+         *
+         * Aufgefallen an einem Demopostfach, das mit einem inzwischen
+         * getauschten MAIL_CRED_KEY gespeichert worden war — danach
+         * blieb jede einzelne Mail des Mandanten liegen.
+         */
+        if (konto && !ergebnis.ok && ergebnis.fehler.includes("entschlüsselbar")) {
+          await admin
+            .from("mail_account")
+            .update({
+              status: "auth_error",
+              last_error:
+                "Zugangsdaten lassen sich nicht mehr entschlüsseln. Bitte das Postfach in den Einstellungen neu verbinden.",
+            })
+            .eq("id", konto.id as string);
+
+          if (resendVerfuegbar()) {
+            ergebnis = await sendeUeberResend(zeile as unknown as Ausgang);
+          }
+        }
 
         if (ergebnis.ok) {
           await admin

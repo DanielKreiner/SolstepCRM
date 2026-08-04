@@ -87,7 +87,7 @@ test("1 — Die Artikelsuche zeigt Vorschaubilder", async ({ page }) => {
     .single();
   zustand.vorgangId = vorgang!.id as string;
 
-  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}?tab=angebot`);
 
   /*
    * Kein <select> mehr — ein Betrieb mit 468 Artikeln scrollt sonst,
@@ -115,7 +115,7 @@ test("2 — Das Bild wandert in die Position", async ({ page }) => {
   const db = admin();
   await aufraeumen();
   await login(page, DEMO.gf);
-  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+  await page.goto(`/vorgaenge/${zustand.vorgangId}?tab=angebot`);
 
   // Auf der Seite stehen zwei Mengenfelder — Artikel und freie Position.
   const form = page.locator("form", { hasText: "Artikel übernehmen" });
@@ -178,8 +178,20 @@ test("3 — Der Kunde sieht das Bild auf der Angebotsseite", async ({ page }) =>
   await login(page, DEMO.gf);
   const token = await portalToken(page, zustand.kundeId);
 
+  /*
+   * Voraussetzung, nicht Prüfgegenstand: ohne Versand ist das Angebot
+   * ein Entwurf, und das Portal liefert bewusst keine einzige Position.
+   * Den Versandknopf selbst prüft vorgang.spec.
+   */
+  await db
+    .from("vorgang")
+    .update({ angebot_versendet_am: new Date().toISOString() })
+    .eq("id", zustand.vorgangId!);
+
   await page.context().clearCookies();
-  await page.goto(`/portal/${token}/vorgang/${zustand.vorgangId}`);
+  await page.goto(
+    `/portal/${token}/vorgang/${zustand.vorgangId}?bereich=angebot`,
+  );
 
   await expect(
     page.locator(`img[src="${zustand.bild}"]`).first(),

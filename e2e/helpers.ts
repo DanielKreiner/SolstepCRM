@@ -137,7 +137,7 @@ export async function portalToken(page: Page, kundeId: string): Promise<string> 
     .single();
   if (error) throw new Error(`Kein Vorgang für ${kundeId}: ${error.message}`);
 
-  await page.goto(`/vorgaenge/${v.id as string}`);
+  await page.goto(`/vorgaenge/${v.id as string}?tab=kunde`);
   await page.getByRole("button", { name: "Kundenportal" }).click();
 
   const feld = page.getByLabel("Portallink").first();

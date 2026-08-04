@@ -22,7 +22,59 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * in der aufrufenden Server Action, die Mandantenzuordnung hier.
  */
 
-export type MailArt = "angebot" | "rueckfrage" | "nachricht" | "sonstiges";
+export type MailArt =
+  | "angebot"
+  | "rueckfrage"
+  | "nachricht"
+  | "portal"
+  | "termin"
+  | "auftrag"
+  | "sonstiges";
+
+/**
+ * Das Markenbild des Mandanten (CLAUDE.md 6.4, company.pdf_settings).
+ *
+ * Für den Kunden ist die Mail Post von seinem Elektriker und nicht von
+ * dieser Software. Also steht das Logo des Betriebs darin, seine Farbe
+ * und seine Adresse — nicht unsere.
+ */
+export type Marke = {
+  firma: string;
+  logoUrl: string | null;
+  akzent: string;
+  fusszeile: string | null;
+};
+
+const STANDARD_AKZENT = "#E8952B";
+
+export async function markeLaden(
+  admin: SupabaseClient,
+  companyId: string,
+): Promise<Marke> {
+  const { data } = await admin
+    .from("company")
+    .select("name, address, zip, city, pdf_settings")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  const s = (data?.pdf_settings ?? {}) as Record<string, unknown>;
+  const akzent = typeof s.akzent === "string" ? s.akzent : "";
+
+  return {
+    firma: (data?.name as string) ?? BRAND.name,
+    logoUrl: typeof s.logo_url === "string" && s.logo_url ? s.logo_url : null,
+    /*
+     * Nur echte Hexfarben durchlassen. Der Wert landet direkt in einem
+     * style-Attribut — ein Freitextfeld darf dort nichts anderes
+     * hineinschreiben können.
+     */
+    akzent: /^#[0-9a-fA-F]{6}$/.test(akzent) ? akzent : STANDARD_AKZENT,
+    fusszeile:
+      typeof s.fusszeile === "string" && s.fusszeile
+        ? s.fusszeile
+        : [data?.name, data?.zip, data?.city].filter(Boolean).join(" · ") || null,
+  };
+}
 
 export type Empfaenger = { name: string; email: string };
 
@@ -113,16 +165,27 @@ export async function einreihen(
   auftrag: MailAuftrag,
 ): Promise<{ ok: true; id: string } | { ok: false; grund: string }> {
   /*
-   * Ohne eingehängtes Postfach wird trotzdem eingereiht — der Zusteller
-   * entscheidet später, worüber er sendet. Sonst geht der Text verloren,
-   * bevor jemand das Postfach einhängt.
+   * Nur ein Postfach anhängen, das auch senden kann.
+   *
+   * Vorher genügte is_default. Ein eingetragenes, aber nie geprüftes
+   * Postfach (status 'unverified') zog damit jede Mail an sich und liess
+   * sie dort liegen — der Übergangsversand kam nie zum Zug, und der
+   * Betrieb sah nur „Zugangsdaten nicht entschlüsselbar". Genau so ist
+   * es passiert: das Demopostfach im Seed war nie verbunden.
+   *
+   * Ohne brauchbares Postfach bleibt die Zuordnung leer, und der
+   * Zusteller entscheidet selbst, worüber er sendet.
    */
   const { data: postfach } = await admin
     .from("mail_account")
     .select("id")
     .eq("company_id", auftrag.companyId)
-    .eq("is_default", true)
+    .eq("status", "ok")
+    .order("is_default", { ascending: false })
+    .limit(1)
     .maybeSingle();
+
+  const marke = await markeLaden(admin, auftrag.companyId);
 
   const { data, error } = await admin
     .from("mail_outbox")
@@ -134,8 +197,8 @@ export async function einreihen(
       erneut_zu: auftrag.erneutZu ?? null,
       to_addrs: [auftrag.an.email],
       subject: auftrag.betreff,
-      body_html: html(auftrag),
-      body_text: text(auftrag),
+      body_html: html(auftrag, marke),
+      body_text: text(auftrag, marke),
     })
     .select("id")
     .single();
@@ -151,7 +214,7 @@ export async function einreihen(
  * darstellt (CLAUDE.md 6.1). Keine externen Bilder, keine Webfonts —
  * beides wird im Standard blockiert und hinterlässt Löcher.
  */
-function html(a: MailAuftrag): string {
+function html(a: MailAuftrag, m: Marke): string {
   const absaetze = a.absaetze
     .map(
       (p) =>
@@ -159,28 +222,53 @@ function html(a: MailAuftrag): string {
     )
     .join("");
 
+  /*
+   * Der Knopf als Tabellenzelle mit Hintergrundfarbe, nicht als
+   * gestyltes <a>: Outlook wirft border-radius und padding an Links weg,
+   * an Tabellenzellen nicht. Die nackte Adresse steht darunter, weil
+   * viele Programme Bilder und manche auch Knöpfe unterdrücken.
+   */
   const knopf = a.knopf
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0">
-         <tr><td style="border-radius:99px;background:#E8952B">
+         <tr><td style="border-radius:99px;background:${m.akzent}">
            <a href="${esc(a.knopf.url)}" style="display:inline-block;padding:13px 26px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none">${esc(a.knopf.text)}</a>
          </td></tr>
        </table>
-       <p style="margin:0 0 14px;font-size:12px;line-height:1.5;color:#6A625A">Falls der Knopf nicht funktioniert: ${esc(a.knopf.url)}</p>`
+       <p style="margin:0 0 14px;font-size:12px;line-height:1.5;color:#6A625A">Falls der Knopf nicht funktioniert: <a href="${esc(a.knopf.url)}" style="color:#6A625A">${esc(a.knopf.url)}</a></p>`
     : "";
 
-  return `<!doctype html><html lang="de"><body style="margin:0;padding:24px;background:#EAE6E0;font-family:Helvetica,Arial,sans-serif">
-    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px">
-      <tr><td style="padding:28px">
+  /*
+   * Ohne Logo der Firmenname als Schrift — kein leeres Kästchen und kein
+   * Platzhalterbild. Feste Höhe, damit ein zu grosses Logo die Mail
+   * nicht sprengt.
+   */
+  const kopf = m.logoUrl
+    ? `<img src="${esc(m.logoUrl)}" alt="${esc(m.firma)}" height="40" style="display:block;height:40px;width:auto;border:0">`
+    : `<span style="font-size:19px;font-weight:700;letter-spacing:-0.02em;color:#151210">${esc(m.firma)}</span>`;
+
+  const fuss = m.fusszeile
+    ? `<tr><td style="padding:0 28px 24px">
+         <p style="margin:0;font-size:11.5px;line-height:1.5;color:#9C9289">${esc(m.fusszeile)}</p>
+       </td></tr>`
+    : "";
+
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(a.betreff)}</title></head>
+  <body style="margin:0;padding:24px;background:#EAE6E0;font-family:Helvetica,Arial,sans-serif">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:18px">
+      <tr><td style="padding:26px 28px 0">${kopf}</td></tr>
+      <tr><td style="padding:18px 28px 0"><div style="height:3px;width:44px;border-radius:99px;background:${m.akzent}"></div></td></tr>
+      <tr><td style="padding:20px 28px 4px">
         <p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#151210">Guten Tag ${esc(a.an.name)},</p>
         ${absaetze}
         ${knopf}
-        <p style="margin:22px 0 0;font-size:13px;line-height:1.5;color:#6A625A">Freundliche Grüße<br>${esc(BRAND.name)}</p>
+        <p style="margin:22px 0 24px;font-size:13px;line-height:1.5;color:#6A625A">Freundliche Grüße<br>${esc(m.firma)}</p>
       </td></tr>
+      ${fuss}
     </table>
   </body></html>`;
 }
 
-function text(a: MailAuftrag): string {
+function text(a: MailAuftrag, m: Marke): string {
   return [
     `Guten Tag ${a.an.name},`,
     "",
@@ -188,7 +276,8 @@ function text(a: MailAuftrag): string {
     ...(a.knopf ? ["", `${a.knopf.text}: ${a.knopf.url}`] : []),
     "",
     "Freundliche Grüße",
-    BRAND.name,
+    m.firma,
+    ...(m.fusszeile ? ["", m.fusszeile] : []),
   ].join("\n");
 }
 

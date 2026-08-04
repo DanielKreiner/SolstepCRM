@@ -8,6 +8,7 @@ import { verschluesseln } from "@/lib/mail/crypto";
 import { createToken, hashToken } from "@/lib/portal/token";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { einreihen, mailClient } from "@/lib/vorgang/mail";
 
 /*
  * Kunden, deren Anlagen und der Portalzugang.
@@ -325,7 +326,7 @@ export async function createPortalAccess(
   const supabase = await createClient();
   const { data: kunde } = await supabase
     .from("customer")
-    .select("id, name")
+    .select("id, name, email")
     .eq("id", id.data)
     .maybeSingle();
 
@@ -376,6 +377,19 @@ export async function createPortalAccess(
 
   if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
 
+  /*
+   * Und dem Kunden Bescheid geben. Ein Zugang, von dem nur das Backoffice
+   * weiss, ist keiner — bisher musste jemand den Link von Hand in eine
+   * Mail kopieren, und genau das passierte oft nicht.
+   */
+  const gemailt = await zugangMailen(
+    zugang.me.companyId,
+    kunde.id as string,
+    (kunde.email as string | null) ?? null,
+    kunde.name as string,
+    token,
+  );
+
   revalidatePath("/vorgaenge");
   return {
     error: null,
@@ -383,8 +397,60 @@ export async function createPortalAccess(
      * Der Link steht in der Erfolgsmeldung, weil es die einzige Gelegenheit
      * ist. Beim nächsten Laden der Seite ist er weg.
      */
-    ok: `${BRAND.domain}/portal/${token}`,
+    ok: gemailt
+      ? `An ${gemailt} geschickt. Link: ${BRAND.domain}/portal/${token}`
+      : `${BRAND.domain}/portal/${token}`,
   };
+}
+
+/**
+ * Die Willkommensmail zum Portalzugang.
+ *
+ * Scheitert bewusst leise: der Zugang steht bereits, und ihn wieder
+ * wegzunehmen, weil beim Kunden keine Mailadresse hinterlegt ist, wäre
+ * der schlechtere Tausch. Der Link steht dann in der Meldung, und
+ * jemand schickt ihn von Hand.
+ */
+async function zugangMailen(
+  companyId: string,
+  kundeId: string,
+  email: string | null,
+  name: string,
+  token: string,
+): Promise<string | null> {
+  if (!email) return null;
+
+  /*
+   * Ein Portalzugang gehört dem Kunden und nicht einem einzelnen
+   * Vorgang. Für die Zuordnung im Postausgang nehmen wir trotzdem einen
+   * — sonst hinge die Mail nirgends und niemand fände sie wieder.
+   */
+  const admin = mailClient();
+  const { data: v } = await admin
+    .from("vorgang")
+    .select("id")
+    .eq("customer_id", kundeId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!v) return null;
+
+  const r = await einreihen(admin, {
+    companyId,
+    vorgangId: v.id as string,
+    art: "portal",
+    an: { name, email },
+    betreff: "Ihr Zugang zum Kundenportal",
+    absaetze: [
+      "wir haben Ihnen einen persönlichen Bereich eingerichtet. Dort sehen Sie jederzeit, wie weit Ihr Projekt ist, finden Ihr Angebot und alle Unterlagen, und können uns direkt schreiben.",
+      "Ein Passwort brauchen Sie nicht — der Link unten genügt. Bitte geben Sie ihn nicht weiter, er ist persönlich.",
+      "Der Zugang ist 90 Tage gültig. Läuft er ab, melden Sie sich einfach bei uns.",
+    ],
+    knopf: { text: "Portal öffnen", url: `${BRAND.domain}/portal/${token}` },
+  });
+
+  return r.ok ? email : null;
 }
 
 export async function revokePortalAccess(
