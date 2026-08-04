@@ -22,16 +22,18 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { LEER, Meldung, type AktionsStatus } from "@/components/ui/Formular";
 import { Suchauswahl, type Option } from "@/components/ui/Suchauswahl";
+import {
+  Positionsleiste,
+  type Produkt,
+  type VorlageOption,
+} from "./Positionsleiste";
 import { eur, num } from "@/lib/format";
 import { berechne, type PreisGruppe, type PreisPosition } from "@/lib/vorgang/preis";
 import {
   angebotskopfSpeichern,
   gruppeAendern,
-  gruppeAnlegen,
   gruppeAufloesen,
   positionAendern,
-  positionAusArtikel,
-  positionFrei,
   positionLoeschen,
   positionOptional,
   positionVerschieben,
@@ -121,6 +123,9 @@ export function Positionen({
   rahmen,
   artikel,
   kategorien,
+  produkte,
+  vorlagen,
+  einheiten,
   gesperrt,
   gesperrtGrund,
 }: {
@@ -131,6 +136,10 @@ export function Positionen({
   artikel: Option[];
   /** Kategorien des Artikelstamms — für Kategorie-Upgrades. */
   kategorien: string[];
+  /** Der Katalog für das Produktfenster — mit Bild, Hersteller, EK und VK. */
+  produkte: Produkt[];
+  vorlagen: VorlageOption[];
+  einheiten: string[];
   gesperrt: boolean;
   gesperrtGrund: string | null;
 }) {
@@ -269,13 +278,31 @@ export function Positionen({
 
   return (
     <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[15px] font-semibold">Angebotspositionen</h2>
-        <span className="num text-[11.5px] text-faint">
-          {warten ? "wird gespeichert …" : null}{" "}
-          {liste.length} {liste.length === 1 ? "Position" : "Positionen"}
-        </span>
-      </div>
+      {/*
+        Die Werkzeuge stehen oben, nicht unter der Liste. Je voller das
+        Angebot, desto weiter weg war der Knopf zum Hinzufügen — genau
+        verkehrt herum.
+      */}
+      {!gesperrt ? (
+        <Positionsleiste
+          vorgangId={vorgangId}
+          anzahl={liste.length}
+          produkte={produkte}
+          vorlagen={vorlagen}
+          einheiten={einheiten}
+        />
+      ) : (
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-[15px] font-semibold">Positionen</h2>
+          <span className="num text-[11.5px] text-faint">
+            {liste.length} {liste.length === 1 ? "Position" : "Positionen"}
+          </span>
+        </div>
+      )}
+
+      {warten ? (
+        <p className="mb-2 text-[11.5px] text-faint">wird gespeichert …</p>
+      ) : null}
 
       {gesperrt ? (
         <p className="mb-4 rounded-input bg-panel px-4 py-3 text-[12.5px] text-muted">
@@ -411,17 +438,15 @@ export function Positionen({
         </div>
       </dl>
 
+      {/*
+        Steuer, Rabatt und Lieferung bleiben unten: sie gehören zu den
+        Summen darüber und werden einmal je Angebot gesetzt, nicht bei
+        jeder Position.
+      */}
       {!gesperrt ? (
-        <>
-          <div className="mt-4 grid gap-3 border-t border-line pt-4 md:grid-cols-2">
-            <ArtikelForm vorgangId={vorgangId} artikel={artikel} />
-            <FreieForm vorgangId={vorgangId} />
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <GruppeForm vorgangId={vorgangId} />
-            <RahmenForm vorgangId={vorgangId} rahmen={rahmen} />
-          </div>
-        </>
+        <div className="mt-4 border-t border-line pt-4">
+          <RahmenForm vorgangId={vorgangId} rahmen={rahmen} />
+        </div>
       ) : null}
     </section>
   );
@@ -887,94 +912,6 @@ function Klein({ label }: { label: string }) {
 
 /* ------------------------------------------------------------ ANLEGEN */
 
-function ArtikelForm({
-  vorgangId,
-  artikel,
-}: {
-  vorgangId: string;
-  artikel: Option[];
-}) {
-  const [status, formAction] = useActionState<AktionsStatus, FormData>(
-    positionAusArtikel,
-    LEER,
-  );
-
-  return (
-    <form action={formAction} key={status.ok ?? "leer"} className="rounded-input bg-panel p-4">
-      <h3 className="text-[13px] font-semibold">Artikel übernehmen</h3>
-      <p className="mt-1 mb-3 text-[11.5px] text-muted">
-        Preis, Kalkulation und Bild werden kopiert — ein späterer
-        Artikelpreis ändert dieses Angebot nicht.
-      </p>
-
-      <input type="hidden" name="vorgangId" value={vorgangId} />
-
-      <Suchauswahl
-        name="articleId"
-        label="Artikel"
-        pflicht
-        breit
-        platzhalter="Artikel suchen — Bezeichnung oder Nummer"
-        optionen={artikel}
-      />
-
-      <div className="mt-2">
-        <Feld praefix="pa" label="Menge" name="menge" wert={1} typ="number" schritt="0.001" />
-      </div>
-
-      <div className="mt-3">
-        <Klein label="Übernehmen" />
-      </div>
-      <Meldung status={status} />
-    </form>
-  );
-}
-
-function FreieForm({ vorgangId }: { vorgangId: string }) {
-  const [status, formAction] = useActionState<AktionsStatus, FormData>(
-    positionFrei,
-    LEER,
-  );
-
-  return (
-    <form action={formAction} key={status.ok ?? "leer"} className="rounded-input bg-panel p-4">
-      <h3 className="text-[13px] font-semibold">Freie Position</h3>
-      <p className="mt-1 mb-3 text-[11.5px] text-muted">
-        Für Leistungen ohne Artikel — Montage, Anfahrt, Gerüst.
-      </p>
-
-      <input type="hidden" name="vorgangId" value={vorgangId} />
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Feld praefix="pf" label="Bezeichnung" name="bezeichnung" wert="" spalten="sm:col-span-2" />
-        <Feld praefix="pf" label="Menge" name="menge" wert={1} typ="number" schritt="0.001" />
-        <Feld praefix="pf" label="Einheit" name="einheit" wert="Stk" />
-        <Feld praefix="pf" label="Verkauf netto" name="epNetto" wert="" typ="number" schritt="0.01" />
-        <Feld praefix="pf" label="Einkauf" name="kalkEk" wert="" typ="number" schritt="0.01" />
-        <Feld praefix="pf" label="Stunden" name="kalkStunden" wert="" typ="number" schritt="0.001" />
-        <Feld praefix="pf" label="USt %" name="ustSatz" wert={20} typ="number" schritt="1" />
-      </div>
-
-      <label className="mt-2 flex items-center gap-2 text-[11.5px]">
-        <input
-          type="checkbox"
-          name="istMaterial"
-          value="ja"
-          className="h-4 w-4 accent-[var(--accent)]"
-        />
-        Material
-      </label>
-
-      <div className="mt-3">
-        <Klein label="Position anlegen" />
-      </div>
-      <Meldung status={status} />
-    </form>
-  );
-}
-
-/* ------------------------------------------------------------ GRUPPE */
-
 /**
  * Eine Gruppe im Editor.
  *
@@ -1150,39 +1087,6 @@ function GruppenBlock({
         </p>
       )}
     </section>
-  );
-}
-
-function GruppeForm({ vorgangId }: { vorgangId: string }) {
-  const [status, formAction] = useActionState<AktionsStatus, FormData>(
-    gruppeAnlegen,
-    LEER,
-  );
-
-  return (
-    <form
-      action={formAction}
-      key={status.ok ?? "leer"}
-      className="rounded-input bg-panel p-4"
-    >
-      <h3 className="text-[13px] font-semibold">Gruppe anlegen</h3>
-      <p className="mt-1 mb-3 text-[11.5px] text-muted">
-        Für Pakete wie „PV-Anlage 9,3 kWp“. Der Kunde entscheidet über das
-        Paket, nicht über zwanzig Modulklemmen.
-      </p>
-
-      <input type="hidden" name="vorgangId" value={vorgangId} />
-
-      <div className="grid gap-2">
-        <Feld praefix="gn" label="Name" name="name" wert="" />
-        <Feld praefix="gn" label="Beschreibung" name="beschreibung" wert="" />
-      </div>
-
-      <div className="mt-3">
-        <Klein label="Anlegen" />
-      </div>
-      <Meldung status={status} />
-    </form>
   );
 }
 

@@ -6,7 +6,6 @@ import { GateAmpel } from "@/components/vorgang/GateAmpel";
 import { Stepper } from "@/components/vorgang/Stepper";
 import { Positionen } from "@/components/vorgang/Positionen";
 import { Postausgang, type MailZeile } from "@/components/vorgang/Postausgang";
-import { Schnellbau } from "@/components/vorgang/Schnellbau";
 import { Rechnungen } from "@/components/vorgang/Rechnungen";
 import { Versand } from "@/components/vorgang/Versand";
 import { Chat } from "@/components/vorgang/Chat";
@@ -380,12 +379,16 @@ async function AngebotReiter({
     await Promise.all([
       supabase
         .from("article")
-        .select("id, sku, name, category, sale_price, image_url, modul_wp")
+        .select(
+          "id, sku, name, category, manufacturer, unit, purchase_price, sale_price, image_url, modul_wp",
+        )
         .eq("active", true)
         .order("name"),
       supabase
         .from("angebot_vorlage")
-        .select("id, name, beschreibung, ziel_kwp, ist_standard")
+        .select(
+          "id, name, beschreibung, ziel_kwp, ist_standard, positionen:angebot_vorlage_position ( id )",
+        )
         .order("ist_standard", { ascending: false })
         .order("name"),
       supabase.from("customer").select("email").eq("id", kopf.kundeId).maybeSingle(),
@@ -417,27 +420,6 @@ async function AngebotReiter({
         gesperrt={gesperrt}
       />
 
-      {!gesperrt ? (
-        <Schnellbau
-          vorgangId={id}
-          module={(artikel ?? [])
-            .filter((a) => a.modul_wp !== null)
-            .map((a) => ({
-              wert: a.id as string,
-              text: a.name as string,
-              zusatz: `${a.modul_wp as number} Wp · ${eur(a.sale_price)}`,
-              ...(a.image_url ? { bild: a.image_url as string } : {}),
-            }))}
-          vorlagen={(vorlagenRoh ?? []).map((v) => ({
-            id: v.id as string,
-            name: v.name as string,
-            beschreibung: (v.beschreibung as string | null) ?? null,
-            zielKwp: v.ziel_kwp === null ? null : Number(v.ziel_kwp),
-            istStandard: v.ist_standard as boolean,
-          }))}
-        />
-      ) : null}
-
       <Positionen
         vorgangId={id}
         positionen={positionen}
@@ -459,6 +441,32 @@ async function AngebotReiter({
           zusatz: `${a.sku as string} · ${eur(a.sale_price)}`,
           ...(a.image_url ? { bild: a.image_url as string } : {}),
         }))}
+        produkte={(artikel ?? []).map((a) => ({
+          id: a.id as string,
+          name: a.name as string,
+          hersteller: (a.manufacturer as string | null) ?? null,
+          kategorie: (a.category as string | null) ?? null,
+          ekNetto: a.purchase_price === null ? null : Number(a.purchase_price),
+          vkNetto: Number(a.sale_price),
+          bildUrl: (a.image_url as string | null) ?? null,
+          modulWp: a.modul_wp === null ? null : Number(a.modul_wp),
+        }))}
+        vorlagen={(vorlagenRoh ?? []).map((v) => ({
+          id: v.id as string,
+          name: v.name as string,
+          beschreibung: (v.beschreibung as string | null) ?? null,
+          zielKwp: v.ziel_kwp === null ? null : Number(v.ziel_kwp),
+          istStandard: v.ist_standard as boolean,
+          anzahlPositionen: ((v.positionen ?? []) as unknown[]).length,
+        }))}
+        /* Was der Betrieb tatsächlich verwendet — keine erfundene Liste. */
+        einheiten={[
+          ...new Set(
+            (artikel ?? [])
+              .map((a) => a.unit as string | null)
+              .filter((u): u is string => Boolean(u)),
+          ),
+        ].sort()}
         kategorien={[
           ...new Set(
             (artikel ?? [])

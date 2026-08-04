@@ -182,6 +182,8 @@ export async function positionAusArtikel(
 const freiSchema = z.object({
   vorgangId: z.string().uuid(),
   bezeichnung: z.string().trim().min(2, "Bezeichnung fehlt.").max(200),
+  /* Steht beim Kunden unter der Position — „Gerüst inkl. Auf- und Abbau". */
+  beschreibung: z.string().trim().max(2000).optional().default(""),
   menge: z.coerce.number().gt(0, "Menge muss grösser als null sein."),
   einheit: z.string().trim().max(20).optional().default("Stk"),
   epNetto: z.coerce.number().min(0),
@@ -222,6 +224,7 @@ export async function positionFrei(
     vorgang_id: d.vorgangId,
     sort: Number(letzte?.sort ?? 0) + 10,
     bezeichnung: d.bezeichnung,
+    beschreibung: d.beschreibung || null,
     menge: d.menge,
     einheit: d.einheit || "Stk",
     ep_netto: d.epNetto,
