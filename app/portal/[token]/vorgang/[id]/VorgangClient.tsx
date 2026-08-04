@@ -132,7 +132,14 @@ export function AngebotAktionen({
 
       {offen ? (
         <div className="border-t border-line bg-panel">
+          {/*
+            Die id ist der Anker: die Angebotsansicht spiegelt die
+            angekreuzten Optionen und Upgrades über das form-Attribut
+            hierher, ohne dass beide Komponenten denselben Zustand
+            teilen müssen.
+          */}
           <form
+            id="annahme-formular"
             action={formAction}
             className="mx-auto flex w-full max-w-[860px] flex-wrap items-end gap-3 px-4 py-4"
           >

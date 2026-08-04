@@ -1,5 +1,9 @@
 "use server";
 
+/** Nur echte UUIDs weiterreichen — der Rest ist Tippfehler oder Angriff. */
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -44,11 +48,25 @@ export async function vorgangAnnehmen(
     kopf.get("x-real-ip") ??
     null;
 
+  /*
+   * Die Auswahl kommt als Liste von IDs aus dem Formular. Geprüft wird
+   * sie nicht hier, sondern beim Schreiben: dort trifft eine geratene
+   * fremde ID nichts, weil auf vorgang_id und optional eingeschränkt wird.
+   */
+  const ids = (wert: FormDataEntryValue | null): string[] =>
+    typeof wert === "string"
+      ? wert.split(",").map((x) => x.trim()).filter((x) => UUID.test(x))
+      : [];
+
   const ergebnis = await portalVorgangAnnehmen(
     session,
     parsed.data.vorgangId,
     parsed.data.name,
     ip,
+    {
+      optionen: ids(formData.get("gewaehlteOptionen")),
+      upgrades: ids(formData.get("gewaehlteUpgrades")),
+    },
   );
 
   if (!ergebnis.ok) return { error: ergebnis.meldung, ok: null };

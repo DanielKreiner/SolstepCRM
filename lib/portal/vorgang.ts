@@ -52,13 +52,34 @@ export type PortalDokument = {
 
 export type PortalPosition = {
   id: string;
+  gruppeId: string | null;
   bezeichnung: string;
+  hersteller: string | null;
+  kategorie: string | null;
   menge: number;
   einheit: string;
   epNetto: number;
   ustSatz: number;
+  rabattProzent: number;
+  optional: boolean;
+  /* Was der Kunde daraus gemacht hat. */
+  kundenAuswahl: string;
+  upgradeName: string | null;
+  upgradeAufpreis: number | null;
+  upgradeText: string | null;
   bildUrl: string | null;
   beschreibung: string | null;
+  datenblattUrl: string | null;
+  techSpecs: { key?: string; value?: string; unit?: string; group?: string }[] | null;
+};
+
+export type PortalGruppe = {
+  id: string;
+  name: string;
+  beschreibung: string | null;
+  sort: number;
+  paketPreis: number | null;
+  einzelpreiseVerstecken: boolean;
 };
 
 export type PortalTermin = {
@@ -94,6 +115,15 @@ export type PortalDetail = {
   schritte: PortalSchritt[];
   dokumente: PortalDokument[];
   positionen: PortalPosition[];
+  gruppen: PortalGruppe[];
+  /* Steuersatz, Rabatt und Lieferung — die Zahlen unter dem Strich. */
+  rahmen: { ustSatz: number; rabattProzent: number; lieferungNetto: number };
+  texte: {
+    titel: string | null;
+    einleitung: string | null;
+    abschluss: string | null;
+    gueltigBis: string | null;
+  };
   termine: PortalTermin[];
   firma: {
     name: string;
@@ -115,7 +145,10 @@ export async function portalVorgangDetail(
   const { data: v } = await admin
     .from("vorgang")
     .select(
-      "id, number, phase, kwp, speicher_kwh, adresse, plz, ort, angebotswert_netto, auftragswert_netto, verloren_am, created_at",
+      `id, number, phase, kwp, speicher_kwh, adresse, plz, ort,
+       angebotswert_netto, auftragswert_netto, verloren_am, created_at,
+       ust_satz, rabatt_prozent, lieferung_netto,
+       angebot_titel, angebot_einleitung, angebot_abschluss, angebot_gueltig_bis`,
     )
     .eq("id", vorgangId)
     /* Der Token allein reicht nicht — der Vorgang muss diesem Kunden gehören. */
@@ -165,13 +198,29 @@ export async function portalVorgangDetail(
 
   const posAbfrage = admin
     .from("vorgang_position")
-    .select("id, bezeichnung, menge, einheit, ep_netto, ust_satz, bild_url, beschreibung, sort")
+    .select(
+      `id, gruppe_id, bezeichnung, menge, einheit, ep_netto, ust_satz,
+       rabatt_prozent, optional, kunden_auswahl,
+       upgrade_article_id, upgrade_aufpreis, upgrade_text,
+       bild_url, beschreibung, sort,
+       artikel:article_id ( manufacturer, category, datasheet_url, tech_specs ),
+       upgradeZiel:upgrade_article_id ( name )`,
+    )
     .eq("vorgang_id", vorgangId)
     .order("sort");
 
-  const { data: positionen } = ab
-    ? await posAbfrage.eq("dokument_id", ab.id)
-    : await posAbfrage.is("dokument_id", null);
+  const gruppenAbfrage = admin
+    .from("vorgang_gruppe")
+    .select("id, name, beschreibung, sort, paket_preis, einzelpreise_verstecken")
+    .eq("vorgang_id", vorgangId)
+    .order("sort");
+
+  const [{ data: positionen }, { data: gruppen }] = await Promise.all([
+    ab ? posAbfrage.eq("dokument_id", ab.id) : posAbfrage.is("dokument_id", null),
+    ab
+      ? gruppenAbfrage.eq("dokument_id", ab.id)
+      : gruppenAbfrage.is("dokument_id", null),
+  ]);
 
   return {
     vorgang: abbilden(v as unknown as Roh),
@@ -200,8 +249,39 @@ export async function portalVorgangDetail(
       bezahltAm: d.bezahlt_am,
       createdAt: d.created_at,
     })),
+    gruppen: ((gruppen ?? []) as unknown as GruppeRoh[]).map((g) => ({
+      id: g.id,
+      name: g.name,
+      beschreibung: g.beschreibung,
+      sort: g.sort,
+      paketPreis: g.paket_preis === null ? null : Number(g.paket_preis),
+      einzelpreiseVerstecken: g.einzelpreise_verstecken,
+    })),
+    rahmen: {
+      ustSatz: Number(v.ust_satz ?? 20),
+      rabattProzent: Number(v.rabatt_prozent ?? 0),
+      lieferungNetto: Number(v.lieferung_netto ?? 0),
+    },
+    texte: {
+      titel: (v.angebot_titel as string | null) ?? null,
+      einleitung: (v.angebot_einleitung as string | null) ?? null,
+      abschluss: (v.angebot_abschluss as string | null) ?? null,
+      gueltigBis: (v.angebot_gueltig_bis as string | null) ?? null,
+    },
     positionen: ((positionen ?? []) as unknown as PosRoh[]).map((p) => ({
       id: p.id,
+      gruppeId: p.gruppe_id,
+      hersteller: p.artikel?.manufacturer ?? null,
+      kategorie: p.artikel?.category ?? null,
+      rabattProzent: Number(p.rabatt_prozent ?? 0),
+      optional: p.optional,
+      kundenAuswahl: p.kunden_auswahl,
+      upgradeName: p.upgradeZiel?.name ?? null,
+      upgradeAufpreis:
+        p.upgrade_aufpreis === null ? null : Number(p.upgrade_aufpreis),
+      upgradeText: p.upgrade_text,
+      datenblattUrl: p.artikel?.datasheet_url ?? null,
+      techSpecs: p.artikel?.tech_specs ?? null,
       bezeichnung: p.bezeichnung,
       menge: Number(p.menge),
       einheit: p.einheit,
@@ -246,6 +326,10 @@ export async function portalVorgangAnnehmen(
   vorgangId: string,
   name: string,
   ip: string | null,
+  auswahl: { optionen: string[]; upgrades: string[] } = {
+    optionen: [],
+    upgrades: [],
+  },
 ): Promise<{ ok: boolean; meldung: string }> {
   const admin = createAdminClient();
 
@@ -258,6 +342,80 @@ export async function portalVorgangAnnehmen(
     .maybeSingle();
 
   if (!v) return { ok: false, meldung: "Angebot nicht gefunden." };
+
+  /*
+   * Erst die Wahl des Kunden festschreiben, dann die Kaskade — sie friert
+   * die Positionen ein, und was dann noch optional ist, wäre für immer
+   * abgewählt. Andersherum bestellte der Kunde etwas anderes, als die
+   * Seite ihm ausgerechnet hat.
+   *
+   * Die IDs kommen aus dem Formular und sind damit vom Kunden bestimmt.
+   * Deshalb wird nur innerhalb dieses Vorgangs und nur auf optionale
+   * Zeilen geschrieben: eine geratene fremde ID trifft nichts.
+   */
+  const { data: optionen } = await admin
+    .from("vorgang_position")
+    .select("id, upgrade_article_id, upgrade_aufpreis, menge, ep_netto")
+    .eq("vorgang_id", vorgangId)
+    .is("dokument_id", null);
+
+  const gewaehlt = new Set(auswahl.optionen);
+  const upgradeWunsch = new Set(auswahl.upgrades);
+
+  for (const p of optionen ?? []) {
+    const id = p.id as string;
+
+    if (gewaehlt.has(id)) {
+      /* Angekreuzt: zählt ab jetzt wie jede andere Position. */
+      await admin
+        .from("vorgang_position")
+        .update({ optional: false, kunden_auswahl: "gewaehlt" })
+        .eq("id", id)
+        .eq("vorgang_id", vorgangId)
+        .eq("optional", true);
+    } else {
+      await admin
+        .from("vorgang_position")
+        .update({ kunden_auswahl: "abgewaehlt" })
+        .eq("id", id)
+        .eq("vorgang_id", vorgangId)
+        .eq("optional", true);
+    }
+
+    /*
+     * Upgrade: die Position wird zum besseren Produkt. Der Aufpreis ist
+     * brutto und stand im Angebot — der Nettoaufschlag folgt daraus, mit
+     * demselben Steuersatz, den die Position trägt.
+     */
+    if (upgradeWunsch.has(id) && p.upgrade_article_id && p.upgrade_aufpreis) {
+      const { data: ziel } = await admin
+        .from("article")
+        .select("name, sale_price, purchase_price, image_url, description, unit")
+        .eq("id", p.upgrade_article_id as string)
+        .maybeSingle();
+
+      if (ziel) {
+        await admin
+          .from("vorgang_position")
+          .update({
+            article_id: p.upgrade_article_id,
+            bezeichnung: ziel.name as string,
+            ep_netto: ziel.sale_price,
+            kalk_ek: ziel.purchase_price,
+            einheit: (ziel.unit as string) ?? "Stk",
+            bild_url: ziel.image_url,
+            beschreibung: ziel.description,
+            kunden_auswahl: "upgraded",
+            upgrade_article_id: null,
+            upgrade_aufpreis: null,
+            upgrade_kategorie: null,
+            upgrade_text: null,
+          })
+          .eq("id", id)
+          .eq("vorgang_id", vorgangId);
+      }
+    }
+  }
 
   const ergebnis = await kaskadeAusloesen(admin, {
     vorgangId,
@@ -350,13 +508,37 @@ type DokRoh = {
 
 type PosRoh = {
   id: string;
+  gruppe_id: string | null;
   bezeichnung: string;
   menge: string;
   einheit: string;
   ep_netto: string;
   ust_satz: string;
+  rabatt_prozent: string | null;
+  optional: boolean;
+  kunden_auswahl: string;
+  upgrade_article_id: string | null;
+  upgrade_aufpreis: string | null;
+  upgrade_text: string | null;
   bild_url: string | null;
   beschreibung: string | null;
+  /* PostgREST liefert eingebettete 1:1-Bezüge als Objekt oder null. */
+  artikel: {
+    manufacturer: string | null;
+    category: string | null;
+    datasheet_url: string | null;
+    tech_specs: { key?: string; value?: string; unit?: string; group?: string }[] | null;
+  } | null;
+  upgradeZiel: { name: string } | null;
+};
+
+type GruppeRoh = {
+  id: string;
+  name: string;
+  beschreibung: string | null;
+  sort: number;
+  paket_preis: string | null;
+  einzelpreise_verstecken: boolean;
 };
 
 type TerminRoh = {

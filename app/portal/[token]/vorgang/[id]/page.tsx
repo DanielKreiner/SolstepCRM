@@ -4,8 +4,8 @@ import { notFound } from "next/navigation";
 import { date, dateTime, eur, num, time } from "@/lib/format";
 import { resolvePortal } from "@/lib/portal/data";
 import { portalVorgangDetail } from "@/lib/portal/vorgang";
-import { PHASEN, phaseIndex, summen } from "@/lib/vorgang/modell";
-import { AngebotAktionen, PositionListe } from "./VorgangClient";
+import { PHASEN, phaseIndex } from "@/lib/vorgang/modell";
+import { AngebotAnsicht } from "./AngebotAnsicht";
 import { OffeneAnfragen, PortalChat } from "./PortalChat";
 import { ConfirmAppointmentForm } from "../../PortalForms";
 import { chatLesen } from "@/lib/vorgang/chat";
@@ -36,19 +36,20 @@ export default async function PortalVorgangPage({
   const daten = await portalVorgangDetail(session, id);
   if (!daten) notFound();
 
-  const { vorgang: v, schritte, dokumente, positionen, termine, firma, angenommen } =
+  const {
+    vorgang: v,
+    schritte,
+    dokumente,
+    positionen,
+    gruppen,
+    rahmen,
+    texte,
+    termine,
+    firma,
+    angenommen,
+  } =
     daten;
 
-  const s = summen(
-    positionen.map((p) => ({
-      menge: p.menge,
-      epNetto: p.epNetto,
-      ustSatz: p.ustSatz,
-      kalkStunden: null,
-      kalkEk: null,
-      istMaterial: true,
-    })),
-  );
 
   /*
    * Gespräch und Rückfragen, nur die Kundensicht — interne Notizen
@@ -85,14 +86,25 @@ export default async function PortalVorgangPage({
           </Link>
           <p className="mt-3 text-[13px] text-muted">{firma?.name}</p>
           <h1 className="text-[30px] leading-tight font-bold tracking-[-0.03em]">
-            Ihre Photovoltaikanlage
+            {texte.titel ?? "Ihre Photovoltaikanlage"}
           </h1>
           <p className="num mt-1 text-[13px] text-muted">
             {v.nummer}
             {[v.adresse, v.ort].filter(Boolean).length > 0
               ? ` · ${[v.adresse, v.ort].filter(Boolean).join(", ")}`
               : ""}
+            {texte.gueltigBis ? ` · gültig bis ${date(texte.gueltigBis)}` : ""}
           </p>
+
+          {/*
+            Die Einleitung steht vor allem anderen. Sie ist das, was der
+            Betrieb dem Kunden sagen will, bevor er über Zahlen liest.
+          */}
+          {texte.einleitung ? (
+            <p className="mt-4 max-w-[62ch] text-[14.5px] leading-relaxed text-muted">
+              {texte.einleitung}
+            </p>
+          ) : null}
         </header>
 
         <OffeneAnfragen
@@ -254,23 +266,13 @@ export default async function PortalVorgangPage({
               </a>
             </div>
 
-            <PositionListe positionen={positionen} />
-
-            <div className="mt-3 rounded-panel bg-surface p-6 shadow-soft sm:p-8">
-              <p className="text-[11.5px] font-semibold tracking-[0.14em] text-accent-ink uppercase">
-                {angenommen ? "Auftragssumme" : "Ihr Investment"}
-              </p>
-              <dl className="mt-4 flex flex-col gap-[10px]">
-                <Zeile label="Netto" wert={eur(s.netto)} />
-                <Zeile label="Umsatzsteuer" wert={eur(s.ust)} leise />
-                <div className="mt-2 flex items-baseline justify-between border-t border-line pt-4">
-                  <dt className="text-[16px] font-bold">Gesamt brutto</dt>
-                  <dd className="num text-[26px] font-bold tracking-[-0.03em]">
-                    {eur(s.brutto)}
-                  </dd>
-                </div>
-              </dl>
-            </div>
+            <AngebotAnsicht
+              positionen={positionen}
+              gruppen={gruppen}
+              rahmen={rahmen}
+              formularId="annahme-formular"
+              aktionen={{ token, vorgangId: v.id, zeigen: kannAnnehmen }}
+            />
           </section>
         ) : null}
 
@@ -389,19 +391,20 @@ export default async function PortalVorgangPage({
           )}
         </section>
 
+        {texte.abschluss ? (
+          <section className="mb-4 rounded-panel bg-surface p-6 shadow-soft sm:p-8">
+            <p className="max-w-[62ch] text-[14px] leading-relaxed whitespace-pre-line">
+              {texte.abschluss}
+            </p>
+          </section>
+        ) : null}
+
         <p className="pb-6 text-center text-[11.5px] text-faint">
           Fragen? Melden Sie sich über{" "}
           <Link href={`/portal/${token}#anliegen`}>Anliegen im Portal</Link>.
         </p>
       </main>
 
-      {kannAnnehmen ? (
-        <AngebotAktionen
-          token={token}
-          vorgangId={v.id}
-          gesamt={eur(s.brutto)}
-        />
-      ) : null}
     </div>
   );
 }
@@ -433,25 +436,3 @@ const KUNDENTEXT: Record<string, { titel: string; meta: string }> = {
   },
 };
 
-function Zeile({
-  label,
-  wert,
-  leise = false,
-}: {
-  label: string;
-  wert: string;
-  leise?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className={leise ? "text-[13px] text-muted" : "text-[13.5px]"}>
-        {label}
-      </dt>
-      <dd
-        className={`num ${leise ? "text-[13px] text-muted" : "text-[14px] font-medium"}`}
-      >
-        {wert}
-      </dd>
-    </div>
-  );
-}
