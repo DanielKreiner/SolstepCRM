@@ -31,6 +31,12 @@ export const NAV: NavGroup[] = [
       { label: "Vorgänge", href: "/vorgaenge", icon: "pipelines", area: "pipelines" },
       { label: "Planung", href: "/planung", icon: "dispo", area: "pipelines" },
       { label: "Material", href: "/material", icon: "lager", area: "pipelines" },
+      /*
+       * Bestellungen stehen neben Material und nicht darin: das eine ist
+       * die Frage „was fehlt", das andere „was ist unterwegs". Wer
+       * bestellt, sitzt im Büro; wer kommissioniert, im Lager.
+       */
+      { label: "Bestellungen", href: "/bestellungen", icon: "lager", area: "pipelines" },
       { label: "Offene Posten", href: "/offene-posten", icon: "rechnungen", area: "rechnungen" },
       /*
        * Service steht in der Navigation, obwohl es die dritte Pipeline ist.
