@@ -15,13 +15,12 @@ export type ChecklisteState = { error: string | null; ok: string | null };
  * feste Liste im Code wäre für die Hälfte der Betriebe falsch.
  */
 
-export const TYPEN = [
-  ["haken", "Abhaken"],
-  ["text", "Textangabe"],
-  ["zahl", "Zahl"],
-  ["foto", "Foto"],
-  ["datei", "Datei"],
-] as const;
+/*
+ * Die Punktarten stehen in lib/vorgang/checkliste.ts, nicht hier.
+ * Eine "use server"-Datei darf ausschliesslich async-Funktionen
+ * exportieren — ein Array daraus zu importieren ergibt zur Laufzeit
+ * undefined, und die Seite fällt mit einem TypeError um.
+ */
 
 async function zugang() {
   const me = await requireMe();

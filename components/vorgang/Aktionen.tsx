@@ -472,6 +472,31 @@ function AnnahmePanel({
               vorgabe="nein"
               hinweis={"Ja lässt das Gate „Team“ offen laufen."}
             />
+
+            {/*
+              Vorbelegt mit ja: der beste Zeitpunkt für den Portalzugang
+              ist genau jetzt, wo der Kunde zugesagt hat und auf sein
+              Projekt schaut. Eine Woche später ruft er an, statt
+              nachzusehen. Wer nicht will, nimmt das Häkchen weg.
+            */}
+            <label className="flex items-start gap-[9px] rounded-input bg-panel px-4 py-3 text-[13px]">
+              <input
+                type="checkbox"
+                name="portal"
+                value="ja"
+                defaultChecked
+                className="mt-[2px] h-4 w-4 accent-[var(--accent)]"
+              />
+              <span>
+                <span className="block font-medium">
+                  Kundenportal anlegen und Zugang schicken
+                </span>
+                <span className="block text-[11.5px] text-muted">
+                  Der Kunde bekommt eine Mail mit seinem persönlichen Link. Hat
+                  er schon einen gültigen Zugang, bleibt der bestehen.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">

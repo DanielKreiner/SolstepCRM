@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Abschnitt } from "@/components/ui/Abschnitt";
+import { ChecklisteForm, MarkeForm } from "./MarkeForms";
 import { ausJson } from "@/lib/rules/zeitregeln";
 import { KpiKarte } from "@/components/ui/KpiKarte";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -47,6 +48,8 @@ const KIND_LABEL: Record<string, string> = {
  */
 const BEREICHE = [
   ["rechte", "Rollen und Rechte"],
+  ["erscheinungsbild", "Erscheinungsbild"],
+  ["checklisten", "Checklisten"],
   ["standorte", "Standorte"],
   ["zeit", "Zeiterfassung"],
   ["phasen", "Phasen"],
@@ -115,7 +118,7 @@ export default async function EinstellungenPage({
     supabase
       .from("company")
       .select(
-        "name, uid_nr, address, zip, city, country, iban, status, plan, seats, time_settings",
+        "name, uid_nr, address, zip, city, country, iban, status, plan, seats, time_settings, pdf_settings",
       )
       .maybeSingle(),
     supabase
@@ -132,6 +135,25 @@ export default async function EinstellungenPage({
       .select("id, address, provider, status, last_sync_at, is_default"),
     phasenBelegung(),
   ]);
+
+  /*
+   * Nur laden, wenn der Bereich offen ist — die Einstellungen holen
+   * ohnehin schon reichlich, und niemand braucht die Checkliste, um
+   * eine Rolle umzustellen.
+   */
+  const { data: checkliste } =
+    bereich === "checklisten"
+      ? await supabase
+          .from("checkliste_vorlage")
+          .select(
+            "id, name, punkte:checkliste_punkt_vorlage ( id, label, hinweis, typ, pflicht, sort )",
+          )
+          .eq("art", "aufnahme")
+          .limit(1)
+          .maybeSingle()
+      : { data: null };
+
+  const marke = (company?.pdf_settings ?? {}) as Record<string, unknown>;
 
   const permMap = new Map<string, string>();
   for (const p of perms ?? []) {
@@ -233,6 +255,56 @@ export default async function EinstellungenPage({
         </nav>
 
         <div className="min-w-0">
+          {bereich === "erscheinungsbild" ? (
+            <Abschnitt titel="Erscheinungsbild">
+              <p className="-mt-1 mb-4 text-[12.5px] text-muted">
+                Logo, Farbe und Fusszeile gelten für Mail und PDF gleichermassen.
+                Für den Kunden ist eine Mail Post von euch — nicht von der
+                Software.
+              </p>
+              {darfSchreiben ? (
+                <MarkeForm
+                  firma={(company?.name as string) ?? "Betrieb"}
+                  logoUrl={
+                    typeof marke.logo_url === "string" ? marke.logo_url : null
+                  }
+                  akzent={typeof marke.akzent === "string" ? marke.akzent : ""}
+                  fusszeile={
+                    typeof marke.fusszeile === "string" ? marke.fusszeile : ""
+                  }
+                />
+              ) : (
+                <p className="text-[13px] text-muted">
+                  Für Einstellungen fehlt deiner Rolle das Schreibrecht.
+                </p>
+              )}
+            </Abschnitt>
+          ) : null}
+
+          {bereich === "checklisten" ? (
+            <Abschnitt titel="Aufnahme vor Ort">
+              {darfSchreiben ? (
+                <ChecklisteForm
+                  vorlageId={(checkliste?.id as string | undefined) ?? null}
+                  punkte={((checkliste?.punkte ?? []) as unknown as {
+                    id: string;
+                    label: string;
+                    hinweis: string | null;
+                    typ: string;
+                    pflicht: boolean;
+                    sort: number;
+                  }[])
+                    .slice()
+                    .sort((a, b) => a.sort - b.sort)}
+                />
+              ) : (
+                <p className="text-[13px] text-muted">
+                  Für Einstellungen fehlt deiner Rolle das Schreibrecht.
+                </p>
+              )}
+            </Abschnitt>
+          ) : null}
+
           {bereich === "rechte" ? (
             <Abschnitt titel="Rollen und Rechte">
               <p className="-mt-1 mb-4 text-[12.5px] text-muted">

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Aktionspanel } from "@/components/vorgang/Aktionen";
 import { GateAmpel } from "@/components/vorgang/GateAmpel";
 import { Stepper } from "@/components/vorgang/Stepper";
+import { AufnahmeBlock, type AufnahmePunkt } from "@/components/vorgang/Aufnahme";
 import { Positionen } from "@/components/vorgang/Positionen";
 import { Postausgang, type MailZeile } from "@/components/vorgang/Postausgang";
 import { Rechnungen } from "@/components/vorgang/Rechnungen";
@@ -47,7 +48,14 @@ export const metadata: Metadata = { title: "Vorgang" };
  * auf das Angebot eines Vorgangs ist teilbar.
  */
 
-const REITER = ["ueberblick", "angebot", "kunde", "kommunikation", "belege"] as const;
+const REITER = [
+  "ueberblick",
+  "aufnahme",
+  "angebot",
+  "kunde",
+  "kommunikation",
+  "belege",
+] as const;
 type ReiterKey = (typeof REITER)[number];
 
 export default async function VorgangPage({
@@ -215,6 +223,8 @@ export default async function VorgangPage({
         />
       ) : null}
 
+      {tab === "aufnahme" ? <AufnahmeReiter id={id} darfSchreiben={darfSchreiben} /> : null}
+
       {tab === "angebot" ? (
         <AngebotReiter
           id={id}
@@ -247,6 +257,7 @@ export default async function VorgangPage({
 
 const LABEL: Record<ReiterKey, string> = {
   ueberblick: "Überblick",
+  aufnahme: "Aufnahme",
   angebot: "Angebot",
   kunde: "Kunde",
   kommunikation: "Gespräch",
@@ -476,6 +487,120 @@ async function AngebotReiter({
         ].sort()}
       />
     </div>
+  );
+}
+
+/* -------------------------------------------------------------- AUFNAHME */
+
+async function AufnahmeReiter({
+  id,
+  darfSchreiben,
+}: {
+  id: string;
+  darfSchreiben: boolean;
+}) {
+  const supabase = await createClient();
+
+  const { data: liste } = await supabase
+    .from("vorgang_checkliste")
+    .select(
+      `id, name, abgeschlossen_am,
+       punkte:vorgang_checkliste_punkt (
+         id, label, hinweis, typ, pflicht, eigen, sort,
+         wert_text, wert_zahl, erledigt_am
+       )`,
+    )
+    .eq("vorgang_id", id)
+    .eq("art", "aufnahme")
+    .limit(1)
+    .maybeSingle();
+
+  if (!liste) {
+    return (
+      <AufnahmeBlock vorgangId={id} aufnahme={null} darfSchreiben={darfSchreiben} />
+    );
+  }
+
+  /*
+   * Anhänge kommen aus vorgang_anhang — dieselbe Strecke wie im Chat,
+   * inklusive Prüfung der Dateiart und entfernter GPS-Daten. Der Bucket
+   * ist privat, also braucht jede Datei eine signierte Adresse.
+   */
+  const { data: anhaenge } = await supabase
+    .from("vorgang_anhang")
+    .select("id, checkliste_punkt_id, dateiname, mime, storage_path")
+    .eq("vorgang_id", id)
+    .not("checkliste_punkt_id", "is", null);
+
+  const roh = (anhaenge ?? []) as unknown as {
+    id: string;
+    checkliste_punkt_id: string;
+    dateiname: string;
+    mime: string | null;
+    storage_path: string;
+  }[];
+
+  const signiert = new Map<string, string>();
+  if (roh.length > 0) {
+    const { data } = await supabase.storage
+      .from("job-photos")
+      .createSignedUrls(roh.map((a) => a.storage_path), 60 * 60);
+    for (const s of data ?? []) {
+      if (s.path && s.signedUrl) signiert.set(s.path, s.signedUrl);
+    }
+  }
+
+  const jePunkt = new Map<string, AufnahmePunkt["anhaenge"]>();
+  for (const a of roh) {
+    const l = jePunkt.get(a.checkliste_punkt_id) ?? [];
+    l.push({
+      id: a.id,
+      name: a.dateiname,
+      url: signiert.get(a.storage_path) ?? null,
+      istBild: (a.mime ?? "").startsWith("image/"),
+    });
+    jePunkt.set(a.checkliste_punkt_id, l);
+  }
+
+  const punkte = ((liste.punkte ?? []) as unknown as {
+    id: string;
+    label: string;
+    hinweis: string | null;
+    typ: string;
+    pflicht: boolean;
+    eigen: boolean;
+    sort: number;
+    wert_text: string | null;
+    wert_zahl: string | null;
+    erledigt_am: string | null;
+  }[])
+    .slice()
+    .sort((a, b) => a.sort - b.sort)
+    .map((p) => ({
+      id: p.id,
+      label: p.label,
+      hinweis: p.hinweis,
+      typ: p.typ,
+      pflicht: p.pflicht,
+      eigen: p.eigen,
+      sort: p.sort,
+      wertText: p.wert_text,
+      wertZahl: p.wert_zahl === null ? null : Number(p.wert_zahl),
+      erledigtAm: p.erledigt_am,
+      anhaenge: jePunkt.get(p.id) ?? [],
+    }));
+
+  return (
+    <AufnahmeBlock
+      vorgangId={id}
+      darfSchreiben={darfSchreiben}
+      aufnahme={{
+        id: liste.id as string,
+        name: liste.name as string,
+        abgeschlossenAm: (liste.abgeschlossen_am as string | null) ?? null,
+        punkte,
+      }}
+    />
   );
 }
 
