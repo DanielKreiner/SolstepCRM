@@ -83,7 +83,7 @@ export async function GET(request: Request) {
           kind: "time_flagged",
           title: "Zeitbuchung zu prüfen",
           body: v.text,
-          link: "/zeiterfassung?filter=zu-pruefen",
+          link: "/zeiten",
         });
       }
     }

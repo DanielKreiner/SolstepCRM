@@ -1,168 +1,194 @@
 import type { Metadata } from "next";
-import { DataTable, type Column } from "@/components/ui/DataTable";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { Pill } from "@/components/ui/Pill";
-import { Stat } from "@/components/ui/Stat";
-import { date, hhmm, time } from "@/lib/format";
+import Link from "next/link";
+import { Pill, type Tone } from "@/components/ui/Pill";
+import { date, hhmm, time, viennaDay } from "@/lib/format";
+import { konten } from "@/lib/zeiten/daten";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { addDays } from "@/lib/time";
+import { Korrekturantrag } from "./Korrekturantrag";
 
 export const metadata: Metadata = { title: "Meine Zeiten" };
 
-const KIND_LABEL: Record<string, string> = {
-  work: "Arbeit",
-  travel: "Fahrt",
-  break: "Pause",
-  errand: "Besorgung",
-  training: "Schulung",
-  leave_comp: "Zeitausgleich",
+/**
+ * Die eigenen Zeiten.
+ *
+ * Zwei Zahlen oben — Saldo und Resturlaub —, darunter die Liste. Wer
+ * etwas ändern will, beantragt es; entschieden wird im Büro.
+ */
+
+const TON: Record<string, Tone> = {
+  running: "doing",
+  booked: "warn",
+  approved: "done",
+  flagged: "crit",
+  replaced: "neutral",
 };
 
-type Row = {
-  id: string;
-  kind: string;
-  started_at: string;
-  ended_at: string | null;
-  duration_min: number | null;
-  status: string;
-  note: string | null;
-  job: { id: string; number: string } | null;
+const TEXT: Record<string, string> = {
+  running: "läuft",
+  booked: "gebucht",
+  approved: "genehmigt",
+  flagged: "zu prüfen",
+  replaced: "ersetzt",
 };
 
-export default async function MeineZeitenPage() {
+export default async function MeineZeitenPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ zeitraum?: string }>;
+}) {
   const me = await requireMe();
+  const { zeitraum } = await searchParams;
   const supabase = await createClient();
 
-  const jahr = new Date().getFullYear();
+  const heute = viennaDay();
+  const monat = zeitraum === "monat";
+  const ab = monat ? addDays(heute, -30) : addDays(heute, -7);
 
-  const [{ data: eintraege }, { data: saldo }] = await Promise.all([
+  const [{ data: roh }, { data: antraege }, kontoliste] = await Promise.all([
     supabase
       .from("time_entry")
       .select(
-        "id, kind, started_at, ended_at, duration_min, status, note, vorgang:vorgang_id ( id, number )",
+        `id, started_at, ended_at, duration_min, auto_break_min, status, quelle,
+         einsatz:einsatz_id ( titel, vorgang:vorgang_id ( number, customer:customer_id ( name ) ) )`,
       )
       .eq("user_id", me.id)
-      .gte("started_at", `${jahr}-01-01`)
-      .order("started_at", { ascending: false })
-      .limit(200),
+      .gte("started_at", `${ab}T00:00:00Z`)
+      .order("started_at", { ascending: false }),
     supabase
-      .from("v_time_balance")
-      .select("actual_min, adjust_min")
+      .from("time_correction")
+      .select("time_entry_id")
       .eq("user_id", me.id)
-      .maybeSingle(),
+      .eq("status", "requested"),
+    konten(supabase, { bis: heute }),
   ]);
 
-  const rows = (eintraege ?? []) as unknown as Row[];
-  const gesamt = Number(saldo?.actual_min ?? 0) + Number(saldo?.adjust_min ?? 0);
+  const meins = kontoliste.find((k) => k.userId === me.id);
+  const offeneAntraege = new Set(
+    ((antraege ?? []) as { time_entry_id: string }[]).map((a) => a.time_entry_id),
+  );
 
-  const dieserMonat = rows
-    .filter(
-      (r) =>
-        r.started_at.slice(0, 7) === new Date().toISOString().slice(0, 7) &&
-        r.kind !== "break",
-    )
-    .reduce((s, r) => s + (r.duration_min ?? 0), 0);
-
-  const offen = rows.filter(
-    (r) => r.status === "flagged" || r.status === "running",
-  ).length;
-
-  const columns: Column<Row>[] = [
-    {
-      key: "tag",
-      header: "Tag",
-      width: "120px",
-      render: (r) => <span className="num text-[12.5px]">{date(r.started_at)}</span>,
-    },
-    {
-      key: "zeit",
-      header: "Von – bis",
-      width: "150px",
-      render: (r) => (
-        <span className="num text-[13px]">
-          {time(r.started_at)} – {r.ended_at ? time(r.ended_at) : "läuft"}
-        </span>
-      ),
-    },
-    {
-      key: "art",
-      header: "Art",
-      width: "130px",
-      render: (r) => (
-        <Pill tone={r.kind === "break" ? "neutral" : "doing"}>
-          {KIND_LABEL[r.kind] ?? r.kind}
-        </Pill>
-      ),
-    },
-    {
-      key: "auftrag",
-      header: "Auftrag",
-      width: "1fr",
-      render: (r) => (
-        <span className="num text-[12.5px] text-muted">
-          {r.job?.number ?? "—"}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      width: "130px",
-      render: (r) =>
-        r.status === "approved" ? (
-          <Pill tone="done">genehmigt</Pill>
-        ) : r.status === "flagged" ? (
-          <Pill tone="crit">geprüft</Pill>
-        ) : r.status === "replaced" ? (
-          <Pill tone="neutral">ersetzt</Pill>
-        ) : (
-          <Pill tone="neutral">gebucht</Pill>
-        ),
-    },
-    {
-      key: "dauer",
-      header: "Dauer",
-      width: "100px",
-      align: "right",
-      render: (r) => (
-        <span className="num text-[13px] font-semibold">
-          {hhmm(r.duration_min)}
-        </span>
-      ),
-    },
-  ];
+  const zeilen = ((roh ?? []) as unknown as {
+    id: string;
+    started_at: string;
+    ended_at: string | null;
+    duration_min: number | null;
+    auto_break_min: number;
+    status: string;
+    quelle: string;
+    einsatz: {
+      titel: string | null;
+      vorgang: { number: string; customer: { name: string } | null } | null;
+    } | null;
+  }[]).map((z) => ({
+    id: z.id,
+    von: z.started_at,
+    bis: z.ended_at,
+    minuten: Math.max(0, (z.duration_min ?? 0) - (z.auto_break_min ?? 0)),
+    status: z.status,
+    quelle: z.quelle,
+    wo: z.einsatz?.vorgang?.customer?.name ?? z.einsatz?.titel ?? "ohne Einsatz",
+    nummer: z.einsatz?.vorgang?.number ?? null,
+  }));
 
   return (
     <>
-      <PageHeader
-        title="Meine Zeiten"
-        subtitle={`${jahr} · nur die eigenen Buchungen`}
-      />
+      <h1 className="mb-1 text-[24px] font-bold tracking-[-0.02em]">
+        Meine Zeiten
+      </h1>
+      <p className="mb-4 text-[13px] text-muted">
+        Stimmt etwas nicht, sag Bescheid — geändert wird im Büro.
+      </p>
 
-      <div className="mb-4 grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-        <Stat label="Iststunden gesamt" value={hhmm(gesamt)} />
-        <Stat label="Dieser Monat" value={hhmm(dieserMonat)} />
-        <Stat label="Wochenstunden" value={`${me.weeklyHours} h`} />
-        <Stat
-          label="Zu klären"
-          value={offen}
-          tone={offen > 0 ? "warn" : "done"}
-        />
+      <div className="mb-4 grid grid-cols-2 gap-[10px]">
+        <div className="rounded-[20px] bg-surface p-5 shadow-soft">
+          <p
+            className={`num text-[30px] leading-none font-semibold ${
+              (meins?.saldoMin ?? 0) < 0 ? "text-s-crit" : "text-s-done"
+            }`}
+          >
+            {(meins?.saldoMin ?? 0) >= 0 ? "+" : "−"}
+            {hhmm(Math.abs(meins?.saldoMin ?? 0))}
+          </p>
+          <p className="mt-1 text-[12.5px] text-muted">Saldo</p>
+        </div>
+        <div className="rounded-[20px] bg-surface p-5 shadow-soft">
+          <p className="num text-[30px] leading-none font-semibold">
+            {(meins?.resturlaub ?? 0).toLocaleString("de-AT", {
+              maximumFractionDigits: 1,
+            })}
+          </p>
+          <p className="mt-1 text-[12.5px] text-muted">Tage Resturlaub</p>
+        </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        getKey={(r) => r.id}
-        empty="In diesem Jahr noch nichts gebucht."
-        compact
-      />
+      <div className="mb-4 flex gap-2">
+        {[
+          ["woche", "Woche"],
+          ["monat", "Monat"],
+        ].map(([wert, label]) => (
+          <Link
+            key={wert}
+            href={`/m/zeiten?zeitraum=${wert}`}
+            className={[
+              "min-h-[44px] flex-1 rounded-pill px-4 py-[11px] text-center text-[14px] font-semibold",
+              (monat ? "monat" : "woche") === wert
+                ? "bg-ink text-app hover:text-app"
+                : "border border-line bg-surface text-ink hover:text-ink",
+            ].join(" ")}
+          >
+            {label}
+          </Link>
+        ))}
+      </div>
 
-      <p className="mt-3 text-[12px] text-faint">
-        Stimmt eine Zeit nicht, wird sie nicht überschrieben. Im Stundenkonto
-        lässt sich eine Korrektur beantragen; die alte Buchung bleibt als
-        ersetzt erhalten.
-      </p>
+      {zeilen.length === 0 ? (
+        <p className="rounded-[20px] bg-surface p-6 text-[13px] text-muted shadow-soft">
+          In diesem Zeitraum ist nichts gebucht.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-[8px]">
+          {zeilen.map((z) => (
+            <li key={z.id} className="rounded-[20px] bg-surface p-4 shadow-soft">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="num text-[13px] font-semibold">{date(z.von)}</span>
+                <span className="num text-[13px] text-muted">
+                  {time(z.von)}–{z.bis ? time(z.bis) : "läuft"}
+                </span>
+                <span className="num ml-auto text-[14px] font-semibold">
+                  {hhmm(z.minuten)}
+                </span>
+              </div>
+
+              <p className="mt-1 text-[13px]">
+                {z.wo}
+                {z.nummer ? <span className="num text-faint"> · {z.nummer}</span> : null}
+              </p>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Pill tone={TON[z.status] ?? "neutral"}>
+                  {TEXT[z.status] ?? z.status}
+                </Pill>
+                {z.quelle === "korrektur" ? (
+                  <Pill tone="waiting">korrigiert</Pill>
+                ) : null}
+
+                {z.bis && z.status !== "replaced" ? (
+                  <span className="ml-auto">
+                    <Korrekturantrag
+                      entryId={z.id}
+                      vonVorgabe={time(z.von)}
+                      bisVorgabe={time(z.bis)}
+                      laeuftAntrag={offeneAntraege.has(z.id)}
+                    />
+                  </span>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   );
 }

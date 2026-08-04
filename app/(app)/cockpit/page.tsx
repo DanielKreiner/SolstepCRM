@@ -75,7 +75,7 @@ export default async function CockpitPage() {
           pille={`${stundenDiff >= 0 ? "+" : ""}${num(stundenDiff)} h`}
           ton={stundenDiff >= 0 ? "gut" : "warn"}
           notiz={`von ${num(c.stundenWoche.soll)} Soll`}
-          href="/zeiterfassung"
+          href="/zeiten"
         />
         <KpiKarte
           label="Offene Rechnungen"
@@ -258,7 +258,7 @@ export default async function CockpitPage() {
               Gerade steht niemand auf der Uhr.
             </p>
             <div className="mt-4">
-              <LinkButton href="/zeiterfassung" variant="quiet">
+              <LinkButton href="/zeiten" variant="quiet">
                 Zeiterfassung öffnen
               </LinkButton>
             </div>

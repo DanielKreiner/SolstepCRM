@@ -388,8 +388,7 @@ export async function saveTimeSettings(
   }
 
   revalidatePath("/einstellungen");
-  revalidatePath("/zeiterfassung");
-  revalidatePath("/stundenkonto");
+  revalidatePath("/zeiten");
   return {
     error: null,
     ok:

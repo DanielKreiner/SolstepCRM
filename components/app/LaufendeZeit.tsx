@@ -57,7 +57,7 @@ export function LaufendeZeit({
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
-          href="/zeiterfassung"
+          href="/zeiten"
           className="rounded-pill bg-white/12 px-[15px] py-[9px] text-[12.5px] font-semibold text-white hover:bg-white/20 hover:text-white"
         >
           Zeiten prüfen

@@ -107,7 +107,7 @@ export async function GET(request: Request) {
             kind: "timesheet_open",
             title: `${offen.length} Zeitbuchungen aus ${periode.slice(0, 7)} offen`,
             body: "Geprüfte Buchungen oder offene Korrekturen. Der Monatsabschluss hat sie ausgelassen.",
-            link: "/stundenkonto",
+            link: "/zeiten?tab=konten",
           });
         }
       }

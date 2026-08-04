@@ -99,7 +99,7 @@ export async function Shell({
     "/vorgaenge": angeboteOffen,
     "/lager": lowStock,
     "/offene-posten": rechnungenOffen,
-    "/zeiterfassung": korrekturenOffen,
+    "/zeiten": korrekturenOffen,
     "/abwesenheiten": antraegeOffen,
     "/service": ticketsOffen,
     "/bewerber": bewerberOffen,
