@@ -33,6 +33,7 @@ export function Planung({
   vorgaenge,
   qualifikationen,
   darfPlanen,
+  vorgangVorbelegt,
 }: {
   woche: string;
   tage: string[];
@@ -43,9 +44,15 @@ export function Planung({
   vorgaenge: Option[];
   qualifikationen: { wert: string; text: string }[];
   darfPlanen: boolean;
+  /**
+   * Aus der Aufgabe im Vorgang: der Dialog geht gleich auf und trägt den
+   * Vorgang schon. Sonst müsste der Planer den Vorgang, aus dem er
+   * gerade kommt, noch einmal suchen.
+   */
+  vorgangVorbelegt: string | null;
 }) {
   const [offen, setOffen] = useState<{ tag: string; userId: string | null } | null>(
-    null,
+    vorgangVorbelegt && darfPlanen ? { tag: tage[0]!, userId: null } : null,
   );
 
   const vorWoche = verschoben(woche, -7);
@@ -115,6 +122,7 @@ export function Planung({
           qualifikationen={qualifikationen}
           bloecke={bloecke}
           abwesenheiten={abwesenheiten}
+          vorgangVorbelegt={vorgangVorbelegt}
           schliessen={() => setOffen(null)}
         />
       ) : null}
@@ -178,6 +186,7 @@ function EinsatzDialog({
   qualifikationen,
   bloecke,
   abwesenheiten,
+  vorgangVorbelegt,
   schliessen,
 }: {
   tag: string;
@@ -188,6 +197,7 @@ function EinsatzDialog({
   qualifikationen: { wert: string; text: string }[];
   bloecke: TafelBlock[];
   abwesenheiten: TafelAbw[];
+  vorgangVorbelegt: string | null;
   schliessen: () => void;
 }) {
   const [status, formAction] = useActionState<PlanStatus, FormData>(
@@ -317,6 +327,7 @@ function EinsatzDialog({
               pflicht={art === "auftrag"}
               platzhalter="Nummer oder Kundenname"
               optionen={vorgaenge}
+              {...(vorgangVorbelegt ? { wert: vorgangVorbelegt } : {})}
             />
           </div>
         ) : (

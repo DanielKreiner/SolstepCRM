@@ -28,10 +28,10 @@ export const metadata: Metadata = { title: "Planung" };
 export default async function PlanungPage({
   searchParams,
 }: {
-  searchParams: Promise<{ woche?: string }>;
+  searchParams: Promise<{ woche?: string; vorgang?: string }>;
 }) {
   const me = await requireMe();
-  const { woche } = await searchParams;
+  const { woche, vorgang } = await searchParams;
   const supabase = await createClient();
 
   const montagIso = startOfViennaWeek(
@@ -118,6 +118,7 @@ export default async function PlanungPage({
           label: string;
         }[]).map((q) => ({ wert: q.schluessel, text: q.label }))}
         darfPlanen={darfPlanen}
+        vorgangVorbelegt={vorgang ?? null}
       />
     </>
   );

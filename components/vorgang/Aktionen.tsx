@@ -18,7 +18,6 @@ import {
   vorgangVerloren,
 } from "@/app/(app)/vorgaenge/actions";
 import { angebotAngenommen } from "@/app/(app)/vorgaenge/kaskade-actions";
-import { montageTerminieren } from "@/app/(app)/vorgaenge/termin-actions";
 
 /**
  * Das Aktionspanel: genau eine primäre Aktion je Phase.
@@ -84,7 +83,7 @@ export function Aktionspanel({
   verlorenGrund,
   anzahlungProzent,
   angebotVersendet,
-  team,
+  termin,
 }: {
   vorgangId: string;
   phase: Phase;
@@ -95,7 +94,8 @@ export function Aktionspanel({
   anzahlungProzent: number;
   /** Ist das Angebot beim Kunden? Sonst kann er im Portal nichts annehmen. */
   angebotVersendet: boolean;
-  team: { id: string; name: string }[];
+  /** Der Montageeinsatz, falls einer geplant ist. */
+  termin: { von: string; bis: string; personen: string[] } | null;
 }) {
   if (phase === "verloren") {
     return (
@@ -119,11 +119,11 @@ export function Aktionspanel({
    */
   if (phase === "beauftragt") {
     return (
-      <TerminPanel
+      <TerminAufgabe
         vorgangId={vorgangId}
         offeneGates={offeneGates}
         darfSchreiben={darfSchreiben}
-        team={team}
+        termin={termin}
       />
     );
   }
@@ -647,182 +647,112 @@ function JaNein({
  * Augen. Das Planungsboard ist danach nur eine zweite Ansicht derselben
  * Termine.
  */
-function TerminPanel({
+/**
+ * Die Terminierung als Aufgabe.
+ *
+ * Terminiert wird in der Plantafel und nicht hier. Zwei Wege in denselben
+ * Einsatz hiessen zwei Kalender, und der Vorgang zeigte am Ende einen
+ * anderen Termin als die Tafel.
+ *
+ * Die Aufgabe hat keine eigene Tabelle: sie IST das Fehlen eines
+ * Einsatzes. Ein Häkchen „erledigt" liesse sich setzen, ohne dass
+ * irgendwo ein Termin steht — und genau das wäre die Lüge, die im Betrieb
+ * teuer wird.
+ */
+function TerminAufgabe({
   vorgangId,
   offeneGates,
   darfSchreiben,
-  team,
+  termin,
 }: {
   vorgangId: string;
   offeneGates: string[];
   darfSchreiben: boolean;
-  team: { id: string; name: string }[];
+  termin: { von: string; bis: string; personen: string[] } | null;
 }) {
-  const [offen, setOffen] = useState(false);
-  const [status, formAction] = useActionState<AktionsStatus, FormData>(
-    montageTerminieren,
-    LEER,
-  );
   const blockiert = offeneGates.length > 0;
+
+  if (termin) {
+    const von = new Date(termin.von);
+    const bis = new Date(termin.bis);
+    return (
+      <section className="rounded-[20px] bg-surface p-5 shadow-soft">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h2 className="text-[15px] font-semibold">Montage</h2>
+          <span className="rounded-pill bg-s-done/14 px-[10px] py-[3px] text-[11px] font-semibold text-s-done">
+            terminiert
+          </span>
+        </div>
+        <p className="num text-[14px] font-semibold">
+          {von.toLocaleDateString("de-AT", {
+            weekday: "long",
+            day: "2-digit",
+            month: "2-digit",
+          })}{" "}
+          {von.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })}
+          –{bis.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })}
+        </p>
+        <p className="mt-1 mb-4 text-[12.5px] text-muted">
+          {termin.personen.length
+            ? termin.personen.join(", ")
+            : "noch niemand zugeordnet"}
+        </p>
+
+        <a
+          href={`/planung?woche=${termin.von.slice(0, 10)}`}
+          className="inline-block rounded-pill border border-line bg-surface px-[18px] py-[10px] text-[13px] font-medium text-ink hover:bg-sunk hover:text-ink"
+        >
+          In der Plantafel ansehen
+        </a>
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-[20px] bg-surface p-5 shadow-soft">
-      <h2 className="text-[15px] font-semibold">Montage terminieren</h2>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <h2 className="text-[15px] font-semibold">Offene Aufgabe</h2>
+        <span
+          className={[
+            "rounded-pill px-[10px] py-[3px] text-[11px] font-semibold",
+            blockiert ? "bg-sunk text-muted" : "bg-s-warn/14 text-accent-ink",
+          ].join(" ")}
+        >
+          {blockiert ? "wartet" : "offen"}
+        </span>
+      </div>
+
+      <p className="text-[14px] font-semibold">Montage terminieren</p>
       <p className="mt-1 mb-4 text-[12.5px] text-muted">
         {blockiert
-          ? "Terminierung ist blockiert, solange Pflicht-Gates offen sind."
-          : "Alle Pflicht-Gates sind durch."}
+          ? "Wird frei, sobald die Pflicht-Gates durch sind."
+          : "Alle Pflicht-Gates sind durch — der Termin gehört in die Plantafel."}
       </p>
 
-      {!offen ? (
-        <>
-          <button
-            type="button"
-            disabled={!darfSchreiben || blockiert}
-            onClick={() => setOffen(true)}
-            className={[
-              "min-h-[52px] w-full rounded-pill border-0 px-6 text-[14.5px] font-semibold",
-              !darfSchreiben || blockiert
-                ? "cursor-not-allowed bg-sunk text-faint"
-                : "cursor-pointer bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-white shadow-[0_8px_22px_rgba(201,121,24,0.28)]",
-            ].join(" ")}
-          >
-            Montage terminieren
-          </button>
+      {blockiert ? (
+        <p className="mb-4 rounded-input bg-s-crit/8 px-4 py-3 text-[12.5px] text-s-crit">
+          Offen: {offeneGates.join(" · ")}
+        </p>
+      ) : null}
 
-          {blockiert ? (
-            <p className="mt-3 rounded-input bg-s-crit/8 px-4 py-3 text-[12.5px] text-s-crit">
-              Offene Pflicht-Gates: {offeneGates.join(" · ")}
-            </p>
-          ) : null}
-
-          {darfSchreiben ? (
-            <VerlorenKnopf vorgangId={vorgangId} phase="beauftragt" />
-          ) : null}
-        </>
+      {darfSchreiben ? (
+        <a
+          href={`/planung?vorgang=${vorgangId}`}
+          aria-disabled={blockiert}
+          className={[
+            "flex min-h-[52px] w-full items-center justify-center rounded-pill px-6 text-[14.5px] font-semibold",
+            blockiert
+              ? "pointer-events-none bg-sunk text-faint"
+              : "bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-white hover:text-white",
+          ].join(" ")}
+        >
+          In der Plantafel terminieren
+        </a>
       ) : (
-        <form action={formAction}>
-          <input type="hidden" name="vorgangId" value={vorgangId} />
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Datum id="tp-von-d" name="vonDatum" label="Von" />
-            <Uhr id="tp-von-z" name="vonZeit" label="Beginn" vorgabe="07:00" />
-            <Datum id="tp-bis-d" name="bisDatum" label="Bis" />
-            <Uhr id="tp-bis-z" name="bisZeit" label="Ende" vorgabe="16:00" />
-          </div>
-
-          <fieldset className="mt-4">
-            <legend className="mb-2 text-[12px] font-medium text-muted">
-              Team
-            </legend>
-            <div className="flex flex-col gap-[6px]">
-              {team.length === 0 ? (
-                <span className="text-[12px] text-faint">
-                  Kein Mitarbeiter aktiv.
-                </span>
-              ) : (
-                team.map((u) => (
-                  <label key={u.id} className="flex items-center gap-2 text-[12.5px]">
-                    <input
-                      type="checkbox"
-                      name="team"
-                      value={u.id}
-                      className="h-4 w-4 accent-[var(--accent)]"
-                    />
-                    {u.name}
-                  </label>
-                ))
-              )}
-            </div>
-          </fieldset>
-
-          <div className="mt-3 grid gap-3">
-            <Text
-              id="tp-sub"
-              name="subText"
-              label="Fremdfirma"
-              platzhalter="Name der Subfirma, falls beteiligt"
-            />
-            <Text id="tp-notiz" name="notiz" label="Notiz" platzhalter="Zufahrt, Schlüssel, Kontakt vor Ort" />
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <TerminAbsenden />
-            <button
-              type="button"
-              onClick={() => setOffen(false)}
-              className="cursor-pointer border-0 bg-transparent text-[12.5px] text-muted underline"
-            >
-              Abbrechen
-            </button>
-          </div>
-
-          <p className="mt-2 text-[11px] text-faint">
-            Doppelbelegung wird gemeldet, aber nicht verhindert — manchmal
-            gehen zwei Baustellen an einem Tag, und das entscheidet der
-            Betrieb.
-          </p>
-
-          <Meldung status={status} />
-        </form>
+        <p className="text-[11.5px] text-faint">
+          Diese Rolle terminiert nicht.
+        </p>
       )}
     </section>
-  );
-}
-
-function TerminAbsenden() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="min-h-[48px] flex-1 cursor-pointer rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-6 text-[14px] font-semibold text-white shadow-[0_8px_22px_rgba(201,121,24,0.28)] disabled:opacity-60"
-    >
-      {pending ? "Wird terminiert …" : "Terminieren"}
-    </button>
-  );
-}
-
-function Datum({ id, name, label }: { id: string; name: string; label: string }) {
-  return (
-    <span className="flex flex-col gap-[5px]">
-      <label htmlFor={id} className="text-[12px] font-medium text-muted">
-        {label}
-      </label>
-      <input
-        id={id}
-        name={name}
-        type="date"
-        required
-        className="num w-full rounded-input border border-transparent bg-sunk px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent focus:bg-surface"
-      />
-    </span>
-  );
-}
-
-function Uhr({
-  id,
-  name,
-  label,
-  vorgabe,
-}: {
-  id: string;
-  name: string;
-  label: string;
-  vorgabe: string;
-}) {
-  return (
-    <span className="flex flex-col gap-[5px]">
-      <label htmlFor={id} className="text-[12px] font-medium text-muted">
-        {label}
-      </label>
-      <input
-        id={id}
-        name={name}
-        type="time"
-        defaultValue={vorgabe}
-        className="num w-full rounded-input border border-transparent bg-sunk px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent focus:bg-surface"
-      />
-    </span>
   );
 }

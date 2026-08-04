@@ -110,7 +110,7 @@ export default async function VorgangPage({
    * Jeder Reiter holt sich nur, was er zeigt. Der Artikelstamm ist der
    * teuerste Posten und wird ausschliesslich im Angebotseditor gebraucht.
    */
-  const [{ data: team }, versand] = await Promise.all([
+  const [{ data: team }, versand, { data: einsatz }] = await Promise.all([
     tab === "ueberblick"
       ? supabase.from("app_user").select("id, name").eq("active", true).order("name")
       : Promise.resolve({ data: null }),
@@ -119,6 +119,21 @@ export default async function VorgangPage({
           .from("vorgang")
           .select("angebot_versendet_am, angebot_gesehen_am")
           .eq("id", id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    /*
+     * Der Montageeinsatz. Er ist zugleich die Antwort auf die Frage, ob
+     * die Aufgabe „terminieren" noch offen ist — ein eigenes Häkchen
+     * dafür liesse sich setzen, ohne dass irgendwo ein Termin steht.
+     */
+    tab === "ueberblick"
+      ? supabase
+          .from("einsatz")
+          .select("von, bis, personen:einsatz_person ( user:user_id ( name ) )")
+          .eq("vorgang_id", id)
+          .eq("art", "auftrag")
+          .order("von")
+          .limit(1)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
@@ -221,6 +236,19 @@ export default async function VorgangPage({
           team={(team ?? []) as { id: string; name: string }[]}
           darfSchreiben={darfSchreiben}
           angebotVersendet={Boolean(versand?.data?.angebot_versendet_am)}
+          termin={
+            einsatz
+              ? {
+                  von: einsatz.von as string,
+                  bis: einsatz.bis as string,
+                  personen: ((einsatz.personen ?? []) as unknown as {
+                    user: { name: string } | null;
+                  }[])
+                    .map((p) => p.user?.name)
+                    .filter((n): n is string => Boolean(n)),
+                }
+              : null
+          }
         />
       ) : null}
 
@@ -289,6 +317,7 @@ function Ueberblick({
   team,
   darfSchreiben,
   angebotVersendet,
+  termin,
 }: {
   kopf: Kopf;
   gates: NonNullable<Detail>["gates"];
@@ -298,6 +327,7 @@ function Ueberblick({
   team: { id: string; name: string }[];
   darfSchreiben: boolean;
   angebotVersendet: boolean;
+  termin: { von: string; bis: string; personen: string[] } | null;
 }) {
   const naechsterTermin = termine.find((t) => new Date(t.bis) >= new Date());
 
@@ -332,7 +362,7 @@ function Ueberblick({
           verlorenGrund={kopf.verlorenGrund}
           anzahlungProzent={kopf.anzahlungProzent}
           angebotVersendet={angebotVersendet}
-          team={team}
+          termin={termin}
         />
 
         {naechsterTermin ? (
