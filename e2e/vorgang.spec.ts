@@ -755,18 +755,23 @@ test("15 — Der Kunde sieht seinen Vorgang im Portal und nimmt an", async ({
 
   await page.goto(`/portal/${token}/vorgang/${neu!.id}`);
 
-  /* ---- Was der Kunde sieht ---- */
-  await expect(
-    page.getByRole("heading", { name: "Ihre Photovoltaikanlage" }),
-  ).toBeVisible();
+  /* ---- Was der Kunde zuerst sieht: der Fortschritt ---- */
+  await expect(page.getByRole("heading", { name: "Fortschritt" })).toBeVisible();
   await expect(page.getByText("9,84 kWp").first()).toBeVisible();
   await expect(page.getByText("Wo Ihr Projekt steht")).toBeVisible();
   // Phasen in Kundensprache, nicht „Beauftragt — Gates laufen".
   await expect(page.getByText("Material, Netzanmeldung und Förderung laufen.")).toBeVisible();
-  await expect(page.getByText("PV-Anlage 9,84 kWp schlüsselfertig")).toBeVisible();
   await expect(page.getByText("Angebot versendet")).toBeVisible();
 
   /* ---- Was er nicht sieht ---- */
+  await expect(page.locator("body")).not.toContainText("GEHEIM-INTERN");
+
+  /*
+   * Das Angebot ist ein eigener Bereich. Der Weg dorthin führt über die
+   * Navigation — genau den Klick macht der Kunde auch.
+   */
+  await page.getByRole("link", { name: "Ihr Angebot" }).first().click();
+  await expect(page.getByText("PV-Anlage 9,84 kWp schlüsselfertig")).toBeVisible();
   await expect(page.locator("body")).not.toContainText("GEHEIM-INTERN");
 
   /* ---- Annehmen ---- */

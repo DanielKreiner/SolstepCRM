@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { date, dateTime, eur, num, time } from "@/lib/format";
 import { resolvePortal } from "@/lib/portal/data";
 import { portalVorgangDetail } from "@/lib/portal/vorgang";
 import { PHASEN, phaseIndex } from "@/lib/vorgang/modell";
+import {
+  PortalShell,
+  type PortalBereich,
+} from "@/components/portal/PortalShell";
 import { AngebotAnsicht } from "./AngebotAnsicht";
 import { OffeneAnfragen, PortalChat } from "./PortalChat";
 import { ConfirmAppointmentForm } from "../../PortalForms";
@@ -26,12 +29,21 @@ export const metadata: Metadata = { title: "Ihr Projekt" };
  */
 export default async function PortalVorgangPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string; id: string }>;
+  searchParams: Promise<{ bereich?: string }>;
 }) {
   const { token, id } = await params;
   const session = await resolvePortal(token);
   if (!session) notFound();
+
+  const { bereich: roh } = await searchParams;
+  const bereich: PortalBereich = (
+    ["fortschritt", "angebot", "dokumente", "anliegen", "ertrag"] as const
+  ).includes(roh as PortalBereich)
+    ? (roh as PortalBereich)
+    : "fortschritt";
 
   const daten = await portalVorgangDetail(session, id);
   if (!daten) notFound();
@@ -46,9 +58,10 @@ export default async function PortalVorgangPage({
     texte,
     termine,
     firma,
+    ansprechpartner,
     angenommen,
-  } =
-    daten;
+    angebotVersendet,
+  } = daten;
 
 
   /*
@@ -73,40 +86,58 @@ export default async function PortalVorgangPage({
     (d) => d.typ !== "anzahlungsrechnung" && d.typ !== "schlussrechnung",
   );
 
+  const TITEL: Record<PortalBereich, { titel: string; unter: string }> = {
+    fortschritt: {
+      titel: "Fortschritt",
+      unter: `${v.nummer}${termine.length ? ` · seit ${date(termine[0]!.von)} in Umsetzung` : ""}`,
+    },
+    angebot: {
+      titel: texte.titel ?? (angenommen ? "Ihr Auftrag" : "Ihr Angebot"),
+      unter: texte.gueltigBis
+        ? `Gültig bis ${date(texte.gueltigBis)}`
+        : "Ihre Anlage im Detail",
+    },
+    dokumente: { titel: "Dokumente", unter: "Alles zum Nachlesen und Herunterladen" },
+    anliegen: { titel: "Anliegen", unter: "Schreiben Sie uns — wir antworten hier" },
+    ertrag: { titel: "Ertrag", unter: "Was Ihre Anlage leistet" },
+  };
+
   return (
-    <div className={kannAnnehmen ? "pb-[132px]" : ""}>
-      <main className="mx-auto w-full max-w-[860px] px-4 py-8">
-        {/* ------------------------------------------------------ KOPF */}
-        <header className="mb-5">
-          <Link
-            href={`/portal/${token}`}
-            className="text-[12.5px] text-muted hover:text-ink"
-          >
-            ‹ Übersicht
-          </Link>
-          <p className="mt-3 text-[13px] text-muted">{firma?.name}</p>
-          <h1 className="text-[30px] leading-tight font-bold tracking-[-0.03em]">
-            {texte.titel ?? "Ihre Photovoltaikanlage"}
-          </h1>
-          <p className="num mt-1 text-[13px] text-muted">
-            {v.nummer}
-            {[v.adresse, v.ort].filter(Boolean).length > 0
-              ? ` · ${[v.adresse, v.ort].filter(Boolean).join(", ")}`
-              : ""}
-            {texte.gueltigBis ? ` · gültig bis ${date(texte.gueltigBis)}` : ""}
-          </p>
-
-          {/*
-            Die Einleitung steht vor allem anderen. Sie ist das, was der
-            Betrieb dem Kunden sagen will, bevor er über Zahlen liest.
-          */}
-          {texte.einleitung ? (
-            <p className="mt-4 max-w-[62ch] text-[14.5px] leading-relaxed text-muted">
-              {texte.einleitung}
-            </p>
-          ) : null}
-        </header>
-
+    <PortalShell
+      token={token}
+      vorgangId={v.id}
+      bereich={bereich}
+      kundeName={session.customerName}
+      nummer={v.nummer}
+      adresse={[v.adresse, v.ort].filter(Boolean).join(", ") || null}
+      phase={v.phase}
+      ansprechpartner={ansprechpartner}
+      titel={TITEL[bereich].titel}
+      unter={TITEL[bereich].unter}
+      nav={[
+        { bereich: "fortschritt", label: "Fortschritt", icon: "berichte" },
+        {
+          bereich: "angebot",
+          label: angenommen ? "Ihr Auftrag" : "Ihr Angebot",
+          icon: "angebote",
+          ...(positionen.length ? { anzahl: 1 } : {}),
+        },
+        {
+          bereich: "dokumente",
+          label: "Dokumente",
+          icon: "dokumente",
+          anzahl: dokumente.length,
+        },
+        {
+          bereich: "anliegen",
+          label: "Anliegen",
+          icon: "chat",
+          anzahl: chat.nachrichten.length + chat.anfragen.length,
+        },
+        { bereich: "ertrag", label: "Ertrag", icon: "trend" },
+      ]}
+    >
+      <div className={kannAnnehmen && bereich === "angebot" ? "pb-[132px]" : ""}>
         <OffeneAnfragen
           token={token}
           vorgangId={v.id}
@@ -114,7 +145,7 @@ export default async function PortalVorgangPage({
         />
 
         {/* -------------------------------------------------- ANLAGE */}
-        {v.kwp ? (
+        {bereich === "fortschritt" && v.kwp ? (
           <section className="mb-4 rounded-panel bg-surface p-6 shadow-soft sm:p-8">
             <p className="text-[11.5px] font-semibold tracking-[0.14em] text-accent-ink uppercase">
               Ihre Anlage
@@ -139,6 +170,7 @@ export default async function PortalVorgangPage({
         ) : null}
 
         {/* ------------------------------------------------ FORTSCHRITT */}
+        {bereich === "fortschritt" ? (
         <section className="mb-4 rounded-panel bg-surface p-6 shadow-soft sm:p-8">
           <h2 className="mb-4 text-[17px] font-bold tracking-[-0.02em]">
             Wo Ihr Projekt steht
@@ -199,8 +231,10 @@ export default async function PortalVorgangPage({
           )}
         </section>
 
+        ) : null}
+
         {/* ---------------------------------------------------- TERMIN */}
-        {naechster ? (
+        {bereich === "fortschritt" && naechster ? (
           <section className="mb-4 rounded-panel bg-surface p-6 shadow-soft sm:p-8">
             <p className="text-[11.5px] font-semibold tracking-[0.14em] text-accent-ink uppercase">
               {naechster.art === "montage" ? "Montage" : "Termin vor Ort"}
@@ -250,7 +284,27 @@ export default async function PortalVorgangPage({
         ) : null}
 
         {/* --------------------------------------------------- ANGEBOT */}
-        {positionen.length > 0 ? (
+        {/*
+          Kein Angebot da? Dann steht ein Satz und keine leere Fläche. Der
+          Kunde soll wissen, dass nichts kaputt ist — es ist einfach noch
+          nicht fertig.
+        */}
+        {bereich === "angebot" && positionen.length === 0 ? (
+          <section className="rounded-panel bg-surface p-6 shadow-soft sm:p-8">
+            <h2 className="text-[17px] font-bold tracking-[-0.02em]">
+              {angebotVersendet
+                ? "Hier ist noch nichts hinterlegt"
+                : "Ihr Angebot wird gerade erstellt"}
+            </h2>
+            <p className="mt-2 text-[13.5px] text-muted">
+              {angebotVersendet
+                ? "Melden Sie sich gern bei uns, wenn Sie etwas vermissen."
+                : "Sobald es fertig ist, bekommen Sie eine Mail und finden es hier."}
+            </p>
+          </section>
+        ) : null}
+
+        {bereich === "angebot" && positionen.length > 0 ? (
           <section className="mb-4">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-[21px] font-bold tracking-[-0.02em]">
@@ -277,7 +331,7 @@ export default async function PortalVorgangPage({
         ) : null}
 
         {/* ------------------------------------------------ RECHNUNGEN */}
-        {rechnungen.length > 0 ? (
+        {bereich === "dokumente" && rechnungen.length > 0 ? (
           <section className="mb-4 rounded-panel bg-surface p-6 shadow-soft sm:p-8">
             <h2 className="mb-3 text-[17px] font-bold tracking-[-0.02em]">
               Ihre Rechnungen
@@ -329,7 +383,7 @@ export default async function PortalVorgangPage({
         ) : null}
 
         {/* -------------------------------------------------- DOKUMENTE */}
-        {belege.length > 0 ? (
+        {bereich === "dokumente" && belege.length > 0 ? (
           <section className="mb-4 rounded-panel bg-surface p-6 shadow-soft sm:p-8">
             <h2 className="mb-3 text-[17px] font-bold tracking-[-0.02em]">
               Unterlagen
@@ -354,14 +408,60 @@ export default async function PortalVorgangPage({
           </section>
         ) : null}
 
-        <PortalChat
-          token={token}
-          vorgangId={v.id}
-          firmaName={firma?.name ?? "Ihr Betrieb"}
-          nachrichten={chat.nachrichten}
-        />
+        {bereich === "anliegen" ? (
+          <PortalChat
+            token={token}
+            vorgangId={v.id}
+            firmaName={firma?.name ?? "Ihr Betrieb"}
+            nachrichten={chat.nachrichten}
+          />
+        ) : null}
+
+        {/* ------------------------------------------------------ ERTRAG */}
+        {bereich === "ertrag" ? (
+          <section className="rounded-panel bg-surface p-6 shadow-soft sm:p-8">
+            {v.kwp ? (
+              <>
+                <div className="flex flex-wrap gap-x-10 gap-y-5">
+                  <Kennzahl label="Leistung" wert={`${num(v.kwp)} kWp`} />
+                  {v.speicherKwh ? (
+                    <Kennzahl
+                      label="Speicher"
+                      wert={`${num(v.speicherKwh)} kWh`}
+                    />
+                  ) : null}
+                  {/*
+                   * Faustformel für Österreich: rund 1000 kWh je kWp und
+                   * Jahr. Bewusst als Schätzung ausgewiesen — die echte
+                   * Zahl hängt an Ausrichtung, Neigung und Verschattung,
+                   * und eine Prognose, die wie eine Zusage aussieht,
+                   * enttäuscht im ersten Winter.
+                   */}
+                  <Kennzahl
+                    label="Ertrag je Jahr, geschätzt"
+                    wert={`${new Intl.NumberFormat("de-AT", {
+                      maximumFractionDigits: 0,
+                    }).format(v.kwp * 1000)} kWh`}
+                  />
+                </div>
+                <p className="mt-5 max-w-[62ch] text-[12.5px] leading-relaxed text-muted">
+                  Die Ertragsangabe ist ein Richtwert von rund 1000 kWh je
+                  kWp und Jahr. Was Ihre Anlage tatsächlich liefert, hängt
+                  von Ausrichtung, Dachneigung und Verschattung ab — nach
+                  der Inbetriebnahme sehen Sie hier die gemessenen Werte.
+                </p>
+              </>
+            ) : (
+              <p className="text-[13px] text-muted">
+                Sobald die Anlagengrösse feststeht, steht hier Ihr zu
+                erwartender Ertrag.
+              </p>
+            )}
+          </section>
+        ) : null}
 
         {/* ----------------------------------------------------- VERLAUF */}
+        {bereich === "fortschritt" ? (
         <section className="mb-4 rounded-panel bg-surface p-6 shadow-soft sm:p-8">
           <h2 className="mb-3 text-[17px] font-bold tracking-[-0.02em]">
             Was bisher passiert ist
@@ -391,7 +491,9 @@ export default async function PortalVorgangPage({
           )}
         </section>
 
-        {texte.abschluss ? (
+        ) : null}
+
+        {bereich === "angebot" && texte.abschluss ? (
           <section className="mb-4 rounded-panel bg-surface p-6 shadow-soft sm:p-8">
             <p className="max-w-[62ch] text-[14px] leading-relaxed whitespace-pre-line">
               {texte.abschluss}
@@ -399,13 +501,8 @@ export default async function PortalVorgangPage({
           </section>
         ) : null}
 
-        <p className="pb-6 text-center text-[11.5px] text-faint">
-          Fragen? Melden Sie sich über{" "}
-          <Link href={`/portal/${token}#anliegen`}>Anliegen im Portal</Link>.
-        </p>
-      </main>
-
-    </div>
+      </div>
+    </PortalShell>
   );
 }
 
@@ -436,3 +533,14 @@ const KUNDENTEXT: Record<string, { titel: string; meta: string }> = {
   },
 };
 
+
+function Kennzahl({ label, wert }: { label: string; wert: string }) {
+  return (
+    <div>
+      <div className="num text-[30px] leading-none font-bold tracking-[-0.03em] text-accent-ink">
+        {wert}
+      </div>
+      <div className="mt-1 text-[12px] text-muted">{label}</div>
+    </div>
+  );
+}

@@ -5,6 +5,12 @@ import { z } from "zod";
 import { anhangSpeichern } from "@/lib/vorgang/chat";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import {
+  einreihen,
+  kundeZumVorgang,
+  mailClient,
+  portalLink,
+} from "@/lib/vorgang/mail";
 
 export type ChatStatus = { error: string | null; ok: string | null };
 
@@ -82,11 +88,57 @@ export async function nachrichtSenden(
     if (!r.ok) return { error: r.grund, ok: null };
   }
 
+  /*
+   * Eine Nachricht an den Kunden geht auch als Mail raus. Eine interne
+   * Notiz niemals — das ist der ganze Sinn des Umschalters, und ein
+   * Fehler hier wäre der teuerste im ganzen Modul.
+   */
+  let anAdresse: string | null = null;
+  if (!intern) {
+    anAdresse = await nachrichtMailen(z1.me.companyId, d.vorgangId, d.body);
+  }
+
   revalidatePath(`/vorgaenge/${d.vorgangId}`);
   return {
     error: null,
-    ok: intern ? "Interne Notiz gespeichert." : "Gesendet — der Kunde sieht sie im Portal.",
+    ok: intern
+      ? "Interne Notiz gespeichert."
+      : anAdresse
+        ? `Gesendet — im Portal sichtbar und per Mail an ${anAdresse}.`
+        : "Gesendet — der Kunde sieht sie im Portal. Per Mail ging nichts raus (keine Adresse oder kein Portalzugang).",
   };
+}
+
+/** Siehe rueckfrageMailen: scheitert bewusst leise, die Nachricht steht. */
+async function nachrichtMailen(
+  companyId: string,
+  vorgangId: string,
+  body: string,
+): Promise<string | null> {
+  const admin = mailClient();
+  const kunde = await kundeZumVorgang(admin, vorgangId);
+  if (!kunde.ok || !kunde.empfaenger) return null;
+
+  const link = await portalLink(admin, kunde.kundeId, {
+    vorgangId,
+    bereich: "anliegen",
+  });
+  if (!link) return null;
+
+  const eingereiht = await einreihen(admin, {
+    companyId,
+    vorgangId,
+    art: "nachricht",
+    an: kunde.empfaenger,
+    betreff: `Neue Nachricht zu ${kunde.nummer}`,
+    absaetze: [
+      body,
+      "Antworten können Sie direkt im Portal — dann bleibt alles an einer Stelle.",
+    ],
+    knopf: { text: "Im Portal öffnen", url: link },
+  });
+
+  return eingereiht.ok ? kunde.empfaenger.email : null;
 }
 
 const anfrageSchema = z.object({
@@ -145,8 +197,62 @@ export async function anfrageStellen(
     created_by: z1.me.id,
   });
 
+  /*
+   * Und raus damit. Eine Rückfrage, die nur im Portal steht, wartet
+   * darauf, dass der Kunde von selbst nachsieht — genau das tut er nicht.
+   * Sie ist der Grund, warum die Montage stillsteht, also muss sie ihn
+   * dort erreichen, wo er ohnehin hinschaut.
+   */
+  const versand = await rueckfrageMailen(z1.me.companyId, d.vorgangId, d.titel, d.beschreibung);
+
   revalidatePath(`/vorgaenge/${d.vorgangId}`);
-  return { error: null, ok: "Rückfrage gestellt — der Kunde sieht sie im Portal." };
+  return {
+    error: null,
+    ok: versand
+      ? `Rückfrage gestellt und an ${versand} geschickt.`
+      : "Rückfrage gestellt — sie steht im Portal. Per Mail ging nichts raus (keine Adresse oder kein Portalzugang).",
+  };
+}
+
+/**
+ * Die Rückfrage per Mail hinterherschicken.
+ *
+ * Scheitert bewusst leise: die Frage ist bereits angelegt und steht im
+ * Portal. Ein Abbruch würde sie wieder wegnehmen, nur weil beim Kunden
+ * keine Adresse hinterlegt ist — schlechter Tausch.
+ */
+async function rueckfrageMailen(
+  companyId: string,
+  vorgangId: string,
+  titel: string,
+  beschreibung: string,
+): Promise<string | null> {
+  const admin = mailClient();
+  const kunde = await kundeZumVorgang(admin, vorgangId);
+  if (!kunde.ok || !kunde.empfaenger) return null;
+
+  const link = await portalLink(admin, kunde.kundeId, {
+    vorgangId,
+    bereich: "anliegen",
+  });
+  if (!link) return null;
+
+  const eingereiht = await einreihen(admin, {
+    companyId,
+    vorgangId,
+    art: "rueckfrage",
+    an: kunde.empfaenger,
+    betreff: `Kurze Rückfrage zu ${kunde.nummer}: ${titel}`,
+    absaetze: [
+      "für den nächsten Schritt brauchen wir noch etwas von Ihnen:",
+      titel,
+      ...(beschreibung ? [beschreibung] : []),
+      "Sie können direkt im Portal antworten — dort hängt Ihre Antwort gleich am richtigen Vorgang.",
+    ],
+    knopf: { text: "Im Portal antworten", url: link },
+  });
+
+  return eingereiht.ok ? kunde.empfaenger.email : null;
 }
 
 const erledigtSchema = z.object({

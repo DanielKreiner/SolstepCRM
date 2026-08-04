@@ -112,6 +112,13 @@ const eslintConfig = [
        * hier.
        */
       "lib/mahnung.ts",
+      /*
+       * Mail an den Kunden zu einem Vorgang. Gleiche Begründung wie beim
+       * Mahnlauf: mail_outbox und mail_account sind für authenticated
+       * gesperrt, eine angemeldete Sitzung kann keine Mail schreiben.
+       * Die Rechteprüfung sitzt in der aufrufenden Server Action.
+       */
+      "lib/vorgang/mail.ts",
       "lib/supabase/admin.ts",
       "scripts/**",
       "tests/**",

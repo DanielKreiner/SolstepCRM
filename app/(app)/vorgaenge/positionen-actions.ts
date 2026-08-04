@@ -525,6 +525,147 @@ export async function positionZuordnen(
   return { error: null, ok: d.gruppeId ? "In die Gruppe verschoben." : "Aus der Gruppe genommen." };
 }
 
+/*
+ * Ziehen statt tippen.
+ *
+ * Bis hierher musste man eine Zeile aufklappen, im Auswahlfeld eine
+ * Gruppe suchen und auf „Verschieben" drücken — für etwas, das mit der
+ * Maus eine Bewegung ist. Die Aktion bekommt deshalb Gruppe und Position
+ * in einem Zug, sonst hüpft die Zeile beim Ablegen ans Ende.
+ *
+ * Kein FormData: der Aufruf kommt aus dem Ablegen und nicht aus einem
+ * Formular. Deshalb auch kein useActionState-Vertrag.
+ */
+export async function positionVerschieben(input: {
+  vorgangId: string;
+  positionId: string;
+  gruppeId: string | null;
+  /* Die neue Reihenfolge der Zielspalte, von oben nach unten. */
+  reihenfolge: string[];
+}): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = z
+    .object({
+      vorgangId: z.string().uuid(),
+      positionId: z.string().uuid(),
+      gruppeId: z.string().uuid().nullable(),
+      reihenfolge: z.array(z.string().uuid()).max(500),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Eingabe fehlt.", ok: null };
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const { error } = await supabase
+    .from("vorgang_position")
+    .update({ gruppe_id: d.gruppeId })
+    .eq("id", d.positionId)
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null);
+
+  if (error) return { error: `Verschieben fehlgeschlagen: ${error.message}`, ok: null };
+
+  /*
+   * Sortierung in Zehnerschritten, damit später etwas dazwischenpasst,
+   * ohne alles neu zu nummerieren. Einzelne Updates statt eines Upserts:
+   * ein Upsert bräuchte alle Pflichtspalten und würde bei einem Tippfehler
+   * eine Position überschreiben statt sie umzusortieren.
+   */
+  await Promise.all(
+    d.reihenfolge.map((id, i) =>
+      supabase
+        .from("vorgang_position")
+        .update({ sort: (i + 1) * 10 })
+        .eq("id", id)
+        .eq("vorgang_id", d.vorgangId)
+        .is("dokument_id", null),
+    ),
+  );
+
+  await summeSchreiben(supabase, d.vorgangId);
+  frisch(d.vorgangId);
+  return { error: null, ok: "Verschoben." };
+}
+
+/**
+ * Optional an oder aus — ein Klick, kein Formular.
+ *
+ * Ob eine Position zur Auswahl steht, entscheidet sich beim Durchsehen
+ * der Liste und nicht beim Bearbeiten einer einzelnen Zeile.
+ */
+export async function positionOptional(input: {
+  vorgangId: string;
+  positionId: string;
+  optional: boolean;
+}): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = z
+    .object({
+      vorgangId: z.string().uuid(),
+      positionId: z.string().uuid(),
+      optional: z.boolean(),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Eingabe fehlt.", ok: null };
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, d.vorgangId);
+  if (sperre) return sperre;
+
+  const { error } = await supabase
+    .from("vorgang_position")
+    .update({ optional: d.optional })
+    .eq("id", d.positionId)
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null);
+
+  if (error) return { error: `Fehlgeschlagen: ${error.message}`, ok: null };
+
+  await summeSchreiben(supabase, d.vorgangId);
+  frisch(d.vorgangId);
+  return {
+    error: null,
+    ok: d.optional ? "Steht jetzt zur Auswahl." : "Ist jetzt fester Bestandteil.",
+  };
+}
+
+/** Löschen direkt aus der Liste, ohne die Zeile aufzuklappen. */
+export async function positionWeg(input: {
+  vorgangId: string;
+  positionId: string;
+}): Promise<PosStatus> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const parsed = loeschSchema.safeParse(input);
+  if (!parsed.success) return { error: "Eingabe fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const sperre = await gesperrt(supabase, parsed.data.vorgangId);
+  if (sperre) return sperre;
+
+  const { error } = await supabase
+    .from("vorgang_position")
+    .delete()
+    .eq("id", parsed.data.positionId)
+    .eq("vorgang_id", parsed.data.vorgangId)
+    .is("dokument_id", null);
+
+  if (error) return { error: `Löschen fehlgeschlagen: ${error.message}`, ok: null };
+
+  await summeSchreiben(supabase, parsed.data.vorgangId);
+  frisch(parsed.data.vorgangId);
+  return { error: null, ok: "Position entfernt." };
+}
+
 /* ====================================================== ANGEBOTSKOPF */
 
 const kopfSchema = z.object({

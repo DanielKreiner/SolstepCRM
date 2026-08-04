@@ -1,7 +1,25 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCorners,
+  pointerWithin,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { LEER, Meldung, type AktionsStatus } from "@/components/ui/Formular";
 import { Suchauswahl, type Option } from "@/components/ui/Suchauswahl";
 import { eur, num } from "@/lib/format";
@@ -15,9 +33,49 @@ import {
   positionAusArtikel,
   positionFrei,
   positionLoeschen,
+  positionOptional,
+  positionVerschieben,
+  positionWeg,
   positionZuordnen,
   upgradeSetzen,
 } from "@/app/(app)/vorgaenge/positionen-actions";
+
+/*
+ * Ohne Gruppe ist auch ein Ablageziel. dnd-kit braucht dafür eine ID,
+ * und ein leerer String ist keine.
+ */
+const OHNE = "ohne-gruppe";
+
+const HINWEIS = {
+  draggable:
+    "Mit Leertaste aufnehmen, mit den Pfeiltasten verschieben, mit Leertaste ablegen, mit Escape abbrechen.",
+};
+
+/**
+ * Wohin fällt die Position.
+ *
+ * Erst danach fragen, worüber der Zeiger wirklich steht — die Gruppen
+ * liegen ineinander verschachtelt, und die reine Eckendistanz greift
+ * dann daneben: eine auf die Gruppenkopfzeile gezogene Position landete
+ * bei den Einzelpositionen, weil deren Fläche zufällig näher lag.
+ *
+ * Ohne Zeiger — beim Verschieben mit der Tastatur — bleibt die
+ * Eckendistanz, die dafür genau richtig ist.
+ */
+const treffer: typeof closestCorners = (args) => {
+  const unterZeiger = pointerWithin(args);
+  return unterZeiger.length > 0 ? unterZeiger : closestCorners(args);
+};
+
+const ANSAGEN = {
+  onDragStart: ({ active }: { active: { id: string | number } }) =>
+    `Position ${active.id} aufgenommen.`,
+  onDragOver: ({ over }: { over: { id: string | number } | null }) =>
+    over ? "Über einem möglichen Ziel." : "Ausserhalb jeder Liste.",
+  onDragEnd: ({ over }: { over: { id: string | number } | null }) =>
+    over ? "Abgelegt." : "Nicht abgelegt, die Position blieb, wo sie war.",
+  onDragCancel: () => "Abgebrochen, nichts verschoben.",
+};
 
 export type GruppeAnzeige = {
   id: string;
@@ -76,7 +134,117 @@ export function Positionen({
   gesperrt: boolean;
   gesperrtGrund: string | null;
 }) {
-  const preisPositionen: PreisPosition[] = positionen.map((p) => ({
+  /*
+   * Die Reihenfolge liegt lokal, damit eine gezogene Zeile sofort liegen
+   * bleibt, wo sie hingehört, und nicht erst nach der Serverantwort
+   * zurückspringt. Der Server bleibt die Wahrheit — kommen neue Daten,
+   * gewinnen sie.
+   */
+  const [liste, setListe] = useState(positionen);
+  const [warten, uebergang] = useTransition();
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  useEffect(() => setListe(positionen), [positionen]);
+
+  const sensoren = useSensors(
+    /*
+     * Erst ab 6 Pixeln ist es ein Ziehen. Ohne diese Schwelle wird jeder
+     * Klick auf eine Zeile zum Drag, und die Zeile klappt nie mehr auf.
+     */
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function behaelter(id: string): string {
+    if (id === OHNE || gruppen.some((g) => g.id === id)) return id;
+    const p = liste.find((x) => x.id === id);
+    return p?.gruppeId && gruppen.some((g) => g.id === p.gruppeId)
+      ? p.gruppeId
+      : OHNE;
+  }
+
+  function abgelegt(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over) return;
+
+    const id = String(active.id);
+    const ziel = behaelter(String(over.id));
+    const quelle = behaelter(id);
+    if (ziel === quelle && String(over.id) === id) return;
+
+    const gruppeId = ziel === OHNE ? null : ziel;
+
+    /* Neue Reihenfolge der Zielspalte bestimmen. */
+    const ohneMich = liste.filter((p) => p.id !== id);
+    const inZiel = ohneMich.filter((p) => behaelterVon(p, gruppen) === ziel);
+    const stelle =
+      String(over.id) === ziel
+        ? inZiel.length
+        : Math.max(0, inZiel.findIndex((p) => p.id === String(over.id)));
+
+    const bewegt = liste.find((p) => p.id === id);
+    if (!bewegt) return;
+
+    const neuInZiel = [...inZiel];
+    neuInZiel.splice(stelle, 0, { ...bewegt, gruppeId });
+
+    setListe([
+      ...ohneMich.filter((p) => behaelterVon(p, gruppen) !== ziel),
+      ...neuInZiel,
+    ]);
+
+    setFehler(null);
+    uebergang(async () => {
+      const r = await positionVerschieben({
+        vorgangId,
+        positionId: id,
+        gruppeId,
+        reihenfolge: neuInZiel.map((p) => p.id),
+      });
+      if (r.error) {
+        setFehler(r.error);
+        setListe(positionen);
+      }
+    });
+  }
+
+  function optionalUmschalten(p: PositionAnzeige) {
+    setListe((l) =>
+      l.map((x) => (x.id === p.id ? { ...x, optional: !x.optional } : x)),
+    );
+    setFehler(null);
+    uebergang(async () => {
+      const r = await positionOptional({
+        vorgangId,
+        positionId: p.id,
+        optional: !p.optional,
+      });
+      if (r.error) {
+        setFehler(r.error);
+        setListe(positionen);
+      }
+    });
+  }
+
+  function entfernen(p: PositionAnzeige) {
+    setListe((l) => l.filter((x) => x.id !== p.id));
+    setFehler(null);
+    uebergang(async () => {
+      const r = await positionWeg({ vorgangId, positionId: p.id });
+      if (r.error) {
+        setFehler(r.error);
+        setListe(positionen);
+      }
+    });
+  }
+
+  const werkzeug: Werkzeug = {
+    optionalUmschalten,
+    entfernen,
+    ziehbar: !gesperrt,
+  };
+
+  const preisPositionen: PreisPosition[] = liste.map((p) => ({
     id: p.id,
     gruppeId: p.gruppeId,
     menge: p.menge,
@@ -95,7 +263,7 @@ export function Positionen({
     { wert: "", text: "— ohne Gruppe —" },
     ...gruppen.map((g) => ({ wert: g.id, text: g.name })),
   ];
-  const frei = positionen.filter(
+  const frei = liste.filter(
     (p) => !p.gruppeId || !gruppen.some((g) => g.id === p.gruppeId),
   );
 
@@ -104,7 +272,8 @@ export function Positionen({
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-[15px] font-semibold">Angebotspositionen</h2>
         <span className="num text-[11.5px] text-faint">
-          {positionen.length} {positionen.length === 1 ? "Position" : "Positionen"}
+          {warten ? "wird gespeichert …" : null}{" "}
+          {liste.length} {liste.length === 1 ? "Position" : "Positionen"}
         </span>
       </div>
 
@@ -114,61 +283,91 @@ export function Positionen({
         </p>
       ) : null}
 
-      {positionen.length === 0 && gruppen.length === 0 ? (
+      {fehler ? (
+        <p className="mb-3 rounded-input bg-s-crit/10 px-4 py-3 text-[12.5px] text-s-crit">
+          {fehler}
+        </p>
+      ) : null}
+
+      {liste.length === 0 && gruppen.length === 0 ? (
         <p className="rounded-input bg-panel px-4 py-6 text-center text-[13px] text-muted">
           Noch nichts drin. Artikel suchen oder eine freie Position anlegen —
           für Montage, Anfahrt, Gerüst.
         </p>
       ) : null}
 
-      {/* --------------------------------------------------- GRUPPEN */}
-      {gruppen.map((g) => {
-        const drin = positionen.filter((p) => p.gruppeId === g.id);
-        const summe = preis.positionenNetto;
-        void summe;
-        return (
+      {/*
+        Feste id: ohne sie zählt dnd-kit die Beschreibungs-IDs auf Server
+        und Client getrennt hoch, und React verwirft die Hydrierung mit
+        einer Attributabweichung.
+
+        Ansagen auf Deutsch, weil die Voreinstellung englisch ist und die
+        Regel für alle Texte gilt — auch für die, die nur vorgelesen
+        werden (Abschnitt 10).
+      */}
+      <DndContext
+        id="angebotspositionen"
+        sensors={sensoren}
+        collisionDetection={treffer}
+        onDragEnd={abgelegt}
+        accessibility={{ announcements: ANSAGEN, screenReaderInstructions: HINWEIS }}
+      >
+        {/* --------------------------------------------------- GRUPPEN */}
+        {gruppen.map((g) => (
           <GruppenBlock
             key={g.id}
             vorgangId={vorgangId}
             gruppe={g}
-            positionen={drin}
+            positionen={liste.filter((p) => p.gruppeId === g.id)}
             gruppenWahl={gruppenWahl}
             artikel={artikel}
             kategorien={kategorien}
             gesperrt={gesperrt}
-            netto={berechne(
-              preisPositionen,
-              [{ id: g.id, paketPreis: g.paketPreis }],
-              { ...rahmen, rabattProzent: 0, lieferungNetto: 0 },
-            ).positionenNetto}
+            werkzeug={werkzeug}
+            netto={
+              berechne(
+                preisPositionen,
+                [{ id: g.id, paketPreis: g.paketPreis }],
+                { ...rahmen, rabattProzent: 0, lieferungNetto: 0 },
+              ).positionenNetto
+            }
           />
-        );
-      })}
+        ))}
 
-      {/* --------------------------------------- FREIE EINZELPOSITIONEN */}
-      {frei.length > 0 ? (
-        <div className="mt-3">
+        {/* --------------------------------------- FREIE EINZELPOSITIONEN */}
+        <Ablage id={OHNE}>
           {gruppen.length > 0 ? (
             <p className="mb-2 text-[11px] font-semibold tracking-[0.1em] text-faint uppercase">
               Einzelpositionen
             </p>
           ) : null}
-          <ul className="flex flex-col gap-2">
-            {frei.map((p, i) => (
-              <Zeile
-                key={p.id}
-                vorgangId={vorgangId}
-                position={p}
-                nummer={(i + 1) * 10}
-                gruppenWahl={gruppenWahl}
-                artikel={artikel}
-                kategorien={kategorien}
-                gesperrt={gesperrt}
-              />
-            ))}
-          </ul>
-        </div>
-      ) : null}
+          <SortableContext
+            items={frei.map((p) => p.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="flex flex-col gap-2">
+              {frei.map((p, i) => (
+                <Zeile
+                  key={p.id}
+                  vorgangId={vorgangId}
+                  position={p}
+                  nummer={(i + 1) * 10}
+                  gruppenWahl={gruppenWahl}
+                  artikel={artikel}
+                  kategorien={kategorien}
+                  gesperrt={gesperrt}
+                  werkzeug={werkzeug}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+          {frei.length === 0 && gruppen.length > 0 ? (
+            <p className="rounded-input border border-dashed border-line px-3 py-4 text-center text-[11.5px] text-faint">
+              Hierher ziehen, um eine Position aus ihrer Gruppe zu nehmen.
+            </p>
+          ) : null}
+        </Ablage>
+      </DndContext>
 
       {/* ------------------------------------------------------ SUMMEN */}
       <dl className="mt-4 flex flex-col gap-[7px] border-t border-line pt-4 text-[13px]">
@@ -228,6 +427,42 @@ export function Positionen({
   );
 }
 
+/**
+ * Was eine Zeile ohne Aufklappen können muss.
+ *
+ * Als Bündel durchgereicht statt als drei Einzelprops: die Zeile steckt
+ * zwei Ebenen tief, und drei Handreichungen durch zwei Komponenten sind
+ * schwerer zu lesen als eine.
+ */
+type Werkzeug = {
+  optionalUmschalten: (p: PositionAnzeige) => void;
+  entfernen: (p: PositionAnzeige) => void;
+  ziehbar: boolean;
+};
+
+/** In welchen Behälter gehört die Position — Gruppe oder „ohne". */
+function behaelterVon(p: PositionAnzeige, gruppen: GruppeAnzeige[]): string {
+  return p.gruppeId && gruppen.some((g) => g.id === p.gruppeId)
+    ? p.gruppeId
+    : OHNE;
+}
+
+/** Ablagefläche. Hebt sich sichtbar an, sobald etwas darüber schwebt. */
+function Ablage({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={[
+        "mt-3 rounded-input p-1 transition-colors duration-200",
+        isOver ? "bg-accent/8 ring-1 ring-accent" : "",
+      ].join(" ")}
+    >
+      {children}
+    </div>
+  );
+}
+
 function Summe({
   label,
   wert,
@@ -261,6 +496,7 @@ function Zeile({
   artikel,
   kategorien,
   gesperrt,
+  werkzeug,
 }: {
   vorgangId: string;
   position: PositionAnzeige;
@@ -269,8 +505,13 @@ function Zeile({
   artikel: Option[];
   kategorien: string[];
   gesperrt: boolean;
+  werkzeug: Werkzeug;
 }) {
   const [offen, setOffen] = useState(false);
+  const [fragt, setFragt] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: position.id, disabled: !werkzeug.ziehbar });
+
   const zeile =
     position.menge * position.epNetto * (1 - position.rabattProzent / 100);
   const marge =
@@ -279,56 +520,131 @@ function Zeile({
       : null;
 
   return (
-    <li className="rounded-input bg-panel">
-      <button
-        type="button"
-        disabled={gesperrt}
-        onClick={() => setOffen((o) => !o)}
-        aria-expanded={offen}
-        className="flex w-full cursor-pointer items-center gap-3 border-0 bg-transparent px-3 py-[10px] text-left disabled:cursor-default"
-      >
-        <span className="num w-[26px] shrink-0 text-[11px] text-faint">{nummer}</span>
-
-        {position.bildUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={position.bildUrl}
-            alt=""
-            loading="lazy"
-            className="h-[32px] w-[32px] shrink-0 rounded-[8px] bg-surface object-contain"
-          />
-        ) : null}
-
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-medium">
-            {position.bezeichnung}
-          </span>
-          <span className="num block text-[11px] text-faint">
-            {num(position.menge)} {position.einheit} × {eur(position.epNetto)}
-            {position.rabattProzent > 0
-              ? ` · −${num(position.rabattProzent)} %`
-              : ""}
-            {marge !== null ? ` · DB ${Math.round(marge)} %` : ""}
-            {position.istMaterial ? " · Material" : " · Leistung"}
-          </span>
-        </span>
-
-        {position.optional ? (
-          <span className="shrink-0 rounded-pill bg-s-doing/12 px-[8px] py-px text-[10px] font-semibold text-s-doing">
-            optional
-          </span>
-        ) : null}
-        {position.upgradeAufpreis !== null ? (
-          <span
-            className="num shrink-0 rounded-pill bg-s-warn/14 px-[8px] py-px text-[10px] font-semibold text-accent-ink"
-            title="Der Kunde kann auf ein besseres Produkt wechseln"
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      /* Anheben mit leichter Neigung, wie überall im Haus (Abschnitt 9). */
+      className={[
+        "rounded-input bg-panel",
+        isDragging ? "relative z-10 rotate-[3deg] shadow-soft" : "",
+      ].join(" ")}
+    >
+      <div className="flex items-center gap-2 px-3 py-[10px]">
+        {werkzeug.ziehbar ? (
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            aria-label={`${position.bezeichnung} verschieben`}
+            title="Ziehen — in eine Gruppe oder heraus"
+            className="shrink-0 cursor-grab touch-none rounded-[6px] border-0 bg-transparent px-1 py-2 text-faint hover:text-ink active:cursor-grabbing"
           >
-            +{eur(position.upgradeAufpreis)}
-          </span>
+            <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden fill="currentColor">
+              <circle cx="2" cy="3" r="1.4" /><circle cx="8" cy="3" r="1.4" />
+              <circle cx="2" cy="8" r="1.4" /><circle cx="8" cy="8" r="1.4" />
+              <circle cx="2" cy="13" r="1.4" /><circle cx="8" cy="13" r="1.4" />
+            </svg>
+          </button>
         ) : null}
 
-        <span className="num shrink-0 text-[13.5px] font-semibold">{eur(zeile)}</span>
-      </button>
+        <button
+          type="button"
+          disabled={gesperrt}
+          onClick={() => setOffen((o) => !o)}
+          aria-expanded={offen}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 border-0 bg-transparent p-0 text-left disabled:cursor-default"
+        >
+          <span className="num w-[26px] shrink-0 text-[11px] text-faint">{nummer}</span>
+
+          {position.bildUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={position.bildUrl}
+              alt=""
+              loading="lazy"
+              className="h-[32px] w-[32px] shrink-0 rounded-[8px] bg-surface object-contain"
+            />
+          ) : null}
+
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-medium">
+              {position.bezeichnung}
+            </span>
+            <span className="num block text-[11px] text-faint">
+              {num(position.menge)} {position.einheit} × {eur(position.epNetto)}
+              {position.rabattProzent > 0
+                ? ` · −${num(position.rabattProzent)} %`
+                : ""}
+              {marge !== null ? ` · DB ${Math.round(marge)} %` : ""}
+              {position.istMaterial ? " · Material" : " · Leistung"}
+            </span>
+          </span>
+
+          {position.upgradeAufpreis !== null ? (
+            <span
+              className="num shrink-0 rounded-pill bg-s-warn/14 px-[8px] py-px text-[10px] font-semibold text-accent-ink"
+              title="Der Kunde kann auf ein besseres Produkt wechseln"
+            >
+              +{eur(position.upgradeAufpreis)}
+            </span>
+          ) : null}
+
+          <span className="num shrink-0 text-[13.5px] font-semibold">{eur(zeile)}</span>
+        </button>
+
+        {/*
+          Optional und Löschen stehen in der Liste und nicht im
+          Bearbeiten-Formular: beides entscheidet sich beim Durchsehen,
+          und dafür jede Zeile aufzuklappen war der halbe Nachmittag.
+        */}
+        {!gesperrt ? (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => werkzeug.optionalUmschalten(position)}
+              aria-pressed={position.optional}
+              title="Optional — der Kunde wählt sie im Portal dazu"
+              className={[
+                "cursor-pointer rounded-pill px-[9px] py-[3px] text-[10px] font-semibold transition-colors",
+                position.optional
+                  ? "bg-s-doing/12 text-s-doing"
+                  : "border border-line bg-surface text-faint hover:text-ink",
+              ].join(" ")}
+            >
+              optional
+            </button>
+
+            {fragt ? (
+              <span className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => werkzeug.entfernen(position)}
+                  className="cursor-pointer rounded-pill bg-s-crit px-[9px] py-[3px] text-[10px] font-semibold text-white"
+                >
+                  wirklich weg
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFragt(false)}
+                  className="cursor-pointer border-0 bg-transparent px-1 text-[10px] text-muted underline"
+                >
+                  nein
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setFragt(true)}
+                aria-label={`${position.bezeichnung} entfernen`}
+                title="Position entfernen"
+                className="cursor-pointer rounded-pill border border-line bg-surface px-[9px] py-[3px] text-[11px] text-faint transition-colors hover:border-s-crit hover:text-s-crit"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        ) : null}
+      </div>
 
       {offen && !gesperrt ? (
         <ZeileBearbeiten
@@ -675,6 +991,7 @@ function GruppenBlock({
   kategorien,
   netto,
   gesperrt,
+  werkzeug,
 }: {
   vorgangId: string;
   gruppe: GruppeAnzeige;
@@ -684,8 +1001,10 @@ function GruppenBlock({
   kategorien: string[];
   netto: number;
   gesperrt: boolean;
+  werkzeug: Werkzeug;
 }) {
   const [offen, setOffen] = useState(false);
+  const { setNodeRef, isOver } = useDroppable({ id: gruppe.id });
   const [status, formAction] = useActionState<AktionsStatus, FormData>(
     gruppeAendern,
     LEER,
@@ -697,7 +1016,13 @@ function GruppenBlock({
   const p = `gr-${gruppe.id.slice(0, 8)}`;
 
   return (
-    <section className="mt-3 rounded-input border border-line bg-panel">
+    <section
+      ref={setNodeRef}
+      className={[
+        "mt-3 rounded-input border bg-panel transition-colors duration-200",
+        isOver ? "border-accent bg-accent/8" : "border-line",
+      ].join(" ")}
+    >
       <div className="flex flex-wrap items-center gap-2 px-3 py-[10px]">
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13.5px] font-semibold">
@@ -799,24 +1124,29 @@ function GruppenBlock({
       ) : null}
 
       {positionen.length > 0 ? (
-        <ul className="flex flex-col gap-2 px-3 pb-3">
-          {positionen.map((pos, i) => (
-            <Zeile
-              key={pos.id}
-              vorgangId={vorgangId}
-              position={pos}
-              nummer={(i + 1) * 10}
-              gruppenWahl={gruppenWahl}
-              artikel={artikel}
-              kategorien={kategorien}
-              gesperrt={gesperrt}
-            />
-          ))}
-        </ul>
+        <SortableContext
+          items={positionen.map((p) => p.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <ul className="flex flex-col gap-2 px-3 pb-3">
+            {positionen.map((pos, i) => (
+              <Zeile
+                key={pos.id}
+                vorgangId={vorgangId}
+                position={pos}
+                nummer={(i + 1) * 10}
+                gruppenWahl={gruppenWahl}
+                artikel={artikel}
+                kategorien={kategorien}
+                gesperrt={gesperrt}
+                werkzeug={werkzeug}
+              />
+            ))}
+          </ul>
+        </SortableContext>
       ) : (
-        <p className="px-3 pb-3 text-[11.5px] text-faint">
-          Noch nichts in dieser Gruppe. Positionen unten anlegen und dann
-          hierher verschieben.
+        <p className="mx-3 mb-3 rounded-input border border-dashed border-line px-3 py-4 text-center text-[11.5px] text-faint">
+          Noch nichts in dieser Gruppe. Positionen hierher ziehen.
         </p>
       )}
     </section>

@@ -116,6 +116,11 @@ export type PortalDetail = {
   dokumente: PortalDokument[];
   positionen: PortalPosition[];
   gruppen: PortalGruppe[];
+  ansprechpartner: {
+    name: string;
+    rolle: string | null;
+    telefon: string | null;
+  } | null;
   /* Steuersatz, Rabatt und Lieferung — die Zahlen unter dem Strich. */
   rahmen: { ustSatz: number; rabattProzent: number; lieferungNetto: number };
   texte: {
@@ -134,6 +139,12 @@ export type PortalDetail = {
   } | null;
   /** Angenommen? Dann steht das Angebot fest. */
   angenommen: boolean;
+  /**
+   * Ist das Angebot überhaupt schon abgeschickt? Ist es das nicht, gibt
+   * es keine Positionen — und der Kunde bekommt einen Satz statt einer
+   * leeren Seite, die aussieht, als sei etwas kaputt.
+   */
+  angebotVersendet: boolean;
 };
 
 export async function portalVorgangDetail(
@@ -148,7 +159,9 @@ export async function portalVorgangDetail(
       `id, number, phase, kwp, speicher_kwh, adresse, plz, ort,
        angebotswert_netto, auftragswert_netto, verloren_am, created_at,
        ust_satz, rabatt_prozent, lieferung_netto,
-       angebot_titel, angebot_einleitung, angebot_abschluss, angebot_gueltig_bis`,
+       angebot_titel, angebot_einleitung, angebot_abschluss, angebot_gueltig_bis,
+       angebot_versendet_am,
+       zustaendig:zustaendig_user_id ( name, role, phone )`,
     )
     .eq("id", vorgangId)
     /* Der Token allein reicht nicht — der Vorgang muss diesem Kunden gehören. */
@@ -215,16 +228,45 @@ export async function portalVorgangDetail(
     .eq("vorgang_id", vorgangId)
     .order("sort");
 
-  const [{ data: positionen }, { data: gruppen }] = await Promise.all([
-    ab ? posAbfrage.eq("dokument_id", ab.id) : posAbfrage.is("dokument_id", null),
-    ab
-      ? gruppenAbfrage.eq("dokument_id", ab.id)
-      : gruppenAbfrage.is("dokument_id", null),
-  ]);
+  /*
+   * Ein Angebot ist so lange ein Entwurf, bis der Betrieb es abschickt.
+   * Vorher liefert das Portal keine Positionen — nicht ausgeblendet im
+   * Markup, sondern gar nicht geladen. Ausgeblendetes steht sonst im
+   * HTML und ist mit einem Rechtsklick zu lesen.
+   *
+   * Nach der Annahme gilt die eingefrorene Fassung an der AB; die ist
+   * per Definition abgeschickt und hängt nicht am Zeitstempel.
+   */
+  const angebotOffen = ab !== undefined || v.angebot_versendet_am !== null;
+
+  const [{ data: positionen }, { data: gruppen }] = angebotOffen
+    ? await Promise.all([
+        ab ? posAbfrage.eq("dokument_id", ab.id) : posAbfrage.is("dokument_id", null),
+        ab
+          ? gruppenAbfrage.eq("dokument_id", ab.id)
+          : gruppenAbfrage.is("dokument_id", null),
+      ])
+    : [{ data: [] }, { data: [] }];
+
+  /*
+   * Der erste Blick des Kunden. Nur der erste — die Frage im Vertrieb
+   * lautet „hat er es gesehen", nicht „wie oft". Ohne await, weil der
+   * Kunde nicht auf einen Schreibvorgang warten soll, der ihn nichts
+   * angeht.
+   */
+  if (angebotOffen && !ab) {
+    void admin
+      .from("vorgang")
+      .update({ angebot_gesehen_am: new Date().toISOString() })
+      .eq("id", vorgangId)
+      .is("angebot_gesehen_am", null)
+      .then(() => undefined);
+  }
 
   return {
     vorgang: abbilden(v as unknown as Roh),
     angenommen: Boolean(ab),
+    angebotVersendet: angebotOffen,
     schritte: ((schritte ?? []) as unknown as {
       id: string;
       typ: string;
@@ -262,6 +304,20 @@ export async function portalVorgangDetail(
       rabattProzent: Number(v.rabatt_prozent ?? 0),
       lieferungNetto: Number(v.lieferung_netto ?? 0),
     },
+    /*
+     * Wer im Portal etwas nicht versteht, sucht keine Kontaktseite,
+     * sondern eine Telefonnummer. Deshalb reist der Zuständige mit.
+     */
+    ansprechpartner: (() => {
+      const z = v.zustaendig as unknown as {
+        name: string;
+        role: string | null;
+        phone: string | null;
+      } | null;
+      return z
+        ? { name: z.name, rolle: z.role ? ROLLE[z.role] ?? z.role : null, telefon: z.phone }
+        : null;
+    })(),
     texte: {
       titel: (v.angebot_titel as string | null) ?? null,
       einleitung: (v.angebot_einleitung as string | null) ?? null,
@@ -459,6 +515,15 @@ export async function portalVorgangAnnehmen(
 
   return { ok: true, meldung: ergebnis.meldung };
 }
+
+/* Rollenbezeichnung in Kundensprache — „bauleitung" sagt niemandem etwas. */
+const ROLLE: Record<string, string> = {
+  gf: "Geschäftsführung",
+  buero: "Büro",
+  bauleitung: "Bauleitung",
+  monteur: "Montage",
+  lager: "Lager",
+};
 
 /* ------------------------------------------------------------- INTERN */
 
