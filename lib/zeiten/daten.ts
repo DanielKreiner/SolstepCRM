@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { tageshinweis } from "@/lib/rules/tagesbild";
 import { arbeitstageImMonat, istArbeitstag } from "@/lib/zeiten/feiertage";
 import { addDays, endOfViennaDay, startOfViennaDay } from "@/lib/time";
 
@@ -19,8 +20,11 @@ export type ZeitZeile = {
   id: string;
   userId: string;
   name: string;
+  /** work | break | travel | errand | training. */
+  art: string;
   von: string;
   bis: string | null;
+  /** Arbeitsminuten. Bei einer Pausenbuchung null — sie ist keine Arbeit. */
   minuten: number;
   pauseMin: number;
   status: string;
@@ -38,9 +42,12 @@ export type TagesPerson = {
   name: string;
   rolle: string;
   istMin: number;
+  pauseMin: number;
   sollMin: number;
   laeuftSeit: string | null;
   laeuftAn: string | null;
+  /** Klartext aus lib/rules/tagesbild — warum jemand hinsehen sollte. */
+  hinweis: string | null;
   zeilen: ZeitZeile[];
 };
 
@@ -55,7 +62,7 @@ export type Tagesbild = {
 };
 
 const FELDER = `id, user_id, started_at, ended_at, duration_min, auto_break_min,
-   status, quelle, einsatz_id, flagged_reason,
+   kind, status, quelle, einsatz_id, flagged_reason,
    person:user_id ( name, role, weekly_hours, location:location_id ( holiday_region ) ),
    einsatz:einsatz_id ( art, titel, vorgang:vorgang_id ( number, customer:customer_id ( name ) ) )`;
 
@@ -66,6 +73,7 @@ type Roh = {
   ended_at: string | null;
   duration_min: number | null;
   auto_break_min: number;
+  kind: string;
   status: string;
   quelle: string;
   einsatz_id: string | null;
@@ -97,10 +105,16 @@ function abbilden(e: Roh): ZeitZeile {
     id: e.id,
     userId: e.user_id,
     name: e.person?.name ?? "—",
+    art: e.kind,
     von: e.started_at,
     bis: e.ended_at,
-    minuten: Math.max(0, dauer - (e.auto_break_min ?? 0)),
-    pauseMin: e.auto_break_min ?? 0,
+    /*
+     * Eine Pausenbuchung ist keine Arbeitszeit. Vor dieser Zeile zählte
+     * sie mit — wer eine halbe Stunde Pause stempelte, bekam sie als
+     * Guthaben gutgeschrieben statt abgezogen.
+     */
+    minuten: e.kind === "break" ? 0 : Math.max(0, dauer - (e.auto_break_min ?? 0)),
+    pauseMin: e.kind === "break" ? dauer : (e.auto_break_min ?? 0),
     status: e.status,
     quelle: e.quelle,
     einsatzId: e.einsatz_id,
@@ -112,7 +126,8 @@ function abbilden(e: Roh): ZeitZeile {
      * Zeiten ohne Einsatz. Letztere darf es nicht mehr geben — solange
      * Altdaten da sind, fallen sie hier auf.
      */
-    zuPruefen: e.status === "flagged" || e.einsatz_id === null,
+    zuPruefen:
+      e.status === "flagged" || (e.kind !== "break" && e.einsatz_id === null),
   };
 }
 
@@ -177,12 +192,15 @@ export async function tagesbild(
   ).map((u) => {
     const meine = zeilen.filter((z) => z.userId === u.id);
     const laufend = meine.find((z) => z.bis === null);
+    const istMin = meine.reduce((s, z) => s + z.minuten, 0);
+    const pauseMin = meine.reduce((s, z) => s + z.pauseMin, 0);
 
     return {
       userId: u.id,
       name: u.name,
       rolle: u.role,
-      istMin: meine.reduce((s, z) => s + z.minuten, 0),
+      istMin,
+      pauseMin,
       sollMin: sollFuerTag(
         d.tag,
         Number(u.weekly_hours ?? 0),
@@ -191,6 +209,12 @@ export async function tagesbild(
       ),
       laeuftSeit: laufend?.von ?? null,
       laeuftAn: laufend?.einsatzId ?? null,
+      hinweis: tageshinweis({
+        istMin,
+        pauseMin,
+        geflaggt: meine.some((z) => z.status === "flagged"),
+        ohneEinsatz: meine.some((z) => z.art !== "break" && z.einsatzId === null),
+      }),
       zeilen: meine,
     };
   });

@@ -107,7 +107,7 @@ export default async function ZeitenPage({
             <h2 className="mb-3 text-[15px] font-semibold">{date(tag)}</h2>
 
             {bild.personen.every((p) => p.zeilen.length === 0) ? (
-              <p className="text-[13px] text-muted">
+              <p data-testid="heute-leer" className="text-[13px] text-muted">
                 Für diesen Tag ist noch nichts gebucht.
               </p>
             ) : (
@@ -117,12 +117,21 @@ export default async function ZeitenPage({
                   .map((p) => (
                     <li
                       key={p.userId}
+                      data-testid={`heute-person-${p.userId}`}
                       className="rounded-card border border-line bg-panel px-3 py-[10px]"
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[13.5px] font-semibold">{p.name}</span>
                         {p.laeuftSeit ? (
                           <Pill tone="doing">seit {time(p.laeuftSeit)} dabei</Pill>
+                        ) : null}
+                        {/*
+                          SPEC 4.8: was auffällt, muss auch auffallen.
+                          Eine Warnung, keine Sperre — korrigiert wird sie
+                          über einen Antrag, nicht durch Überschreiben.
+                        */}
+                        {p.hinweis ? (
+                          <Pill tone="crit">{p.hinweis}</Pill>
                         ) : null}
                         <span className="num ml-auto text-[13px]">
                           {hhmm(p.istMin)}

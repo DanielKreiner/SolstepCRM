@@ -35,7 +35,15 @@ export async function login(page: Page, email: string): Promise<void> {
   await page.getByLabel("E-Mail").fill(email);
   await page.getByLabel("Passwort").fill(password());
   await page.getByRole("button", { name: "Anmelden" }).click();
-  await page.waitForURL("**/cockpit", { timeout: 20_000 });
+
+  /*
+   * Wohin es nach dem Login geht, hängt seit dem Navigationsumbau an der
+   * Rolle: Büro und Bauleitung ins Cockpit, Monteur und Lager in ihre
+   * eigene App. Der Helper darf das nicht vorwegnehmen — sonst hängt
+   * jeder Monteur-Test zwanzig Sekunden an einer Seite, die er nie
+   * erreichen wird.
+   */
+  await page.waitForURL(/\/(cockpit|m\/heute)/, { timeout: 20_000 });
 }
 
 /** Service-Role-Client für Kontrollmessungen am Datenbestand. */

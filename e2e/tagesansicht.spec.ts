@@ -26,29 +26,43 @@ async function aufraeumen(): Promise<void> {
 
 test.afterAll(aufraeumen);
 
-test("Die Tagesansicht zeigt jede aktive Person, auch ohne Buchung", async ({
+test("Ein leerer Tag sagt das, ein gebuchter zeigt die Person", async ({
   page,
 }) => {
   await aufraeumen();
+  const db = admin();
+
+  const { data: person } = await db
+    .from("app_user")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .eq("email", DEMO.monteur)
+    .single();
+
   await login(page, DEMO.gf);
   await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
 
-  const db = admin();
-  const { data: leute } = await db
-    .from("app_user")
-    .select("name")
-    .eq("company_id", COMPANY_A)
-    .eq("active", true);
+  /*
+   * Ein Tag ohne jede Buchung sagt das klar. Vor dem Umbau stand hier
+   * die vollständige Mannschaft mit lauter Nullen — das war eine Wand
+   * aus Zeilen ohne Aussage, in der niemand mehr las, wer wirklich fehlt.
+   */
+  await expect(page.getByTestId("heute-leer")).toBeVisible();
 
-  // Jede aktive Person steht in der Tabelle — auch wer nichts gebucht hat.
-  for (const p of leute ?? []) {
-    await expect(
-      page.getByText(p.name as string, { exact: true }).first(),
-      p.name as string,
-    ).toBeVisible();
-  }
+  await db.from("time_entry").insert({
+    company_id: COMPANY_A,
+    user_id: person!.id,
+    kind: "work",
+    started_at: `${TAG}T05:00:00Z`,
+    ended_at: `${TAG}T13:00:00Z`,
+    status: "booked",
+  });
 
-  await expect(page.getByText("niemand eingestempelt")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("heute-leer")).toHaveCount(0);
+  await expect(
+    page.getByTestId(`heute-person-${person!.id as string}`),
+  ).toBeVisible();
 });
 
 test("Eine Buchung ohne Auftrag wird zur Prüfung markiert", async ({ page }) => {
@@ -75,7 +89,7 @@ test("Eine Buchung ohne Auftrag wird zur Prüfung markiert", async ({ page }) =>
   await login(page, DEMO.gf);
   await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
 
-  await expect(page.getByText("keine Zuordnung").first()).toBeVisible();
+  await expect(page.getByText("ohne Einsatz").first()).toBeVisible();
   await expect(
     page.getByText("Buchung ohne Auftragszuordnung").first(),
   ).toBeVisible();
@@ -113,7 +127,6 @@ test("Über zehn Stunden ohne Pause gilt als unplausibel", async ({ page }) => {
   await login(page, DEMO.gf);
   await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
 
-  await expect(page.getByText("unplausibel").first()).toBeVisible();
   await expect(page.getByText("über 10 Stunden ohne Pause")).toBeVisible();
 });
 
@@ -164,13 +177,17 @@ test("Mit gebuchter Pause ist derselbe Tag nicht mehr unplausibel", async ({
   await expect(page.getByText("über 10 Stunden ohne Pause")).toHaveCount(0);
 });
 
-test("Ein Monteur sieht in der Tagesansicht nur sich selbst", async ({
+test("Ein Monteur kommt gar nicht erst in die Tagesansicht", async ({
   page,
 }) => {
-  // Migration 0008: die Zeiten der Kollegen gehen ihn nichts an.
+  /*
+   * Migration 0008 hielt die Zeiten der Kollegen von ihm fern; seit dem
+   * Navigationsumbau ist der Weg schon vorher zu — die Betriebs-App ist
+   * für ihn gesperrt, er landet in seiner eigenen.
+   */
   await login(page, DEMO.monteur);
   await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
 
-  await expect(page.getByText("Michael Hofstätter")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/m\/heute/, { timeout: 15_000 });
   await expect(page.getByText("Sabine Reiter")).toHaveCount(0);
 });
