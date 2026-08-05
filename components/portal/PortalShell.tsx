@@ -23,8 +23,7 @@ export type PortalBereich =
   | "fortschritt"
   | "angebot"
   | "dokumente"
-  | "anliegen"
-  | "ertrag";
+  | "anliegen";
 
 export type PortalNavEintrag = {
   bereich: PortalBereich;

@@ -63,6 +63,29 @@ export default async function PlanungPage({
     .order("created_at", { ascending: false })
     .limit(200);
 
+  /*
+   * Kunden für den Serviceeinsatz ohne Vorgang. Gelöschte bleiben
+   * draussen — ein Termin bei einem archivierten Kunden ist ein Fehler,
+   * kein Sonderfall.
+   */
+  const { data: kunden } = await supabase
+    .from("customer")
+    .select("id, name, city")
+    .is("deleted_at", null)
+    .order("name")
+    .limit(500);
+
+  /*
+   * Offene Anliegen. Behobene gehören nicht in die Auswahl: einen
+   * Einsatz an ein erledigtes Ticket zu hängen sagt nichts mehr.
+   */
+  const { data: anliegen } = await supabase
+    .from("service_ticket")
+    .select("id, number, category, body, customer:customer_id ( name )")
+    .neq("status", "behoben")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
   const { data: quals } = await supabase
     .from("qualifikation")
     .select("schluessel, label")
@@ -101,8 +124,13 @@ export default async function PlanungPage({
           fahrzeugId: e.fahrzeugId,
           vorgangId: e.vorgangId,
           vorgangNummer: e.vorgangNummer,
+          kundeId: e.kundeId,
+          kundeName: e.kundeName,
+          serviceTicketId: e.serviceTicketId,
           anzahlStopps: e.anzahlStopps,
           notiz: e.notiz,
+          subText: e.subText,
+          benoetigt: e.benoetigt,
         }))}
         abwesenheiten={tafel.abwesenheiten}
         vorgaenge={((vorgaenge ?? []) as unknown as {
@@ -112,6 +140,26 @@ export default async function PlanungPage({
         }[]).map((v) => ({
           wert: v.id,
           text: `${v.number} · ${v.customer?.name ?? "ohne Kunde"}`,
+        }))}
+        kunden={((kunden ?? []) as unknown as {
+          id: string;
+          name: string;
+          city: string | null;
+        }[]).map((k) => ({
+          wert: k.id,
+          text: k.city ? `${k.name} · ${k.city}` : k.name,
+        }))}
+        anliegen={((anliegen ?? []) as unknown as {
+          id: string;
+          number: string | null;
+          category: string | null;
+          body: string | null;
+          customer: { name: string } | null;
+        }[]).map((t) => ({
+          wert: t.id,
+          text: `${t.number ?? "—"} · ${t.customer?.name ?? "ohne Kunde"} · ${
+            t.body?.trim().slice(0, 40) || (t.category ?? "Anliegen")
+          }`,
         }))}
         qualifikationen={((quals ?? []) as unknown as {
           schluessel: string;

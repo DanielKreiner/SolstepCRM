@@ -28,7 +28,8 @@ export default async function HeutePage() {
       .select(
         `id, art, titel, von, bis, vorgang_id, notiz,
          personen:einsatz_person ( user_id, user:user_id ( name ) ),
-         vorgang:vorgang_id ( adresse, plz, ort, customer:customer_id ( name, contact_person, phone ) )`,
+         vorgang:vorgang_id ( adresse, plz, ort, customer:customer_id ( name, contact_person, phone ) ),
+         kunde:kunde_id ( name, address, zip, city, contact_person, phone )`,
       )
       .gte("von", startOfViennaDay(heute).toISOString())
       .lte("von", endOfViennaDay(addDays(heute, 7)).toISOString())
@@ -53,6 +54,15 @@ export default async function HeutePage() {
     vorgang_id: string | null;
     notiz: string | null;
     personen: { user_id: string; user: { name: string } | null }[];
+    /* Serviceeinsatz ohne Vorgang: Adresse und Kontakt vom Kunden. */
+    kunde: {
+      name: string;
+      address: string | null;
+      zip: string | null;
+      city: string | null;
+      contact_person: string | null;
+      phone: string | null;
+    } | null;
     vorgang: {
       adresse: string | null;
       plz: string | null;
@@ -85,13 +95,23 @@ export default async function HeutePage() {
       titel: e.titel ?? "Einsatz",
       vonZeit: time(e.von),
       bisZeit: time(e.bis),
+      /*
+       * Die Baustelle steht am Vorgang; ohne Vorgang bleibt der
+       * Kundensitz. Ein Serviceeinsatz ohne beides schickte den Monteur
+       * bisher mit einem Freitexttitel los.
+       */
       adresse:
         [e.vorgang?.adresse, [e.vorgang?.plz, e.vorgang?.ort].filter(Boolean).join(" ")]
           .filter(Boolean)
-          .join(", ") || null,
-      kunde: e.vorgang?.customer?.name ?? null,
-      kontakt: e.vorgang?.customer?.contact_person ?? null,
-      telefon: e.vorgang?.customer?.phone ?? null,
+          .join(", ") ||
+        [e.kunde?.address, [e.kunde?.zip, e.kunde?.city].filter(Boolean).join(" ")]
+          .filter(Boolean)
+          .join(", ") ||
+        null,
+      kunde: e.vorgang?.customer?.name ?? e.kunde?.name ?? null,
+      kontakt:
+        e.vorgang?.customer?.contact_person ?? e.kunde?.contact_person ?? null,
+      telefon: e.vorgang?.customer?.phone ?? e.kunde?.phone ?? null,
       notiz: e.notiz,
       team: e.personen
         .filter((p) => p.user_id !== me.id)

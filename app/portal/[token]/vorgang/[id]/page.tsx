@@ -40,7 +40,7 @@ export default async function PortalVorgangPage({
 
   const { bereich: roh } = await searchParams;
   const bereich: PortalBereich = (
-    ["fortschritt", "angebot", "dokumente", "anliegen", "ertrag"] as const
+    ["fortschritt", "angebot", "dokumente", "anliegen"] as const
   ).includes(roh as PortalBereich)
     ? (roh as PortalBereich)
     : "fortschritt";
@@ -104,7 +104,6 @@ export default async function PortalVorgangPage({
     },
     dokumente: { titel: "Dokumente", unter: "Alles zum Nachlesen und Herunterladen" },
     anliegen: { titel: "Anliegen", unter: "Schreiben Sie uns — wir antworten hier" },
-    ertrag: { titel: "Ertrag", unter: "Was Ihre Anlage leistet" },
   };
 
   return (
@@ -141,7 +140,6 @@ export default async function PortalVorgangPage({
           icon: "chat",
           anzahl: chat.nachrichten.length + chat.anfragen.length,
         },
-        { bereich: "ertrag", label: "Ertrag", icon: "trend" },
       ]}
     >
       <div className={kannAnnehmen && bereich === "angebot" ? "pb-[132px]" : ""}>
@@ -424,48 +422,16 @@ export default async function PortalVorgangPage({
           />
         ) : null}
 
-        {/* ------------------------------------------------------ ERTRAG */}
-        {bereich === "ertrag" ? (
-          <section className="rounded-panel bg-surface p-6 shadow-soft sm:p-8">
-            {v.kwp ? (
-              <>
-                <div className="flex flex-wrap gap-x-10 gap-y-5">
-                  <Kennzahl label="Leistung" wert={`${num(v.kwp)} kWp`} />
-                  {v.speicherKwh ? (
-                    <Kennzahl
-                      label="Speicher"
-                      wert={`${num(v.speicherKwh)} kWh`}
-                    />
-                  ) : null}
-                  {/*
-                   * Faustformel für Österreich: rund 1000 kWh je kWp und
-                   * Jahr. Bewusst als Schätzung ausgewiesen — die echte
-                   * Zahl hängt an Ausrichtung, Neigung und Verschattung,
-                   * und eine Prognose, die wie eine Zusage aussieht,
-                   * enttäuscht im ersten Winter.
-                   */}
-                  <Kennzahl
-                    label="Ertrag je Jahr, geschätzt"
-                    wert={`${new Intl.NumberFormat("de-AT", {
-                      maximumFractionDigits: 0,
-                    }).format(v.kwp * 1000)} kWh`}
-                  />
-                </div>
-                <p className="mt-5 max-w-[62ch] text-[12.5px] leading-relaxed text-muted">
-                  Die Ertragsangabe ist ein Richtwert von rund 1000 kWh je
-                  kWp und Jahr. Was Ihre Anlage tatsächlich liefert, hängt
-                  von Ausrichtung, Dachneigung und Verschattung ab — nach
-                  der Inbetriebnahme sehen Sie hier die gemessenen Werte.
-                </p>
-              </>
-            ) : (
-              <p className="text-[13px] text-muted">
-                Sobald die Anlagengrösse feststeht, steht hier Ihr zu
-                erwartender Ertrag.
-              </p>
-            )}
-          </section>
-        ) : null}
+        {/*
+          Der Bereich "Ertrag" ist entfallen.
+
+          Er zeigte eine Faustformel — kWp mal 1000 — als eigenen
+          Menüpunkt neben Angebot und Dokumenten. Damit stand eine
+          Schätzung gleichrangig neben Dingen, die verbindlich sind, und
+          ein Kunde, der im ersten Winter nachrechnet, hält sie für eine
+          Zusage. Kommt sie als gemessener Wert aus der Anlage zurück,
+          gehört sie wieder her — vorher nicht.
+        */}
 
         {/* ----------------------------------------------------- VERLAUF */}
         {bereich === "fortschritt" ? (
@@ -540,14 +506,3 @@ const KUNDENTEXT: Record<string, { titel: string; meta: string }> = {
   },
 };
 
-
-function Kennzahl({ label, wert }: { label: string; wert: string }) {
-  return (
-    <div>
-      <div className="num text-[30px] leading-none font-bold tracking-[-0.03em] text-accent-ink">
-        {wert}
-      </div>
-      <div className="mt-1 text-[12px] text-muted">{label}</div>
-    </div>
-  );
-}

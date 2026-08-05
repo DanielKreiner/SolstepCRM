@@ -32,6 +32,8 @@ export function Planung({
   bloecke,
   abwesenheiten,
   vorgaenge,
+  kunden,
+  anliegen,
   qualifikationen,
   darfPlanen,
   vorgangVorbelegt,
@@ -44,6 +46,10 @@ export function Planung({
   bloecke: TafelBlock[];
   abwesenheiten: TafelAbw[];
   vorgaenge: Option[];
+  /** Kunden für Service ohne Vorgang — dort kommt die Adresse vom Kunden. */
+  kunden: Option[];
+  /** Offene Serviceanliegen, an die sich ein Einsatz hängen lässt. */
+  anliegen: Option[];
   qualifikationen: { wert: string; text: string }[];
   darfPlanen: boolean;
   /**
@@ -55,8 +61,15 @@ export function Planung({
   /** Serviceeinsätze der Woche — die mit mehreren Adressen an einem Tag. */
   servicetage: ServiceEinsatz[];
 }) {
-  const [offen, setOffen] = useState<{ tag: string; userId: string | null } | null>(
-    vorgangVorbelegt && darfPlanen ? { tag: tage[0]!, userId: null } : null,
+  const [offen, setOffen] = useState<{
+    tag: string;
+    userId: string | null;
+    /** Gesetzt heisst bearbeiten statt anlegen. */
+    block: TafelBlock | null;
+  } | null>(
+    vorgangVorbelegt && darfPlanen
+      ? { tag: tage[0]!, userId: null, block: null }
+      : null,
   );
 
   const vorWoche = verschoben(woche, -7);
@@ -98,7 +111,7 @@ export function Planung({
         {darfPlanen ? (
           <button
             type="button"
-            onClick={() => setOffen({ tag: tage[0]!, userId: null })}
+            onClick={() => setOffen({ tag: tage[0]!, userId: null, block: null })}
             className="cursor-pointer rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-5 py-[11px] text-[13.5px] font-semibold text-white"
           >
             + Einsatz anlegen
@@ -113,15 +126,23 @@ export function Planung({
         bloecke={bloecke}
         abwesenheiten={abwesenheiten}
         darfPlanen={darfPlanen}
-        neuerEinsatz={(tag, userId) => setOffen({ tag, userId })}
+        neuerEinsatz={(tag, userId) => setOffen({ tag, userId, block: null })}
+        einsatzOeffnen={(id) => {
+          const b = bloecke.find((x) => x.id === id);
+          if (b) setOffen({ tag: b.von.slice(0, 10), userId: null, block: b });
+        }}
       />
 
       <Servicetag einsaetze={servicetage} darfPlanen={darfPlanen} />
 
       {offen ? (
         <EinsatzDialog
+          key={offen.block?.id ?? "neu"}
           tag={offen.tag}
           userId={offen.userId}
+          block={offen.block}
+          kunden={kunden}
+          anliegen={anliegen}
           personen={personen}
           fahrzeuge={fahrzeuge}
           vorgaenge={vorgaenge}
@@ -174,6 +195,21 @@ function Legende() {
   );
 }
 
+/**
+ * Ein gespeicherter Zeitpunkt als Wert für ein datetime-local-Feld.
+ *
+ * `toISOString()` ginge nicht: das liefert UTC, und ein Einsatz von 07:00
+ * stünde im Formular als 05:00. Gefragt ist die Wanduhrzeit des Browsers,
+ * die auch der Planer sieht.
+ */
+function lokal(iso: string): string {
+  const d = new Date(iso);
+  const zwei = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}T${zwei(
+    d.getHours(),
+  )}:${zwei(d.getMinutes())}`;
+}
+
 /** Datum um Tage verschieben, ohne Zeitzonenrechnerei. */
 function verschoben(iso: string, tage: number): string {
   const d = new Date(`${iso}T12:00:00`);
@@ -186,9 +222,12 @@ function verschoben(iso: string, tage: number): string {
 function EinsatzDialog({
   tag,
   userId,
+  block,
   personen,
   fahrzeuge,
   vorgaenge,
+  kunden,
+  anliegen,
   qualifikationen,
   bloecke,
   abwesenheiten,
@@ -197,9 +236,13 @@ function EinsatzDialog({
 }: {
   tag: string;
   userId: string | null;
+  /** Null heisst anlegen. Sonst wird dieser Einsatz bearbeitet. */
+  block: TafelBlock | null;
   personen: TafelPerson[];
   fahrzeuge: { id: string; name: string; kennzeichen: string | null }[];
   vorgaenge: Option[];
+  kunden: Option[];
+  anliegen: Option[];
   qualifikationen: { wert: string; text: string }[];
   bloecke: TafelBlock[];
   abwesenheiten: TafelAbw[];
@@ -210,14 +253,27 @@ function EinsatzDialog({
     einsatzSpeichern,
     LEER,
   );
-  const [art, setArt] = useState<"auftrag" | "service" | "intern">("auftrag");
-  const [ganztaegig, setGanztaegig] = useState(false);
-  const [gewaehlt, setGewaehlt] = useState<string[]>(userId ? [userId] : []);
-  const [fahrzeugId, setFahrzeugId] = useState("");
-  const [benoetigt, setBenoetigt] = useState<string[]>([]);
-  const [vonRoh, setVonRoh] = useState(`${tag}T07:00`);
-  const [bisRoh, setBisRoh] = useState(`${tag}T16:00`);
+  const [loeschStatus, loeschen] = useActionState<PlanStatus, FormData>(
+    einsatzLoeschen,
+    LEER,
+  );
+  const [art, setArt] = useState<"auftrag" | "service" | "intern">(
+    block?.art ?? "auftrag",
+  );
+  const [ganztaegig, setGanztaegig] = useState(block?.ganztaegig ?? false);
+  const [gewaehlt, setGewaehlt] = useState<string[]>(
+    block ? block.personen : userId ? [userId] : [],
+  );
+  const [fahrzeugId, setFahrzeugId] = useState(block?.fahrzeugId ?? "");
+  const [benoetigt, setBenoetigt] = useState<string[]>(block?.benoetigt ?? []);
+  const [vonRoh, setVonRoh] = useState(
+    block ? lokal(block.von) : `${tag}T07:00`,
+  );
+  const [bisRoh, setBisRoh] = useState(
+    block ? lokal(block.bis) : `${tag}T16:00`,
+  );
   const [grund, setGrund] = useState("");
+  const [loeschFrage, setLoeschFrage] = useState(false);
 
   /*
    * Ganztägig heisst 00:00 bis 23:59 — und dann hat eine Uhrzeit im Feld
@@ -240,21 +296,29 @@ function EinsatzDialog({
     if (!von || !bis || new Date(bis) <= new Date(von)) return [];
     return pruefe({
       neu: {
-        id: "neu",
+        id: block?.id ?? "neu",
         von: new Date(von).toISOString(),
         bis: new Date(bis).toISOString(),
         personen: gewaehlt,
         fahrzeugId: fahrzeugId || null,
         titel: "dieser Einsatz",
       },
-      bestand: bloecke.map((b) => ({
-        id: b.id,
-        von: b.von,
-        bis: b.bis,
-        personen: b.personen,
-        fahrzeugId: b.fahrzeugId,
-        titel: b.titel,
-      })),
+      /*
+       * Beim Bearbeiten sich selbst herausnehmen: ein Einsatz
+       * überschneidet sich immer mit sich, und der Dialog meldete beim
+       * blossen Verschieben um eine Stunde einen Konflikt mit dem
+       * Termin, den man gerade ändert.
+       */
+      bestand: bloecke
+        .filter((b) => b.id !== block?.id)
+        .map((b) => ({
+          id: b.id,
+          von: b.von,
+          bis: b.bis,
+          personen: b.personen,
+          fahrzeugId: b.fahrzeugId,
+          titel: b.titel,
+        })),
       personen: personen.map((p) => ({
         id: p.id,
         name: p.name,
@@ -266,23 +330,42 @@ function EinsatzDialog({
       benoetigt,
       fahrzeuge: fahrzeuge.map((f) => ({ id: f.id, name: f.name })),
     });
-  }, [von, bis, gewaehlt, fahrzeugId, benoetigt, bloecke, personen, abwesenheiten, fahrzeuge]);
+  }, [
+    von,
+    bis,
+    gewaehlt,
+    fahrzeugId,
+    benoetigt,
+    bloecke,
+    personen,
+    abwesenheiten,
+    fahrzeuge,
+    block,
+  ]);
 
   const hart = konflikte.filter((k) => k.stufe === "hart");
   const weich = konflikte.filter((k) => k.stufe === "weich");
   const gesperrt = blockiert(konflikte);
 
-  /* Nach dem Speichern schliesst sich das Fenster von selbst. */
-  if (status.ok) schliessen();
+  /* Nach dem Speichern oder Löschen schliesst sich das Fenster selbst. */
+  if (status.ok || loeschStatus.ok) schliessen();
 
   function umschalten(liste: string[], wert: string): string[] {
     return liste.includes(wert) ? liste.filter((x) => x !== wert) : [...liste, wert];
   }
 
   return (
-    <Dialog offen titel="Einsatz anlegen" breite="weit" schliessen={schliessen}>
+    <Dialog
+      offen
+      titel={block ? "Einsatz bearbeiten" : "Einsatz anlegen"}
+      breite="weit"
+      schliessen={schliessen}
+    >
       <form action={formAction}>
         {/* Die Auswahl liegt im Zustand — die Felder reichen sie mit. */}
+        {block ? (
+          <input type="hidden" name="einsatzId" value={block.id} />
+        ) : null}
         <input type="hidden" name="von" value={von} />
         <input type="hidden" name="bis" value={bis} />
         {gewaehlt.map((u) => (
@@ -333,7 +416,11 @@ function EinsatzDialog({
               pflicht={art === "auftrag"}
               platzhalter="Nummer oder Kundenname"
               optionen={vorgaenge}
-              {...(vorgangVorbelegt ? { wert: vorgangVorbelegt } : {})}
+              {...(block?.vorgangId
+                ? { wert: block.vorgangId }
+                : vorgangVorbelegt
+                  ? { wert: vorgangVorbelegt }
+                  : {})}
             />
           </div>
         ) : (
@@ -343,9 +430,49 @@ function EinsatzDialog({
           </p>
         )}
 
+        {/*
+          Ein Service hat oft keinen laufenden Vorgang: die Anlage steht
+          seit drei Jahren, der Wechselrichter meldet einen Fehler,
+          jemand fährt hin. Ohne Kunde am Einsatz bekäme der Monteur auf
+          "Heute" keine Adresse, keinen Ansprechpartner, keine Nummer —
+          nur einen Freitexttitel.
+        */}
+        {art === "service" ? (
+          <>
+            <div className="mb-3">
+              <Suchauswahl
+                name="kundeId"
+                label="Kunde — wenn kein Vorgang dahintersteht"
+                breit
+                platzhalter="Name oder Ort"
+                optionen={kunden}
+                {...(block?.kundeId ? { wert: block.kundeId } : {})}
+              />
+            </div>
+
+            {anliegen.length > 0 ? (
+              <div className="mb-3">
+                <Suchauswahl
+                  name="serviceTicketId"
+                  label="Anliegen — optional"
+                  breit
+                  platzhalter="Nummer oder Betreff"
+                  optionen={anliegen}
+                  {...(block?.serviceTicketId ? { wert: block.serviceTicketId } : {})}
+                />
+                <p className="mt-1 text-[11.5px] text-muted">
+                  Hängt der Einsatz am Anliegen, weiss die Meldung, dass
+                  jemand kommt — sonst steht sie weiter als offen im Cockpit.
+                </p>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
         <Beschriftung>Bezeichnung</Beschriftung>
         <input
           name="titel"
+          defaultValue={block?.titel ?? ""}
           placeholder={art === "intern" ? "z. B. Lager aufräumen" : "z. B. Montage Tag 1"}
           className="mb-3 w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
         />
@@ -440,6 +567,7 @@ function EinsatzDialog({
             <Beschriftung>Sub — Fremdfirma</Beschriftung>
             <input
               name="subText"
+              defaultValue={block?.subText ?? ""}
               placeholder="Name der Fremdfirma"
               className="w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
             />
@@ -476,6 +604,7 @@ function EinsatzDialog({
         <Beschriftung>Notiz</Beschriftung>
         <textarea
           name="notiz"
+          defaultValue={block?.notiz ?? ""}
           rows={2}
           className="w-full resize-y rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
         />
@@ -531,16 +660,92 @@ function EinsatzDialog({
             {status.error}
           </p>
         ) : null}
+        {loeschStatus.error ? (
+          <p role="alert" className="mt-3 rounded-input bg-s-crit/10 px-4 py-3 text-[13px] text-s-crit">
+            {loeschStatus.error}
+          </p>
+        ) : null}
 
         <DialogFuss abbrechen={schliessen}>
           <Absenden
-            label={weich.length ? "Trotzdem anlegen" : "Einsatz anlegen"}
+            label={
+              weich.length
+                ? "Trotzdem speichern"
+                : block
+                  ? "Änderungen speichern"
+                  : "Einsatz anlegen"
+            }
             gesperrt={gesperrt}
           />
         </DialogFuss>
       </form>
+
+      {/*
+        Löschen steht ausserhalb des Formulars — ein zweites <form> im
+        ersten verwirft der Browser stillschweigend.
+
+        Und es fragt nach: ein Einsatz trägt Zeiten, Material und die
+        Erwartung des Kunden. Ein Fehlklick in einer Tafel voller kleiner
+        Kacheln darf das nicht wegräumen.
+      */}
+      {block ? (
+        <div className="mt-4 border-t border-line pt-4">
+          {loeschFrage ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[12.5px]">
+                {block.titel} am {tagKurz(block.von)} wirklich entfernen?
+              </span>
+              <form action={loeschen}>
+                <input type="hidden" name="einsatzId" value={block.id} />
+                <button
+                  type="submit"
+                  data-testid="einsatz-loeschen-bestaetigen"
+                  className="min-h-[36px] cursor-pointer rounded-pill border-0 bg-s-crit px-[18px] text-[12.5px] font-semibold text-white"
+                >
+                  Ja, entfernen
+                </button>
+              </form>
+              <button
+                type="button"
+                onClick={() => setLoeschFrage(false)}
+                className="min-h-[36px] cursor-pointer rounded-pill border border-line bg-surface px-[18px] text-[12.5px] text-ink"
+              >
+                Behalten
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                data-testid="einsatz-loeschen"
+                onClick={() => setLoeschFrage(true)}
+                className="cursor-pointer border-0 bg-transparent p-0 text-[12.5px] font-semibold text-s-crit underline"
+              >
+                Einsatz entfernen
+              </button>
+              {block.vorgangId ? (
+                <Link
+                  href={`/vorgaenge/${block.vorgangId}`}
+                  className="ml-auto text-[12.5px] text-accent-ink underline"
+                >
+                  Zum Vorgang{block.vorgangNummer ? ` ${block.vorgangNummer}` : ""}
+                </Link>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
     </Dialog>
   );
+}
+
+/** "Mo, 10.08." — genug, um sich der Zeile sicher zu sein. */
+function tagKurz(iso: string): string {
+  return new Date(iso).toLocaleDateString("de-AT", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  });
 }
 
 function Beschriftung({ children }: { children: React.ReactNode }) {

@@ -115,7 +115,7 @@ export async function tafelLaden(
            personen:einsatz_person ( user_id ),
            stopps:einsatz_stopp ( id, sort, name, adresse, uhrzeit, km, fahrzeit_min ),
            vorgang:vorgang_id ( number, adresse, plz, ort, customer:customer_id ( name ) ),
-           kunde:kunde_id ( name, street, zip, city ),
+           kunde:kunde_id ( name, address, zip, city ),
            anliegen:service_ticket_id ( number )`,
         )
         /* Alles, was in die Woche hineinragt — auch was davor beginnt. */
@@ -158,7 +158,7 @@ export async function tafelLaden(
       } | null;
       const k = e.kunde as unknown as {
         name: string;
-        street: string | null;
+        address: string | null;
         zip: string | null;
         city: string | null;
       } | null;
@@ -173,7 +173,7 @@ export async function tafelLaden(
         [v?.adresse, [v?.plz, v?.ort].filter(Boolean).join(" ")]
           .filter(Boolean)
           .join(", ") ||
-        [k?.street, [k?.zip, k?.city].filter(Boolean).join(" ")]
+        [k?.address, [k?.zip, k?.city].filter(Boolean).join(" ")]
           .filter(Boolean)
           .join(", ") ||
         null;

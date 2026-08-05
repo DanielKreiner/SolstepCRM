@@ -177,7 +177,9 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
      */
     supabase
       .from("service_ticket")
-      .select("id, number, category, body, severity, created_at, customer:customer_id ( name )")
+      .select(
+        "id, number, category, body, severity, created_at, customer:customer_id ( name ), einsaetze:einsatz!service_ticket_id ( id )",
+      )
       .eq("status", "offen")
       .order("created_at"),
   ]);
@@ -323,8 +325,19 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
     severity: number | null;
     created_at: string;
     customer: { name: string } | null;
+    einsaetze: { id: string }[] | null;
   };
-  for (const t of ((anliegen ?? []) as unknown as Anliegen[]).slice(0, 3)) {
+  /*
+   * Anliegen mit Termin verschwinden aus der Liste. Der Status bleibt
+   * "offen" — das Ticket ist ja nicht behoben, nur weil jemand hinfährt.
+   * Im Handlungsbedarf steht aber, was noch niemand angefasst hat; ein
+   * eingeplanter Fall gehört dort nicht mehr hin, sonst zeigt die Karte
+   * dauerhaft dieselben drei Zeilen und niemand liest sie noch.
+   */
+  const ohneTermin = ((anliegen ?? []) as unknown as Anliegen[]).filter(
+    (t) => (t.einsaetze ?? []).length === 0,
+  );
+  for (const t of ohneTermin.slice(0, 3)) {
     const tage = tageSeit(t.created_at.slice(0, 10), heute);
     handlungsbedarf.push({
       /*

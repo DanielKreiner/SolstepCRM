@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   DndContext,
@@ -48,8 +47,13 @@ export type TafelBlock = {
   fahrzeugId: string | null;
   vorgangId: string | null;
   vorgangNummer: string | null;
+  kundeId: string | null;
+  kundeName: string | null;
+  serviceTicketId: string | null;
   anzahlStopps: number;
   notiz: string | null;
+  subText: string | null;
+  benoetigt: string[];
 };
 
 export type TafelAbw = {
@@ -109,6 +113,7 @@ export function Plantafel({
   abwesenheiten,
   darfPlanen,
   neuerEinsatz,
+  einsatzOeffnen,
 }: {
   /** Die Tage der Woche, als lokale Mitternachtszeitpunkte. */
   tage: string[];
@@ -119,6 +124,8 @@ export function Plantafel({
   darfPlanen: boolean;
   /** Klick auf eine leere Zelle: Tag und Person für den Dialog. */
   neuerEinsatz: (tag: string, userId: string | null) => void;
+  /** Klick auf einen Block: derselbe Dialog, nur mit Inhalt. */
+  einsatzOeffnen: (id: string) => void;
 }) {
   const [warten, uebergang] = useTransition();
   const [meldung, setMeldung] = useState<{
@@ -313,6 +320,7 @@ export function Plantafel({
                     darfPlanen={darfPlanen}
                     warten={warten}
                     neuerEinsatz={neuerEinsatz}
+                    einsatzOeffnen={einsatzOeffnen}
                   />
                 ))}
               </div>
@@ -332,6 +340,7 @@ function Zelle({
   darfPlanen,
   warten,
   neuerEinsatz,
+  einsatzOeffnen,
 }: {
   tag: string;
   zeile: { typ: "person" | "fahrzeug"; id: string };
@@ -340,6 +349,7 @@ function Zelle({
   darfPlanen: boolean;
   warten: boolean;
   neuerEinsatz: (tag: string, userId: string | null) => void;
+  einsatzOeffnen: (id: string) => void;
 }) {
   const zellId = `z:${tag}:${zeile.typ === "person" ? zeile.id : "-"}`;
   const { setNodeRef, isOver } = useDroppable({ id: zellId, disabled: !darfPlanen });
@@ -398,7 +408,12 @@ function Zelle({
       ))}
 
       {drin.map((b) => (
-        <Block key={b.id} block={b} ziehbar={darfPlanen && !warten} />
+        <Block
+          key={b.id}
+          block={b}
+          ziehbar={darfPlanen && !warten}
+          oeffnen={einsatzOeffnen}
+        />
       ))}
 
       {darfPlanen && drin.length === 0 && abw.length === 0 ? (
@@ -415,7 +430,15 @@ function Zelle({
   );
 }
 
-function Block({ block, ziehbar }: { block: TafelBlock; ziehbar: boolean }) {
+function Block({
+  block,
+  ziehbar,
+  oeffnen,
+}: {
+  block: TafelBlock;
+  ziehbar: boolean;
+  oeffnen: (id: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: block.id,
     disabled: !ziehbar,
@@ -455,20 +478,24 @@ function Block({ block, ziehbar }: { block: TafelBlock; ziehbar: boolean }) {
       ].join(" ")}
     >
       {/*
-        Der Auftragsblock führt in den Vorgang. Der Link liegt innen und
-        nicht auf dem ganzen Block: sonst öffnet jedes Ziehen den Vorgang.
+        Der Klick öffnet den Einsatz, nicht den Vorgang.
+        Vorher sprang man in den Auftrag — und wer den Termin verschieben,
+        jemanden austauschen oder den Einsatz absagen wollte, war auf der
+        falschen Seite und musste zurück. Was man an der Plantafel tut,
+        gehört an die Plantafel. Der Weg zum Vorgang steht im Fenster.
+
+        Der Knopf liegt innen und nicht auf dem ganzen Block: sonst
+        öffnete jedes Ziehen das Fenster.
       */}
-      {block.vorgangId ? (
-        <Link
-          href={`/vorgaenge/${block.vorgangId}`}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="block text-inherit hover:text-inherit"
-        >
-          {inhalt}
-        </Link>
-      ) : (
-        inhalt
-      )}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => oeffnen(block.id)}
+        data-testid={`einsatz-${block.id}`}
+        className="block w-full cursor-pointer border-0 bg-transparent p-0 text-left text-inherit"
+      >
+        {inhalt}
+      </button>
     </div>
   );
 }

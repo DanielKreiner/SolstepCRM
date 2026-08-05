@@ -45,6 +45,9 @@ const anlegenSchema = z.object({
   art: z.enum(["auftrag", "service", "intern"]),
   titel: z.string().trim().max(120).optional().default(""),
   vorgangId: z.string().uuid().optional().or(z.literal("")),
+  /* Für Service ohne Vorgang: von dort kommen Adresse und Kontakt. */
+  kundeId: z.string().uuid().optional().or(z.literal("")),
+  serviceTicketId: z.string().uuid().optional().or(z.literal("")),
   von: z.string().min(10),
   bis: z.string().min(10),
   ganztaegig: z.enum(["ja", "nein"]).optional().default("nein"),
@@ -145,6 +148,13 @@ export async function einsatzSpeichern(
     art: d.art,
     titel: d.titel || null,
     vorgang_id: d.art === "intern" ? null : d.vorgangId || null,
+    /*
+     * Der Kunde hängt nur am Service. Bei einer Montage kommt er über
+     * den Vorgang; ihn zusätzlich zu speichern hiesse, zwei Wahrheiten
+     * zu pflegen und irgendwann zwei verschiedene Namen zu haben.
+     */
+    kunde_id: d.art === "service" ? d.kundeId || null : null,
+    service_ticket_id: d.art === "service" ? d.serviceTicketId || null : null,
     von,
     bis,
     ganztaegig: d.ganztaegig === "ja",
