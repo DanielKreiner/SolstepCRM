@@ -110,6 +110,11 @@ export type MailAuftrag = {
   knopf?: { text: string; url: string } | undefined;
   /** Verweis auf die Mail, die hiermit wiederholt wird. */
   erneutZu?: string | undefined;
+  /**
+   * Dateien, die mitgehen. Ohne Portalzugang ist das PDF der einzige
+   * Weg, auf dem der Kunde sein Angebot bekommt.
+   */
+  anhaenge?: { dateiname: string; inhalt: Buffer; mime?: string }[] | undefined;
 };
 
 /**
@@ -170,6 +175,11 @@ export async function einreihen(
       subject: auftrag.betreff,
       body_html: html(auftrag, marke),
       body_text: text(auftrag, marke),
+      attachments: (auftrag.anhaenge ?? []).map((a) => ({
+        filename: a.dateiname,
+        content_base64: a.inhalt.toString("base64"),
+        mime: a.mime ?? "application/pdf",
+      })),
     })
     .select("id")
     .single();

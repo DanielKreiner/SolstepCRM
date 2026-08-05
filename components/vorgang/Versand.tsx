@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { Dialog } from "@/components/ui/Dialog";
 import { LEER, Meldung, type AktionsStatus } from "@/components/ui/Formular";
 import { Pill } from "@/components/ui/Pill";
 import {
@@ -50,11 +51,18 @@ export function Versand({
    * gehabt. Der Knopf bleibt trotzdem bedienbar — die Prüfung, die
    * zählt, sitzt in der Serveraktion.
    */
+  /*
+   * Der fehlende Portalzugang ist keine Hürde mehr, sondern eine Frage.
+   * Manche Kunden wollen kein Portal; ein Angebot als PDF an eine
+   * Mailadresse ist seit dreissig Jahren ein gültiger Weg.
+   */
   const huerden = [
     anzahlPositionen === 0 ? "noch keine Positionen" : null,
     !kundeMail ? "keine Mailadresse beim Kunden" : null,
-    !hatPortal ? "kein Portalzugang" : null,
   ].filter((h): h is string => h !== null);
+
+  const [frageOffen, setFrageOffen] = useState(false);
+  if (status.ok && frageOffen) setFrageOffen(false);
 
   return (
     <section className="rounded-[20px] bg-surface p-5 shadow-soft">
@@ -86,18 +94,40 @@ export function Versand({
 
       {!gesperrt ? (
         <div className="flex flex-wrap items-center gap-2">
-          <form action={senden}>
-            <input type="hidden" name="vorgangId" value={vorgangId} />
-            {/*
-              Nach dem Senden ist der Editor weiter offen. Wer etwas
-              ändert und erneut sendet, erzeugt die nächste Fassung —
-              der Kunde sieht sie genau dann und keine Sekunde früher.
-            */}
-            <Knopf
-              label={versendetAm ? `Als Fassung ${(fassung ?? 1) + 1} senden` : "Angebot senden"}
-              haupt={!versendetAm}
-            />
-          </form>
+          {/*
+            Nach dem Senden ist der Editor weiter offen. Wer etwas
+            ändert und erneut sendet, erzeugt die nächste Fassung —
+            der Kunde sieht sie genau dann und keine Sekunde früher.
+          */}
+          {hatPortal ? (
+            <form action={senden}>
+              <input type="hidden" name="vorgangId" value={vorgangId} />
+              <Knopf
+                label={
+                  versendetAm
+                    ? `Als Fassung ${(fassung ?? 1) + 1} senden`
+                    : "Angebot senden"
+                }
+                haupt={!versendetAm}
+              />
+            </form>
+          ) : (
+            <button
+              type="button"
+              data-testid="angebot-senden-fragen"
+              onClick={() => setFrageOffen(true)}
+              className={[
+                "min-h-[38px] cursor-pointer rounded-pill px-[20px] text-[12.5px] font-semibold transition-colors",
+                versendetAm
+                  ? "border border-line bg-surface text-ink hover:bg-sunk"
+                  : "border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-white",
+              ].join(" ")}
+            >
+              {versendetAm
+                ? `Als Fassung ${(fassung ?? 1) + 1} senden`
+                : "Angebot senden"}
+            </button>
+          )}
 
           {versendetAm ? (
             <form action={zurueckziehen}>
@@ -123,6 +153,56 @@ export function Versand({
 
       <Meldung status={status} />
       <Meldung status={zurueckStatus} />
+
+      {frageOffen ? (
+        <Dialog
+          offen
+          titel="Wie soll der Kunde das Angebot bekommen?"
+          schliessen={() => setFrageOffen(false)}
+        >
+          <p className="mb-4 text-[13px] text-muted">
+            Der Kunde hat noch keinen Portalzugang.
+          </p>
+
+          <div className="flex flex-col gap-2">
+            <form action={senden}>
+              <input type="hidden" name="vorgangId" value={vorgangId} />
+              <input type="hidden" name="portalAnlegen" value="ja" />
+              <button
+                type="submit"
+                data-testid="senden-mit-portal"
+                className="flex w-full cursor-pointer flex-col items-start gap-1 rounded-card border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-accent hover:bg-accent/6"
+              >
+                <span className="text-[13.5px] font-semibold">
+                  Portalzugang anlegen und senden
+                </span>
+                <span className="text-[12px] text-muted">
+                  Der Kunde kann Optionen wählen, direkt annehmen und
+                  Rückfragen stellen.
+                </span>
+              </button>
+            </form>
+
+            <form action={senden}>
+              <input type="hidden" name="vorgangId" value={vorgangId} />
+              <input type="hidden" name="ohnePortal" value="ja" />
+              <button
+                type="submit"
+                data-testid="senden-ohne-portal"
+                className="flex w-full cursor-pointer flex-col items-start gap-1 rounded-card border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-accent hover:bg-accent/6"
+              >
+                <span className="text-[13.5px] font-semibold">
+                  Nur per Mail, mit PDF im Anhang
+                </span>
+                <span className="text-[12px] text-muted">
+                  Kein Portal. Annehmen kann der Kunde dann nur per Antwort
+                  auf die Mail.
+                </span>
+              </button>
+            </form>
+          </div>
+        </Dialog>
+      ) : null}
     </section>
   );
 }

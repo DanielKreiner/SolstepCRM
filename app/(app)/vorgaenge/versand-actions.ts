@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { date, eur } from "@/lib/format";
+import { belegPdf } from "@/lib/pdf/erzeugen";
+import { createPortalAccess } from "./kunde-actions";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -83,13 +85,52 @@ export async function angebotSenden(
     };
   }
 
-  const link = await portalLink(admin, kunde.kundeId, { vorgangId, bereich: "angebot" });
-  if (!link) {
+  /*
+   * Ohne Portalzugang ging bisher gar nichts — der Versand brach ab und
+   * verlangte, erst einen Zugang anzulegen. Das ist eine Bevormundung:
+   * manche Kunden wollen kein Portal, und ein Angebot als PDF an eine
+   * Mailadresse ist seit dreissig Jahren ein gültiger Weg.
+   *
+   * Jetzt entscheidet der Betrieb: mit Portal (der Kunde kann ansehen,
+   * Optionen wählen und annehmen) oder nur per Mail mit PDF im Anhang.
+   */
+  const nurMail = formData.get("ohnePortal") === "ja";
+
+  /*
+   * Wer im Dialog „Portalzugang anlegen und senden" wählt, bekommt ihn
+   * hier — ein zweiter Klick auf einer anderen Seite wäre ein Umweg um
+   * seiner selbst willen.
+   */
+  if (!nurMail && formData.get("portalAnlegen") === "ja") {
+    const daten = new FormData();
+    daten.set("customerId", kunde.kundeId);
+    const angelegt = await createPortalAccess({ error: null, ok: null }, daten);
+    if (angelegt.error) return { error: angelegt.error, ok: null };
+  }
+
+  const link = nurMail
+    ? null
+    : await portalLink(admin, kunde.kundeId, { vorgangId, bereich: "angebot" });
+
+  if (!nurMail && !link) {
     return {
       error:
-        "Der Kunde hat keinen gültigen Portalzugang. Erst den Zugang anlegen, dann senden.",
+        "Der Portalzugang liess sich nicht anlegen. Schick das Angebot nur per Mail oder sieh in den Einstellungen nach.",
       ok: null,
     };
+  }
+
+  /*
+   * Ohne Portal muss das PDF mit — sonst bekommt der Kunde eine Mail,
+   * die von einem Angebot spricht, das nirgends liegt.
+   */
+  let anhang: { dateiname: string; inhalt: Buffer } | null = null;
+  if (!link) {
+    const beleg = await belegPdf(supabase, vorgangId, "angebot");
+    if (!beleg.ok) {
+      return { error: `Das Angebots-PDF liess sich nicht erzeugen: ${beleg.grund}`, ok: null };
+    }
+    anhang = { dateiname: beleg.dateiname, inhalt: beleg.buffer };
   }
 
   /* Der Betrag steht in der Mail, weil er die erste Frage beantwortet. */
@@ -119,14 +160,19 @@ export async function angebotSenden(
     absaetze: [
       erneut
         ? "wie besprochen schicken wir Ihnen Ihr Angebot noch einmal."
-        : "Ihr Angebot ist fertig. Sie können es in Ihrem Kundenportal ansehen, Optionen auswählen und dort auch direkt annehmen.",
+        : link
+          ? "Ihr Angebot ist fertig. Sie können es in Ihrem Kundenportal ansehen, Optionen auswählen und dort auch direkt annehmen."
+          : "Ihr Angebot ist fertig — Sie finden es als PDF im Anhang.",
       ...(netto ? [`Der Angebotswert liegt bei ${eur(Number(netto))} netto.`] : []),
       ...(v?.angebot_gueltig_bis
         ? [`Das Angebot ist gültig bis ${date(v.angebot_gueltig_bis as string)}.`]
         : []),
-      "Wenn etwas unklar ist, antworten Sie einfach auf diese Mail oder schreiben Sie uns direkt im Portal.",
+      link
+        ? "Wenn etwas unklar ist, antworten Sie einfach auf diese Mail oder schreiben Sie uns direkt im Portal."
+        : "Wenn etwas unklar ist oder Sie annehmen möchten, antworten Sie einfach auf diese Mail.",
     ],
-    knopf: { text: "Angebot ansehen", url: link },
+    ...(link ? { knopf: { text: "Angebot ansehen", url: link } } : {}),
+    ...(anhang ? { anhaenge: [anhang] } : {}),
   });
 
   if (!eingereiht.ok) {
