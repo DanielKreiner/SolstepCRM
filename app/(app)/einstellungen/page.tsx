@@ -10,9 +10,7 @@ import { ROLE_LABEL } from "@/lib/nav";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import {
-  AddPhaseForm,
   PermissionCell,
-  PhaseRowForm,
   StandortForm,
   ZeitregelnForm,
   type StandortWerte,
@@ -34,12 +32,6 @@ const AREAS = [
 
 const ROLES = ["gf", "buero", "bauleitung", "monteur", "lager"] as const;
 
-const KIND_LABEL: Record<string, string> = {
-  vertrieb: "Vertrieb",
-  projekte: "Projekte",
-  service: "Service",
-};
-
 /*
  * Unternavigation wie in der Vorlage. Der aktive Bereich steht in der URL
  * und nicht im Client-State: ein Link auf die Nummernkreise soll ein Link
@@ -53,7 +45,6 @@ const BEREICHE = [
   ["checklisten", "Checklisten"],
   ["standorte", "Standorte"],
   ["zeit", "Zeiterfassung"],
-  ["phasen", "Phasen"],
   ["nummernkreise", "Nummernkreise"],
   ["integrationen", "Integrationen"],
   ["daten", "Daten mitnehmen"],
@@ -101,21 +92,13 @@ export default async function EinstellungenPage({
 
   const [
     { data: perms },
-    { data: pipelines },
     { data: company },
     { data: standorte },
     { data: leute },
     { data: zaehlerstand },
     { data: postfaecher },
-    belegung,
   ] = await Promise.all([
     supabase.from("role_permission").select("role, area, level"),
-    supabase
-      .from("pipeline")
-      .select(
-        "id, kind, name, sort, phasen:pipeline_phase ( id, key, label, sort, system_key, is_final )",
-      )
-      .order("sort"),
     supabase
       .from("company")
       .select(
@@ -134,7 +117,6 @@ export default async function EinstellungenPage({
     supabase
       .from("v_mail_account")
       .select("id, address, provider, status, last_sync_at, is_default"),
-    phasenBelegung(),
   ]);
 
   /*
@@ -171,7 +153,7 @@ export default async function EinstellungenPage({
     <>
       <PageHeader
         title="Einstellungen"
-        subtitle="Rollen, Standorte, Phasen, Nummernkreise, Integrationen."
+        subtitle="Rollen, Standorte, Nummernkreise, Integrationen."
       />
 
       <div className="mb-4 grid gap-[10px] sm:grid-cols-2 xl:grid-cols-4">
@@ -455,74 +437,6 @@ export default async function EinstellungenPage({
             </Abschnitt>
           ) : null}
 
-          {bereich === "phasen" ? (
-            <Abschnitt titel="Phasen">
-              <p className="-mt-1 mb-4 text-[12.5px] text-muted">
-                Jeder Betrieb arbeitet anders. Phasen mit Systembedeutung tragen
-                Automatiken und lassen sich umbenennen, aber nicht löschen.
-              </p>
-
-              <div className="flex flex-col gap-6">
-                {(pipelines ?? []).map((p) => {
-                  const phasen = (
-                    (p.phasen ?? []) as unknown as {
-                      id: string;
-                      key: string;
-                      label: string;
-                      sort: number;
-                      system_key: string | null;
-                      is_final: boolean;
-                    }[]
-                  ).sort((a, b) => a.sort - b.sort);
-
-                  const naechste = Math.max(0, ...phasen.map((ph) => ph.sort)) + 1;
-
-                  return (
-                    <div key={p.id as string}>
-                      <h3 className="mb-2 text-[13.5px] font-semibold">
-                        {KIND_LABEL[p.kind as string] ?? (p.name as string)}
-                      </h3>
-
-                      <ul className="flex flex-col gap-2">
-                        {phasen.map((ph) => (
-                          <li key={ph.id} className="rounded-input bg-panel px-4 py-3">
-                            {darfSchreiben ? (
-                              <PhaseRowForm
-                                phaseId={ph.id}
-                                label={ph.label}
-                                systemKey={ph.system_key}
-                                belegt={belegung.get(ph.id) ?? 0}
-                              />
-                            ) : (
-                              <div className="flex flex-wrap items-center gap-3">
-                                <span className="text-[13px]">{ph.label}</span>
-                                {ph.system_key ? (
-                                  <span className="num rounded-pill bg-s-warn/12 px-[9px] py-[3px] text-[11px] text-accent-ink">
-                                    {ph.system_key}
-                                  </span>
-                                ) : null}
-                                <span className="num text-[11.5px] text-faint">
-                                  {belegung.get(ph.id) ?? 0} Einträge
-                                </span>
-                              </div>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-
-                      {darfSchreiben ? (
-                        <AddPhaseForm
-                          pipelineId={p.id as string}
-                          naechsteSortierung={naechste}
-                        />
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </Abschnitt>
-          ) : null}
-
           {bereich === "nummernkreise" ? (
             <Abschnitt titel="Nummernkreise">
               <p className="-mt-1 mb-4 text-[12.5px] text-muted">
@@ -675,17 +589,3 @@ function IntegrationsZeile({
 }
 
 /** Wie viele Einträge hängen an welcher Phase — für die Löschsperre. */
-async function phasenBelegung(): Promise<Map<string, number>> {
-  const supabase = await createClient();
-  const tickets = await supabase.from("service_ticket").select("phase_id");
-
-  const map = new Map<string, number>();
-  for (const liste of [tickets.data]) {
-    for (const r of liste ?? []) {
-      const id = r.phase_id as string | null;
-      if (!id) continue;
-      map.set(id, (map.get(id) ?? 0) + 1);
-    }
-  }
-  return map;
-}

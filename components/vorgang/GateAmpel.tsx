@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Dialog } from "@/components/ui/Dialog";
 import { GATE_STATUS_LABEL, type GateStatus } from "@/lib/vorgang/modell";
@@ -68,10 +68,22 @@ export function GateAmpel({
     LEER,
   );
 
-  if (gates.length === 0) return null;
+  /*
+   * Nach dem Speichern schliesst sich das Fenster von selbst — aber nur
+   * einmal je Meldung. Vorher stand hier eine Prüfung im Rendern: die
+   * Erfolgsmeldung bleibt stehen, und damit fiel jedes nächste Fenster
+   * sofort wieder zu. Man musste die Seite neu laden, um ein zweites
+   * Gate zu setzen.
+   */
+  const letzteMeldung = useRef<string | null>(null);
+  useEffect(() => {
+    if (status.ok && status.ok !== letzteMeldung.current) {
+      letzteMeldung.current = status.ok;
+      setOffen(null);
+    }
+  }, [status.ok]);
 
-  /* Nach dem Speichern schliesst sich das Fenster von selbst. */
-  if (status.ok && offen) setOffen(null);
+  if (gates.length === 0) return null;
 
   return (
     <div>

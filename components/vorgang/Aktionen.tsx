@@ -712,39 +712,32 @@ function TerminAufgabe({
     <section className="rounded-[20px] bg-surface p-5 shadow-soft">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h2 className="text-[15px] font-semibold">Offene Aufgabe</h2>
-        <span
-          className={[
-            "rounded-pill px-[10px] py-[3px] text-[11px] font-semibold",
-            blockiert ? "bg-sunk text-muted" : "bg-s-warn/14 text-accent-ink",
-          ].join(" ")}
-        >
-          {blockiert ? "wartet" : "offen"}
+        <span className="rounded-pill bg-s-warn/14 px-[10px] py-[3px] text-[11px] font-semibold text-accent-ink">
+          offen
         </span>
       </div>
 
       <p className="text-[14px] font-semibold">Montage terminieren</p>
       <p className="mt-1 mb-4 text-[12.5px] text-muted">
-        {blockiert
-          ? "Wird frei, sobald die Pflicht-Gates durch sind."
-          : "Alle Pflicht-Gates sind durch — der Termin gehört in die Plantafel."}
+        Der Termin gehört in die Plantafel.
       </p>
 
+      {/*
+        Ein Hinweis, keine Sperre. Fehlendes Material wird bestellt und
+        steht dann in den Bestellungen — der Termin muss trotzdem stehen,
+        sonst kann niemand disponieren.
+      */}
       {blockiert ? (
-        <p className="mb-4 rounded-input bg-s-crit/8 px-4 py-3 text-[12.5px] text-s-crit">
-          Offen: {offeneGates.join(" · ")}
+        <p className="mb-4 rounded-input bg-s-warn/12 px-4 py-3 text-[12.5px] text-accent-ink">
+          Noch offen: {offeneGates.join(" · ")}. Terminieren geht trotzdem.
         </p>
       ) : null}
 
       {darfSchreiben ? (
         <a
           href={`/planung?vorgang=${vorgangId}`}
-          aria-disabled={blockiert}
-          className={[
-            "flex min-h-[52px] w-full items-center justify-center rounded-pill px-6 text-[14.5px] font-semibold",
-            blockiert
-              ? "pointer-events-none bg-sunk text-faint"
-              : "bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-white hover:text-white",
-          ].join(" ")}
+          data-testid="terminieren"
+          className="flex min-h-[52px] w-full items-center justify-center rounded-pill bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-6 text-[14.5px] font-semibold text-white hover:text-white"
         >
           In der Plantafel terminieren
         </a>
