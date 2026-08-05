@@ -158,7 +158,13 @@ test("2 — Positionen im Vorgang zusammenstellen, ohne Seitenwechsel", async ({
   const frei = page.getByRole("dialog");
   await frei.getByLabel("Bezeichnung — Pflicht").fill("Montage und Inbetriebnahme");
   await frei.getByLabel("Menge").fill("42");
-  await frei.getByLabel("Einheit").fill("h");
+  /*
+   * Die Einheit ist ein Auswahlfeld, seit die datalist raus ist — sie
+   * zeigte keinen Pfeil und bot faktisch nur "Stk". "Std" statt "h",
+   * weil die Liste die Einheiten des Betriebs führt und nicht jede
+   * denkbare Schreibweise.
+   */
+  await frei.getByTestId("eigen-einheit").selectOption("Std");
   await frei.getByLabel("VK — Pflicht").fill("68");
   await frei.getByLabel("EK", { exact: true }).fill("42");
   await frei.getByLabel("Stunden").fill("1");
