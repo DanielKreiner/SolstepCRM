@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { LEER, Meldung, type AktionsStatus } from "@/components/ui/Formular";
 import { Pill } from "@/components/ui/Pill";
+import { enqueue, flush } from "@/lib/offline/queue";
 import { ohneEinsatzStarten, zeitStarten, zeitStoppen } from "./actions";
 
 export type Einsatz = {
@@ -56,6 +57,35 @@ export function Einsatzkarte({
     zeitStoppen,
     LEER,
   );
+
+  /*
+   * Ohne Netz geht die Buchung in die Warteschlange und die Uhr läuft
+   * lokal weiter (CLAUDE.md Abschnitt 8). Der Server erfährt davon erst
+   * beim Wiedereinbuchen — der Zeitstempel bleibt der vom Dach, nicht
+   * der vom Funkloch-Ende. Ohne diesen Weg wäre jede Buchung auf einer
+   * Baustelle ohne Empfang verloren.
+   */
+  const [lokalSeit, setLokalSeit] = useState<string | null>(null);
+
+  async function offlineStarten() {
+    const eintrag = await enqueue("time_start", {
+      einsatzId: einsatz.id,
+      kind: "work",
+    });
+    setLokalSeit(eintrag.clientTs);
+    window.dispatchEvent(new Event("betrieb:queue"));
+    void flush().then(() => window.dispatchEvent(new Event("betrieb:queue")));
+  }
+
+  async function offlineStoppen() {
+    await enqueue("time_stop", {});
+    setLokalSeit(null);
+    window.dispatchEvent(new Event("betrieb:queue"));
+    void flush().then(() => window.dispatchEvent(new Event("betrieb:queue")));
+  }
+
+  const laeuftJetzt = laeuftHier || lokalSeit !== null;
+  const seit = lokalSeit ?? laeuftSeit;
 
   return (
     <section className="rounded-[20px] bg-surface p-5 shadow-soft">
@@ -117,23 +147,36 @@ export function Einsatzkarte({
 
       {/* ------------------------------------------------ STEMPELN */}
       <div className="mt-4">
-        {laeuftHier ? (
-          <StoppKnopf seit={laeuftSeit!} stoppen={stoppen} status={stoppStatus} />
+        {laeuftJetzt ? (
+          <StoppKnopf
+            seit={seit!}
+            stoppen={stoppen}
+            status={stoppStatus}
+            offlineStoppen={offlineStoppen}
+          />
         ) : (
-          <form action={starten}>
+          <form
+            action={starten}
+            onSubmit={(e) => {
+              if (typeof navigator !== "undefined" && !navigator.onLine) {
+                e.preventDefault();
+                void offlineStarten();
+              }
+            }}
+          >
             <input type="hidden" name="einsatzId" value={einsatz.id} />
             <button
               type="submit"
               data-testid={`zeit-starten-${einsatz.id}`}
-              disabled={Boolean(laeuftSeit)}
+              disabled={Boolean(seit)}
               className={[
                 "min-h-[56px] w-full rounded-pill border-0 px-6 text-[16px] font-semibold",
-                laeuftSeit
+                seit
                   ? "cursor-not-allowed bg-sunk text-faint"
                   : "cursor-pointer bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-white",
               ].join(" ")}
             >
-              {laeuftSeit ? "Andere Zeit läuft" : "Zeit starten"}
+              {seit ? "Andere Zeit läuft" : "Zeit starten"}
             </button>
           </form>
         )}
@@ -172,10 +215,12 @@ function StoppKnopf({
   seit,
   stoppen,
   status,
+  offlineStoppen,
 }: {
   seit: string;
   stoppen: (formData: FormData) => void;
   status: AktionsStatus;
+  offlineStoppen: () => Promise<void>;
 }) {
   const [jetzt, setJetzt] = useState(() => Date.now());
 
@@ -222,7 +267,15 @@ function StoppKnopf({
           </div>
         </>
       ) : (
-        <form action={stoppen}>
+        <form
+          action={stoppen}
+          onSubmit={(e) => {
+            if (typeof navigator !== "undefined" && !navigator.onLine) {
+              e.preventDefault();
+              void offlineStoppen();
+            }
+          }}
+        >
           <button
             type="submit"
             data-testid="zeit-stoppen"

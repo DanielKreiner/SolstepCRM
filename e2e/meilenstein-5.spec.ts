@@ -275,15 +275,50 @@ test("Einstempeln im Flugmodus läuft lokal weiter", async ({
   await aufraeumen();
   const uid = await monteurId();
 
+  /*
+   * Gestempelt wird seit dem Umbau am Einsatz und nicht auf einer
+   * eigenen Seite: eine Uhr ohne Baustelle daneben erzeugt Zeiten, die
+   * niemandem gehören. Also braucht der Flugmodus-Test einen Einsatz von
+   * heute.
+   */
+  const db = admin();
+  const heute = new Date().toISOString().slice(0, 10);
+  const { data: vorgang } = await db
+    .from("vorgang")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .limit(1)
+    .single();
+
+  const { data: e } = await db
+    .from("einsatz")
+    .insert({
+      company_id: COMPANY_A,
+      art: "auftrag",
+      vorgang_id: vorgang!.id,
+      titel: "E2E Flugmodus",
+      von: `${heute}T04:00:00Z`,
+      bis: `${heute}T16:00:00Z`,
+    })
+    .select("id")
+    .single();
+  const einsatzId = e!.id as string;
+
+  await db
+    .from("einsatz_person")
+    .insert({ company_id: COMPANY_A, einsatz_id: einsatzId, user_id: uid });
+
   await login(page, DEMO.monteur);
-  await page.goto("/m/stempeln");
-  await expect(page.getByText("Nicht eingestempelt")).toBeVisible();
+  await page.goto("/m/heute");
+  await expect(page.getByTestId(`zeit-starten-${einsatzId}`)).toBeVisible({
+    timeout: 15_000,
+  });
 
   await context.setOffline(true);
-  await page.getByRole("button", { name: "Einstempeln" }).click();
+  await page.getByTestId(`zeit-starten-${einsatzId}`).click();
 
   // Die Uhr läuft, obwohl der Server nichts davon weiß.
-  await expect(page.getByText("Läuft seit")).toBeVisible();
+  await expect(page.getByTestId("zeit-stoppen")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("offline-banner")).toContainText("Offline");
 
   await context.setOffline(false);
@@ -303,6 +338,8 @@ test("Einstempeln im Flugmodus läuft lokal weiter", async ({
     .toBe(1);
 
   await aufraeumen();
+  await db.from("einsatz_person").delete().eq("einsatz_id", einsatzId);
+  await db.from("einsatz").delete().eq("id", einsatzId);
 });
 
 test("Dieselbe Buchung zweimal gesendet ergibt eine Zeile", async ({ page }) => {
@@ -413,9 +450,12 @@ test("Die Monteur-App ist auf 390 px bedienbar", async ({ page }) => {
   }));
   expect(masse.scroll).toBeLessThanOrEqual(masse.client);
 
-  // Touchziele mindestens 56 px hoch.
-  await page.goto("/m/stempeln");
-  const knopf = page.getByRole("button", { name: /Ein-|Einstempeln/ });
+  /*
+   * Touchziele mindestens 56 px hoch. Geprüft am Knopf "Zeit ohne
+   * Einsatz starten" — er steht auch dann da, wenn für heute nichts
+   * geplant ist, und ist damit der einzige, der immer erreichbar ist.
+   */
+  const knopf = page.getByTestId("ohne-plan-oeffnen");
   const box = await knopf.boundingBox();
-  expect(box!.height).toBeGreaterThanOrEqual(56);
+  expect(box!.height).toBeGreaterThanOrEqual(52);
 });

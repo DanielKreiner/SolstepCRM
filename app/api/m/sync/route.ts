@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { regelnAnwenden } from "@/lib/zeiten/anwenden";
 import { entnahmeBuchen, rueckgabeBuchen } from "@/lib/material/buchen";
 import { createClient } from "@/lib/supabase/server";
 import { getMe } from "@/lib/session";
@@ -29,6 +30,13 @@ const schema = z.object({
 });
 
 const timeStart = z.object({
+  /*
+   * Der Einsatz ist der Anker: eine Zeit ohne Einsatz gehört niemandem.
+   * jobId bleibt für Buchungen aus alten, noch nicht abgeräumten
+   * Warteschlangen auf den Geräten — die dürfen nicht verloren gehen,
+   * nur weil das Feld umbenannt wurde.
+   */
+  einsatzId: z.string().uuid().nullable().optional(),
   jobId: z.string().uuid().nullable().optional(),
   kind: z.enum(["work", "travel", "break", "errand", "training"]).default("work"),
   note: z.string().max(500).nullable().optional(),
@@ -84,10 +92,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Buchung unvollständig." }, { status: 400 });
     }
 
+    /* Der Vorgangsbezug kommt vom Einsatz, nicht vom Gerät. */
+    const { data: einsatz } = p.data.einsatzId
+      ? await supabase
+          .from("einsatz")
+          .select("id, vorgang_id")
+          .eq("id", p.data.einsatzId)
+          .maybeSingle()
+      : { data: null };
+
     const { error } = await supabase.from("time_entry").insert({
       company_id: me.companyId,
       user_id: me.id,
-      vorgang_id: p.data.jobId ?? null,
+      einsatz_id: einsatz?.id ?? null,
+      vorgang_id: einsatz?.vorgang_id ?? p.data.jobId ?? null,
       kind: p.data.kind,
       started_at: clientTs,
       note: p.data.note ?? null,
@@ -110,11 +128,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Buchung unvollständig." }, { status: 400 });
     }
 
-    // Ohne explizite id: den laufenden Eintrag des Nutzers schließen.
-    let query = supabase
+    /*
+     * Den laufenden Eintrag erst holen: Rundung und Pausenabzug des
+     * Betriebs brauchen den Beginn. Sonst wäre eine offline gestempelte
+     * Schicht die einzige, für die die Zeitregeln nicht gelten.
+     */
+    let suche = supabase
+      .from("time_entry")
+      .select("id, started_at")
+      .eq("user_id", me.id)
+      .eq("status", "running");
+    if (p.data.entryId) suche = suche.eq("id", p.data.entryId);
+
+    const { data: laufend } = await suche.limit(1).maybeSingle();
+
+    if (!laufend) {
+      return NextResponse.json(
+        { error: "Kein laufender Eintrag zum Beenden." },
+        { status: 409 },
+      );
+    }
+
+    const geregelt = await regelnAnwenden(
+      supabase,
+      me.companyId,
+      laufend.started_at as string,
+      clientTs,
+    );
+
+    const query = supabase
       .from("time_entry")
       .update({
-        ended_at: clientTs,
+        ended_at: geregelt.bis,
+        auto_break_min: geregelt.autoBreakMin,
         status: flagged ? "flagged" : "booked",
         ...(flagged
           ? {
@@ -122,10 +168,8 @@ export async function POST(request: Request) {
             }
           : {}),
       })
-      .eq("user_id", me.id)
+      .eq("id", laufend.id as string)
       .eq("status", "running");
-
-    if (p.data.entryId) query = query.eq("id", p.data.entryId);
 
     const { data, error } = await query.select("id");
     if (error) return antwortAufFehler(error);
