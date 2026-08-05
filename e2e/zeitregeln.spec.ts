@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { COMPANY_A, DEMO, admin, login, suchwahl } from "./helpers";
+import { COMPANY_A, DEMO, admin, login } from "./helpers";
 
 /*
  * Rundung und Pausenautomatik. Die Rechnung selbst ist in
@@ -13,7 +13,7 @@ test.describe.configure({ mode: "serial" });
 const TAG = "2027-04-12";
 const NOTIZ = "E2E-ZEIT";
 
-const zustand: { userId?: string; userName?: string; jobLabel?: string } = {};
+const zustand: { userId?: string; userName?: string; vorgangId?: string } = {};
 
 /** Ausgangszustand: keine Rundung, Pause ab 6 h mit 30 Minuten. */
 const STANDARD = {
@@ -32,7 +32,14 @@ const STANDARD = {
 
 async function aufraeumen(): Promise<void> {
   const db = admin();
-  await db.from("time_entry").delete().like("note", `${NOTIZ}%`);
+  const { data: einsaetze } = await db
+    .from("einsatz")
+    .select("id")
+    .like("titel", `${NOTIZ}%`);
+  for (const e of einsaetze ?? []) {
+    await db.from("time_entry").delete().eq("einsatz_id", e.id);
+    await db.from("einsatz").delete().eq("id", e.id);
+  }
   await db
     .from("company")
     .update({ time_settings: STANDARD })
@@ -56,31 +63,54 @@ test.beforeAll(async () => {
 
   const { data: vorgang } = await db
     .from("vorgang")
-    .select("number")
+    .select("id")
     .eq("company_id", COMPANY_A)
     .order("number", { ascending: false })
     .limit(1)
     .single();
-  zustand.jobLabel = vorgang!.number as string;
+  zustand.vorgangId = vorgang!.id as string;
 });
 
 test.afterAll(aufraeumen);
+
+/**
+ * Einen Einsatz am Testtag anlegen — Buchungen hängen daran.
+ *
+ * Seit dem Zeiten-Umbau gibt es keine Zeit ohne Einsatz. Der Einsatz ist
+ * damit auch der Anker, an dem der Test seine Buchung wiederfindet: ein
+ * Notizfeld hat das Formular nicht mehr.
+ */
+async function einsatzAnlegen(titel: string): Promise<string> {
+  const db = admin();
+  const { data: e } = await db
+    .from("einsatz")
+    .insert({
+      company_id: COMPANY_A,
+      art: "auftrag",
+      vorgang_id: zustand.vorgangId!,
+      titel,
+      von: `${TAG}T04:00:00Z`,
+      bis: `${TAG}T20:00:00Z`,
+    })
+    .select("id")
+    .single();
+  return e!.id as string;
+}
 
 async function buche(
   page: import("@playwright/test").Page,
   von: string,
   bis: string,
-  notiz: string,
+  einsatzId: string,
 ): Promise<void> {
   // Der Tag steckt in der Adresse, nicht im Formular — die Seite zeigt
   // immer genau einen Tag, und der Link darauf soll teilbar sein.
   await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
-  await page.getByLabel("Person").selectOption(zustand.userId!);
-  await page.getByLabel("Beginn").fill(von);
-  await page.getByLabel("Ende").fill(bis);
-  await suchwahl(page, "Vorgang", zustand.jobLabel!);
-  await page.getByLabel("Notiz").fill(notiz);
-  await page.getByRole("button", { name: "Buchung anlegen" }).click();
+  await page.getByTestId("nacherfassen-person").selectOption(zustand.userId!);
+  await page.getByTestId("nacherfassen-einsatz").selectOption(einsatzId);
+  await page.getByTestId("nacherfassen-von").fill(von);
+  await page.getByTestId("nacherfassen-bis").fill(bis);
+  await page.getByTestId("nacherfassen-speichern").click();
 }
 
 test("1 — Die Einstellungen sind erreichbar und speichern", async ({ page }) => {
@@ -111,15 +141,19 @@ test("2 — Die Rundung greift beim Buchen", async ({ page }) => {
   const db = admin();
   await login(page, DEMO.gf);
 
-  // 07:00 bis 11:07 sind 247 Minuten — kaufmännisch auf 15er: 240.
-  await buche(page, "07:00", "11:07", `${NOTIZ} gerundet`);
+  const einsatzId = await einsatzAnlegen(`${NOTIZ} gerundet`);
 
-  await expect(page.getByText(/gerundet\./)).toBeVisible({ timeout: 20_000 });
+  // 07:00 bis 11:07 sind 247 Minuten — kaufmännisch auf 15er: 240.
+  await buche(page, "07:00", "11:07", einsatzId);
+
+  await expect(page.getByRole("status").first()).toContainText("nachgetragen", {
+    timeout: 20_000,
+  });
 
   const { data } = await db
     .from("time_entry")
     .select("duration_min, auto_break_min, started_at")
-    .eq("note", `${NOTIZ} gerundet`)
+    .eq("einsatz_id", einsatzId)
     .single();
 
   expect(data!.duration_min).toBe(240);
@@ -133,17 +167,19 @@ test("3 — Ab sechs Stunden zieht die Pause automatisch ab", async ({ page }) =
   const db = admin();
   await login(page, DEMO.gf);
 
-  // 12:00 bis 20:00 sind 480 Minuten, glatt — nur der Pausenabzug greift.
-  await buche(page, "12:00", "20:00", `${NOTIZ} lang`);
+  const einsatzId = await einsatzAnlegen(`${NOTIZ} lang`);
 
-  await expect(page.getByText(/30 Minuten Pause abgezogen/)).toBeVisible({
+  // 12:00 bis 20:00 sind 480 Minuten, glatt — nur der Pausenabzug greift.
+  await buche(page, "12:00", "20:00", einsatzId);
+
+  await expect(page.getByRole("status").first()).toContainText("nachgetragen", {
     timeout: 20_000,
   });
 
   const { data } = await db
     .from("time_entry")
     .select("duration_min, auto_break_min")
-    .eq("note", `${NOTIZ} lang`)
+    .eq("einsatz_id", einsatzId)
     .single();
 
   /*
@@ -188,16 +224,17 @@ test("5 — Ohne Rundung bleibt die Minute stehen", async ({ page }) => {
     .eq("id", COMPANY_A);
 
   await login(page, DEMO.gf);
-  await buche(page, "06:00", "06:07", `${NOTIZ} genau`);
+  const einsatzId = await einsatzAnlegen(`${NOTIZ} genau`);
+  await buche(page, "06:00", "06:07", einsatzId);
 
-  await expect(page.getByText(/Buchung gespeichert/)).toBeVisible({
+  await expect(page.getByRole("status").first()).toContainText("nachgetragen", {
     timeout: 20_000,
   });
 
   const { data } = await db
     .from("time_entry")
     .select("duration_min")
-    .eq("note", `${NOTIZ} genau`)
+    .eq("einsatz_id", einsatzId)
     .single();
 
   expect(data!.duration_min).toBe(7);

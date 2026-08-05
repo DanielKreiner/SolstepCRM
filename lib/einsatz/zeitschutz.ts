@@ -1,3 +1,6 @@
+import { viennaDay } from "@/lib/format";
+import { endOfViennaDay } from "@/lib/time";
+
 /*
  * Die Schutzregel für laufende Zeitbuchungen.
  *
@@ -40,15 +43,14 @@ export type Stoppvorschlag = {
  * endet im Sommer jede Buchung um zwei Uhr früh.
  */
 export function naechsteMitternacht(iso: string): Date {
-  const wien = new Date(
-    new Date(iso).toLocaleString("en-US", { timeZone: "Europe/Vienna" }),
-  );
-  const roh = new Date(iso);
-  /* Wie weit liegt Wien vor UTC — zur Rückrechnung des Ergebnisses. */
-  const versatz = wien.getTime() - roh.getTime();
-
-  wien.setHours(24, 0, 0, 0);
-  return new Date(wien.getTime() - versatz);
+  /*
+   * Über date-fns-tz, nicht über toLocaleString: der Umweg
+   * `new Date(x.toLocaleString(..., { timeZone }))` parst das Ergebnis in
+   * der Zeitzone des SERVERS. Auf Vercel (UTC) kam das Richtige heraus,
+   * auf einem Rechner, der selbst in Wien steht, ein Versatz von null —
+   * und damit stillschweigend UTC-Mitternacht.
+   */
+  return endOfViennaDay(viennaDay(iso));
 }
 
 /**

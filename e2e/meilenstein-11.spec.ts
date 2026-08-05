@@ -126,185 +126,29 @@ test("Die Geschäftsführung kann sich nicht selbst aussperren", async ({
   expect(vorher!.level).toBe("write");
 });
 
-test("Eine eigene Phase lässt sich anlegen und benutzen", async ({ page }) => {
-  await aufraeumen();
-  await login(page, DEMO.gf);
-  await page.goto("/einstellungen?bereich=phasen");
-
-  const { data: pipeline } = await admin()
-    .from("pipeline")
-    .select("id")
-    .eq("company_id", COMPANY_A)
-    .eq("kind", "service")
-    .single();
-
-  /*
-   * Die Service-Pipeline: Vertrieb und Projekte laufen über den Vorgang,
-   * dessen Phasen ein Enum sind. Editierbare Phasen je Mandant gibt es
-   * nur noch hier. Nicht .first() — die versteckte pipelineId macht das
-   * Formular eindeutig.
-   */
-  const form = page.locator(
-    `form:has(input[name="pipelineId"][value="${pipeline!.id as string}"])`,
-  );
-  await form.getByLabel("Bezeichnung").fill("Gerüst bestellt");
-  await form.getByLabel("Schlüssel").fill("e2e_geruest");
-  await form.getByRole("button", { name: "Phase anlegen" }).click();
-
-  await expect
-    .poll(async () => {
-      const { count } = await admin()
-        .from("pipeline_phase")
-        .select("id", { count: "exact", head: true })
-        .eq("pipeline_id", pipeline!.id)
-        .eq("key", "e2e_geruest");
-      return count ?? 0;
-    }, { timeout: 15_000 })
-    .toBe(1);
-
-  const { data: neu } = await admin()
-    .from("pipeline_phase")
-    .select("system_key, is_final, label")
-    .eq("key", "e2e_geruest")
-    .single();
-
-  // Eine frei angelegte Phase bekommt keine Systembedeutung — sonst löst
-  // sie unbeabsichtigt Automatiken aus.
-  expect(neu!.system_key).toBeNull();
-  expect(neu!.is_final).toBe(false);
-
-  /*
-   * Und sie steht sofort am Ticket zur Wahl. Die Liste zeigt Status,
-   * nicht Phasen — der Phasenwechsel sitzt auf der Detailseite.
-   */
-  const { data: ticket } = await admin()
-    .from("service_ticket")
-    .select("id")
-    .eq("company_id", COMPANY_A)
-    .limit(1)
-    .single();
-
-  await page.goto(`/service/${ticket!.id as string}`);
-  await expect(
-    page.getByRole("button", { name: "Gerüst bestellt" }),
-  ).toBeVisible();
-});
-
-test("Eine Systemphase lässt sich umbenennen, aber nicht löschen", async ({
-  page,
-}) => {
-  const db = admin();
-  const { data: won } = await db
-    .from("pipeline_phase")
-    .select("id, label")
-    .eq("company_id", COMPANY_A)
-    .eq("system_key", "won")
-    .single();
-
-  await login(page, DEMO.gf);
-  await page.goto("/einstellungen?bereich=phasen");
-
-  /*
-   * Nicht über den Zeilentext suchen: die Bezeichnung steht im Wert des
-   * Eingabefelds, und Werte gehören nicht zum Textinhalt. Das Label des
-   * Felds ist der verlässliche Anker.
-   */
-  const feld = page.getByLabel(`Bezeichnung von ${won!.label as string}`);
-  const zeile = page.locator("li").filter({ has: feld });
-
-  // Kein Löschknopf für Systemphasen.
-  await expect(zeile.getByRole("button", { name: "löschen" })).toHaveCount(0);
-
-  // Umbenennen ist erlaubt und lässt system_key unberührt.
-  await feld.fill("Auftrag erteilt");
-  await zeile.getByRole("button", { name: "umbenennen" }).click();
-
-  await expect
-    .poll(async () => {
-      const { data } = await db
-        .from("pipeline_phase")
-        .select("label, system_key")
-        .eq("id", won!.id)
-        .single();
-      return `${data?.label}|${data?.system_key}`;
-    }, { timeout: 15_000 })
-    .toBe("Auftrag erteilt|won");
-
-  await db
-    .from("pipeline_phase")
-    .update({ label: won!.label })
-    .eq("id", won!.id);
-});
-
-test("Eine belegte Phase lässt sich nicht löschen", async ({ page }) => {
-  const db = admin();
-
-  // Die neue Phase belegen.
-  const { data: phase } = await db
-    .from("pipeline_phase")
-    .select("id")
-    .eq("key", "e2e_geruest")
-    .single();
-  const { data: ticket } = await db
-    .from("service_ticket")
-    .select("id, phase_id")
-    .eq("company_id", COMPANY_A)
-    .limit(1)
-    .single();
-
-  await db
-    .from("service_ticket")
-    .update({ phase_id: phase!.id })
-    .eq("id", ticket!.id);
-
-  await login(page, DEMO.gf);
-  await page.goto("/einstellungen?bereich=phasen");
-
-  const zeile = page
-    .locator("li")
-    .filter({ has: page.getByLabel("Bezeichnung von Gerüst bestellt") });
-  await zeile.getByRole("button", { name: "löschen" }).click();
-  await expect(zeile.getByRole("alert")).toContainText("Erst verschieben");
-
-  // Zurücksetzen und dann löschen — jetzt geht es.
-  await db
-    .from("service_ticket")
-    .update({ phase_id: ticket!.phase_id })
-    .eq("id", ticket!.id);
-  await page.reload();
-
-  const zeile2 = page
-    .locator("li")
-    .filter({ has: page.getByLabel("Bezeichnung von Gerüst bestellt") });
-  await zeile2.getByRole("button", { name: "löschen" }).click();
-
-  await expect
-    .poll(async () => {
-      const { count } = await db
-        .from("pipeline_phase")
-        .select("id", { count: "exact", head: true })
-        .eq("key", "e2e_geruest");
-      return count ?? 0;
-    }, { timeout: 15_000 })
-    .toBe(0);
-
-  await aufraeumen();
-});
+/*
+ * Die drei Phasen-Tests sind entfallen.
+ *
+ * Der Bereich "Einstellungen → Phasen" wurde auf Wunsch gestrichen: der
+ * Vorgang führt seine Phasen als Enum, und die einzige Pipeline mit
+ * editierbaren Phasen war der Service. Damit gibt es keine Oberfläche
+ * mehr, die pipeline_phase pflegt — pflegbare Phasen je Mandant
+ * (CLAUDE.md 5.1a) sind aktuell nicht umgesetzt. Tabelle und Regeln
+ * (system_key steuert Automatiken, Systemphasen sind nicht löschbar)
+ * stehen unverändert in der Datenbank, falls der Bereich zurückkommt.
+ */
 
 test("Ohne Schreibrecht sind die Einstellungen nur lesbar", async ({ page }) => {
   await login(page, DEMO.bauleitung);
 
-  // Rechte und Phasen liegen seit der Unternavigation in getrennten
+  // Rechte und Standorte liegen seit der Unternavigation in getrennten
   // Bereichen — die Sperre muss in beiden greifen, nicht nur im ersten.
   await page.goto("/einstellungen?bereich=rechte");
   await expect(page.getByText("sehen, aber nicht ändern")).toBeVisible();
   await expect(page.getByLabel("rechnungen für gf")).toBeDisabled();
 
-  await page.goto("/einstellungen?bereich=phasen");
+  await page.goto("/einstellungen?bereich=standorte");
   await expect(page.getByText("sehen, aber nicht ändern")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Phase anlegen" }),
-  ).toHaveCount(0);
 });
 
 test("Die Unternavigation führt in jeden Bereich", async ({ page }) => {
@@ -313,7 +157,6 @@ test("Die Unternavigation führt in jeden Bereich", async ({ page }) => {
   for (const [bereich, ueberschrift] of [
     ["rechte", "Rollen und Rechte"],
     ["standorte", "Standorte und Arbeitszeitregeln"],
-    ["phasen", "Phasen"],
     ["nummernkreise", "Nummernkreise"],
     ["integrationen", "Integrationen"],
     ["daten", "Daten mitnehmen"],

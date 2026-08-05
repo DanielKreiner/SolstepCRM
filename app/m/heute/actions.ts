@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { AktionsStatus } from "@/components/ui/Formular";
-import { darfStarten, darfStoppen, minuten } from "@/lib/zeiten/regeln";
+import { darfStarten, darfStoppen } from "@/lib/zeiten/regeln";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { regelnAnwenden } from "@/lib/zeiten/anwenden";
 
 /*
  * Stempeln am Einsatz.
@@ -121,16 +122,25 @@ export async function zeitStoppen(
     return { error: null, ok: "Verworfen." };
   }
 
+  /*
+   * Rundung und Pausenabzug kommen aus den Einstellungen des Betriebs,
+   * nicht aus einer Zahl an dieser Stelle. Die Pause steht dem Monteur
+   * zu, ob er sie stempelt oder nicht — ab wann und wie viel, entscheidet
+   * der Betrieb.
+   */
+  const geregelt = await regelnAnwenden(
+    supabase,
+    me.companyId,
+    laeuft!.started_at as string,
+    jetzt,
+  );
+
   const { error } = await supabase
     .from("time_entry")
     .update({
-      ended_at: jetzt,
+      ended_at: geregelt.bis,
       status: "booked",
-      /*
-       * Ab sechs Stunden zieht die Pause automatisch ab — sie steht dem
-       * Monteur zu, ob er sie stempelt oder nicht.
-       */
-      auto_break_min: minuten(laeuft!.started_at, jetzt) >= 360 ? 30 : 0,
+      auto_break_min: geregelt.autoBreakMin,
     })
     .eq("id", laeuft!.id)
     .eq("status", "running");

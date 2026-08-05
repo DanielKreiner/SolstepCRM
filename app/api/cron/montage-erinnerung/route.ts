@@ -1,4 +1,6 @@
 import { runCron } from "@/lib/cron";
+import { viennaDay } from "@/lib/format";
+import { addDays, endOfViennaDay, startOfViennaDay } from "@/lib/time";
 import { montageErinnerung } from "@/lib/vorgang/kundenmails";
 
 export const runtime = "nodejs";
@@ -20,20 +22,9 @@ export async function GET(request: Request) {
      * Fenster im Sommer zwei Stunden daneben und erwischte Einsätze,
      * die erst übermorgen früh beginnen.
      */
-    const jetzt = new Date();
-    const wien = new Date(
-      jetzt.toLocaleString("en-US", { timeZone: "Europe/Vienna" }),
-    );
-    const versatz = wien.getTime() - jetzt.getTime();
-
-    const start = new Date(wien);
-    start.setDate(start.getDate() + 1);
-    start.setHours(0, 0, 0, 0);
-    const ende = new Date(start);
-    ende.setDate(ende.getDate() + 1);
-
-    const von = new Date(start.getTime() - versatz).toISOString();
-    const bis = new Date(ende.getTime() - versatz).toISOString();
+    const tag = addDays(viennaDay(), 1);
+    const von = startOfViennaDay(tag).toISOString();
+    const bis = endOfViennaDay(tag).toISOString();
 
     const { data: morgen } = await admin
       .from("einsatz")

@@ -6,7 +6,8 @@ import type { AktionsStatus } from "@/components/ui/Formular";
 import { pruefeSpanne } from "@/lib/zeiten/regeln";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
-import { addDays, endOfViennaDay, startOfViennaDay } from "@/lib/time";
+import { regelnAnwenden } from "@/lib/zeiten/anwenden";
+import { addDays, endOfViennaDay, startOfViennaDay, viennaClock } from "@/lib/time";
 
 /*
  * Das Zeiten-Modul des Büros.
@@ -82,8 +83,8 @@ export async function nacherfassen(
   }
   const d = parsed.data;
 
-  const von = viennaZeitpunkt(d.tag, d.von);
-  const bis = viennaZeitpunkt(d.tag, d.bis);
+  const von = viennaClock(d.tag, d.von).toISOString();
+  const bis = viennaClock(d.tag, d.bis).toISOString();
 
   const supabase = await createClient();
   const bestehend = await spannenAmTag(supabase, d.userId, d.tag);
@@ -101,9 +102,7 @@ export async function nacherfassen(
     .maybeSingle();
   if (!einsatz) return { error: "Einsatz nicht gefunden.", ok: null };
 
-  const dauer = Math.round(
-    (new Date(bis).getTime() - new Date(von).getTime()) / 60_000,
-  );
+  const geregelt = await regelnAnwenden(supabase, z1.me.companyId, von, bis);
 
   const { error } = await supabase.from("time_entry").insert({
     company_id: z1.me.companyId,
@@ -112,10 +111,10 @@ export async function nacherfassen(
     vorgang_id: einsatz.vorgang_id,
     kind: "work",
     started_at: von,
-    ended_at: bis,
+    ended_at: geregelt.bis,
     status: "booked",
     quelle: "manuell",
-    auto_break_min: dauer >= 360 ? 30 : 0,
+    auto_break_min: geregelt.autoBreakMin,
     created_by: z1.me.id,
   });
 
@@ -212,8 +211,8 @@ export async function korrigieren(
   if (!alt) return { error: "Zeit nicht gefunden.", ok: null };
 
   const tag = (alt.started_at as string).slice(0, 10);
-  const von = viennaZeitpunkt(tag, d.von);
-  const bis = viennaZeitpunkt(tag, d.bis);
+  const von = viennaClock(tag, d.von).toISOString();
+  const bis = viennaClock(tag, d.bis).toISOString();
 
   const bestehend = await spannenAmTag(
     supabase,
@@ -228,9 +227,7 @@ export async function korrigieren(
   );
   if (!pruefung.ok) return { error: pruefung.grund, ok: null };
 
-  const dauer = Math.round(
-    (new Date(bis).getTime() - new Date(von).getTime()) / 60_000,
-  );
+  const geregelt = await regelnAnwenden(supabase, z1.me.companyId, von, bis);
 
   const { error: neuFehler } = await supabase.from("time_entry").insert({
     company_id: z1.me.companyId,
@@ -239,10 +236,10 @@ export async function korrigieren(
     vorgang_id: alt.vorgang_id,
     kind: alt.kind,
     started_at: von,
-    ended_at: bis,
+    ended_at: geregelt.bis,
     status: d.genehmigt === "ja" ? "approved" : "booked",
     quelle: "korrektur",
-    auto_break_min: dauer >= 360 ? 30 : 0,
+    auto_break_min: geregelt.autoBreakMin,
     replaces_id: alt.id,
     note: d.grund,
     created_by: z1.me.id,
@@ -338,16 +335,4 @@ export async function antragEntscheiden(
   return { error: null, ok: "Antrag genehmigt und Zeit korrigiert." };
 }
 
-/** „08:30" an einem Tag als Zeitpunkt in Ortszeit. */
-function viennaZeitpunkt(tag: string, hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  const probe = new Date(`${tag}T12:00:00Z`);
-  const wien = new Date(
-    probe.toLocaleString("en-US", { timeZone: "Europe/Vienna" }),
-  );
-  const versatzMin = Math.round((wien.getTime() - probe.getTime()) / 60000);
 
-  const d = new Date(`${tag}T00:00:00Z`);
-  d.setUTCMinutes(d.getUTCMinutes() + (h ?? 0) * 60 + (m ?? 0) - versatzMin);
-  return d.toISOString();
-}
