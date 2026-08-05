@@ -62,6 +62,22 @@ const REITER = [
 ] as const;
 type ReiterKey = (typeof REITER)[number];
 
+/*
+ * Einheiten, die es im Artikelstamm nie geben wird: Arbeitszeit,
+ * Pauschalen, laufende Meter. Bewusst kurz — eine Liste mit dreissig
+ * Einträgen sucht länger, als man tippt.
+ */
+const LEISTUNGSEINHEITEN = [
+  "Std",
+  "Tag",
+  "Pauschale",
+  "lfm",
+  "m²",
+  "kg",
+  "Satz",
+  "km",
+] as const;
+
 export default async function VorgangPage({
   params,
   searchParams,
@@ -625,14 +641,22 @@ async function AngebotReiter({
           istStandard: v.ist_standard as boolean,
           anzahlPositionen: ((v.positionen ?? []) as unknown[]).length,
         }))}
-        /* Was der Betrieb tatsächlich verwendet — keine erfundene Liste. */
+        /*
+         * Was der Betrieb verwendet, PLUS die Einheiten für Leistungen.
+         *
+         * Vorher kam die Liste allein aus dem Artikelstamm — und der
+         * kennt Stk und m, weil Stunden und Pauschalen nie Artikel sind.
+         * Ausgerechnet bei der freien Position, die es für Montage,
+         * Anfahrt und Gerüst gibt, stand damit nur "Stk" zur Wahl.
+         */
         einheiten={[
-          ...new Set(
-            (artikel ?? [])
+          ...new Set([
+            ...(artikel ?? [])
               .map((a) => a.unit as string | null)
               .filter((u): u is string => Boolean(u)),
-          ),
-        ].sort()}
+            ...LEISTUNGSEINHEITEN,
+          ]),
+        ].sort((a, b) => a.localeCompare(b, "de"))}
         kategorien={[
           ...new Set(
             (artikel ?? [])

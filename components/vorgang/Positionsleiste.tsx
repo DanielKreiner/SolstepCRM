@@ -470,6 +470,55 @@ function Rund({
  * Verbindung zum Feld hat das Feld gar keinen zugänglichen Namen — für
  * Screenreader wie für jeden Test, der es über sein Label sucht.
  */
+/**
+ * Einheit wählen — mit Ausweg für den Sonderfall.
+ */
+function EinheitWahl({ einheiten }: { einheiten: string[] }) {
+  const liste = einheiten.includes("Stk") ? einheiten : ["Stk", ...einheiten];
+  const [frei, setFrei] = useState(false);
+
+  if (frei) {
+    return (
+      <div className="flex gap-2">
+        <input
+          id="eigen-einheit"
+          name="einheit"
+          autoFocus
+          placeholder="z. B. Palette"
+          className="w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
+        />
+        <button
+          type="button"
+          onClick={() => setFrei(false)}
+          className="shrink-0 cursor-pointer rounded-input border border-line bg-surface px-3 text-[12.5px] text-muted"
+        >
+          Liste
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <select
+      id="eigen-einheit"
+      name="einheit"
+      defaultValue="Stk"
+      data-testid="eigen-einheit"
+      onChange={(e) => {
+        if (e.target.value === "__frei") setFrei(true);
+      }}
+      className="w-full cursor-pointer rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
+    >
+      {liste.map((e) => (
+        <option key={e} value={e}>
+          {e}
+        </option>
+      ))}
+      <option value="__frei">andere …</option>
+    </select>
+  );
+}
+
 function Beschriftung({
   fuer,
   children,
@@ -724,19 +773,16 @@ function EigenesFenster({
           Positionsdatensatz gibt es keine Spalte dafür. Ein Feld, dessen
           Inhalt beim Speichern verschwindet, ist schlimmer als keines.
         */}
+        {/*
+          Ein Auswahlfeld und keine datalist.
+          Die datalist zeigt keinen Pfeil und klappt erst auf, wenn man
+          zu tippen anfängt — sie sah aus wie ein totes Textfeld, in dem
+          für immer "Stk" steht. Wer eine Einheit braucht, die nicht in
+          der Liste ist, bekommt sie über "andere"; das ist der seltene
+          Fall und darf einen Klick mehr kosten.
+        */}
         <Beschriftung fuer="eigen-einheit">Einheit</Beschriftung>
-        <input
-          id="eigen-einheit"
-          name="einheit"
-          list="einheiten-liste"
-          defaultValue="Stk"
-          className="w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
-        />
-        <datalist id="einheiten-liste">
-          {einheiten.map((e) => (
-            <option key={e} value={e} />
-          ))}
-        </datalist>
+        <EinheitWahl einheiten={einheiten} />
 
         <Beschriftung fuer="eigen-bezeichnung">Bezeichnung — Pflicht</Beschriftung>
         <input
