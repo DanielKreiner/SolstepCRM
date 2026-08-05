@@ -1,6 +1,10 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resendVerfuegbar, sendeUeberResend } from "@/lib/mail/resend";
+import {
+  fehlendeResendVariablen,
+  resendVerfuegbar,
+  sendeUeberResend,
+} from "@/lib/mail/resend";
 import {
   MAX_VERSUCHE,
   naechsterVersuch,
@@ -57,14 +61,18 @@ export async function zustellen(
    * sonst ungesendet liegen.
    */
   if (!konto && !resendVerfuegbar()) {
+    const fehlt = fehlendeResendVariablen().join(" und ");
+    const grund =
+      `Kein Postfach eingehängt, und der Ersatzversand ist unvollständig: ` +
+      `${fehlt} ${fehlendeResendVariablen().length === 1 ? "fehlt" : "fehlen"}. ` +
+      `Beide Werte müssen in der Umgebung stehen — ein Schlüssel ohne ` +
+      `Absenderadresse reicht nicht.`;
+
     await admin
       .from("mail_outbox")
-      .update({
-        status: "failed",
-        last_error: "Kein Postfach eingehängt und kein Ersatzversand eingerichtet.",
-      })
+      .update({ status: "failed", last_error: grund })
       .eq("id", zeile.id);
-    return { gesendet: false, fehler: "Kein Postfach eingehängt." };
+    return { gesendet: false, fehler: grund };
   }
 
   let ergebnis = konto

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { Dialog } from "@/components/ui/Dialog";
 import { LEER, Meldung, type AktionsStatus } from "@/components/ui/Formular";
 import { Pill } from "@/components/ui/Pill";
@@ -168,42 +169,73 @@ export function Versand({
             <form action={senden}>
               <input type="hidden" name="vorgangId" value={vorgangId} />
               <input type="hidden" name="portalAnlegen" value="ja" />
-              <button
-                type="submit"
-                data-testid="senden-mit-portal"
-                className="flex w-full cursor-pointer flex-col items-start gap-1 rounded-card border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-accent hover:bg-accent/6"
-              >
-                <span className="text-[13.5px] font-semibold">
-                  Portalzugang anlegen und senden
-                </span>
-                <span className="text-[12px] text-muted">
-                  Der Kunde kann Optionen wählen, direkt annehmen und
-                  Rückfragen stellen.
-                </span>
-              </button>
+              <Wahl
+                testid="senden-mit-portal"
+                titel="Portalzugang anlegen und senden"
+                hilfe="Der Kunde kann Optionen wählen, direkt annehmen und Rückfragen stellen."
+              />
             </form>
 
             <form action={senden}>
               <input type="hidden" name="vorgangId" value={vorgangId} />
               <input type="hidden" name="ohnePortal" value="ja" />
-              <button
-                type="submit"
-                data-testid="senden-ohne-portal"
-                className="flex w-full cursor-pointer flex-col items-start gap-1 rounded-card border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-accent hover:bg-accent/6"
-              >
-                <span className="text-[13.5px] font-semibold">
-                  Nur per Mail, mit PDF im Anhang
-                </span>
-                <span className="text-[12px] text-muted">
-                  Kein Portal. Annehmen kann der Kunde dann nur per Antwort
-                  auf die Mail.
-                </span>
-              </button>
+              <Wahl
+                testid="senden-ohne-portal"
+                titel="Nur per Mail, mit PDF im Anhang"
+                hilfe="Kein Portal. Annehmen kann der Kunde dann nur per Antwort auf die Mail."
+              />
             </form>
           </div>
+
+          {/*
+            Die Antwort der Aktion gehört ins Fenster.
+            Vorher stand sie nur unten in der Sektion — also HINTER dem
+            Dialog. Ging der Versand schief, blieb das Fenster einfach
+            stehen und der Klick sah aus, als wäre nichts passiert.
+          */}
+          {status.error ? (
+            <p
+              role="alert"
+              className="mt-4 rounded-input bg-s-crit/10 px-4 py-3 text-[13px] text-s-crit"
+            >
+              {status.error}
+            </p>
+          ) : null}
         </Dialog>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Eine der beiden Versandarten.
+ *
+ * Mit sichtbarem Wartezustand: PDF erzeugen und Mail zustellen dauert
+ * ein paar Sekunden, und ein Knopf, der sich dabei nicht rührt, wird ein
+ * zweites Mal gedrückt.
+ */
+function Wahl({
+  testid,
+  titel,
+  hilfe,
+}: {
+  testid: string;
+  titel: string;
+  hilfe: string;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      data-testid={testid}
+      disabled={pending}
+      className="flex w-full cursor-pointer flex-col items-start gap-1 rounded-card border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-accent hover:bg-accent/6 disabled:cursor-wait disabled:opacity-60"
+    >
+      <span className="text-[13.5px] font-semibold">
+        {pending ? "Wird gesendet …" : titel}
+      </span>
+      <span className="text-[12px] text-muted">{hilfe}</span>
+    </button>
   );
 }
 

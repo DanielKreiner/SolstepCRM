@@ -26,7 +26,13 @@ export type TafelEinsatz = {
   benoetigt: string[];
   vorgangId: string | null;
   vorgangNummer: string | null;
+  /** Kunde direkt am Einsatz — für Service ohne Vorgang. */
+  kundeId: string | null;
   kundeName: string | null;
+  /** Adresse, egal ob sie vom Vorgang oder vom Kunden kommt. */
+  adresse: string | null;
+  serviceTicketId: string | null;
+  serviceTicketNummer: string | null;
   anzahlStopps: number;
   stopps: {
     id: string;
@@ -105,10 +111,12 @@ export async function tafelLaden(
         .from("einsatz")
         .select(
           `id, art, titel, von, bis, ganztaegig, notiz, sub_text, fahrzeug_id,
-           benoetigte_qualifikationen, vorgang_id,
+           benoetigte_qualifikationen, vorgang_id, kunde_id, service_ticket_id,
            personen:einsatz_person ( user_id ),
            stopps:einsatz_stopp ( id, sort, name, adresse, uhrzeit, km, fahrzeit_min ),
-           vorgang:vorgang_id ( number, customer:customer_id ( name ) )`,
+           vorgang:vorgang_id ( number, adresse, plz, ort, customer:customer_id ( name ) ),
+           kunde:kunde_id ( name, street, zip, city ),
+           anliegen:service_ticket_id ( number )`,
         )
         /* Alles, was in die Woche hineinragt — auch was davor beginnt. */
         .lt("von", bis.toISOString())
@@ -143,12 +151,37 @@ export async function tafelLaden(
     einsaetze: ((einsaetze ?? []) as unknown as EinsatzRoh[]).map((e) => {
       const v = e.vorgang as unknown as {
         number: string;
+        adresse: string | null;
+        plz: string | null;
+        ort: string | null;
         customer: { name: string } | null;
       } | null;
+      const k = e.kunde as unknown as {
+        name: string;
+        street: string | null;
+        zip: string | null;
+        city: string | null;
+      } | null;
+      const t = e.anliegen as unknown as { number: string | null } | null;
+
+      /*
+       * Die Adresse kommt vom Vorgang, wenn es einen gibt — dort steht
+       * die Baustelle, und die ist nicht zwingend die Rechnungsadresse
+       * des Kunden. Ohne Vorgang bleibt der Kundensitz.
+       */
+      const adresse =
+        [v?.adresse, [v?.plz, v?.ort].filter(Boolean).join(" ")]
+          .filter(Boolean)
+          .join(", ") ||
+        [k?.street, [k?.zip, k?.city].filter(Boolean).join(" ")]
+          .filter(Boolean)
+          .join(", ") ||
+        null;
+
       return {
         id: e.id,
         art: e.art as EinsatzArt,
-        titel: e.titel ?? v?.customer?.name ?? "Einsatz",
+        titel: e.titel ?? v?.customer?.name ?? k?.name ?? "Einsatz",
         von: e.von,
         bis: e.bis,
         ganztaegig: e.ganztaegig,
@@ -159,7 +192,11 @@ export async function tafelLaden(
         benoetigt: e.benoetigte_qualifikationen ?? [],
         vorgangId: e.vorgang_id,
         vorgangNummer: v?.number ?? null,
-        kundeName: v?.customer?.name ?? null,
+        kundeId: e.kunde_id,
+        kundeName: v?.customer?.name ?? k?.name ?? null,
+        adresse,
+        serviceTicketId: e.service_ticket_id,
+        serviceTicketNummer: t?.number ?? null,
         anzahlStopps: (e.stopps ?? []).length,
         stopps: (e.stopps ?? [])
           .slice()
@@ -238,6 +275,8 @@ type EinsatzRoh = {
   fahrzeug_id: string | null;
   benoetigte_qualifikationen: string[] | null;
   vorgang_id: string | null;
+  kunde_id: string | null;
+  service_ticket_id: string | null;
   personen: { user_id: string }[] | null;
   stopps:
     | {
@@ -251,4 +290,6 @@ type EinsatzRoh = {
       }[]
     | null;
   vorgang: unknown;
+  kunde: unknown;
+  anliegen: unknown;
 };

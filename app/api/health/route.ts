@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fehlendeResendVariablen } from "@/lib/mail/resend";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -17,10 +18,21 @@ export async function GET() {
     checks.datenbank = "fehler";
   }
 
+  /*
+   * Der Mailweg gehört in die Auskunft, aber nicht in die Ampel: ein
+   * fehlendes Postfach macht die Anwendung nicht kaputt, es lässt nur
+   * Mails liegen. Der Uptime-Monitor soll deswegen nicht anschlagen —
+   * wer aber "warum geht kein Versand" fragt, sieht die Antwort hier,
+   * ohne sich durch die Vercel-Oberfläche zu klicken. Nur Namen, keine
+   * Werte.
+   */
+  const fehlt = fehlendeResendVariablen();
+  const mail = fehlt.length === 0 ? "ok" : `unvollständig: ${fehlt.join(", ")}`;
+
   const healthy = Object.values(checks).every((v) => v === "ok");
 
   return NextResponse.json(
-    { status: healthy ? "ok" : "fehler", checks },
+    { status: healthy ? "ok" : "fehler", checks, mail },
     { status: healthy ? 200 : 503 },
   );
 }

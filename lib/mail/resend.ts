@@ -23,7 +23,22 @@ import type { Ausgang, Versandergebnis } from "./send";
 const API = "https://api.resend.com/emails";
 
 export function resendVerfuegbar(): boolean {
-  return Boolean(process.env.RESEND_API_KEY && absender());
+  return fehlendeResendVariablen().length === 0;
+}
+
+/**
+ * Welche Umgebungsvariablen fehlen — namentlich.
+ *
+ * "Kein Ersatzversand eingerichtet" beantwortet die einzige Frage nicht,
+ * die man in dem Moment hat: WAS fehlt. Beide Werte sind Pflicht, und
+ * einen Schlüssel ohne Absenderadresse zu setzen ist der Fehler, den man
+ * beim Nachtragen in Vercel als Erstes macht.
+ */
+export function fehlendeResendVariablen(): string[] {
+  return [
+    process.env.RESEND_API_KEY ? null : "RESEND_API_KEY",
+    process.env.RESEND_FROM ? null : "RESEND_FROM",
+  ].filter((v): v is string => v !== null);
 }
 
 function absender(): string | null {
