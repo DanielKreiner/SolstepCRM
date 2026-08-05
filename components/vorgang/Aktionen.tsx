@@ -37,18 +37,32 @@ type Aktion = {
 };
 
 const AKTION: Partial<Record<Phase, Aktion>> = {
+  /*
+   * Anfrage und Aufnahme haben hier keinen Knopf mehr.
+   *
+   * Beide Schritte passieren woanders: die Aufnahme wird im Reiter
+   * „Aufnahme" gestartet und abgeschlossen, das Angebot im Reiter
+   * „Angebot" verschickt. Die Phase zieht dort mit (siehe
+   * lib/vorgang/phase-mitziehen). Ein Knopf, der nur nachträglich
+   * bestätigt, was ohnehin schon geschehen ist, wird entweder vergessen
+   * — dann steht der Vorgang im Board falsch — oder er wird gedrückt,
+   * ohne dass jemand die Arbeit gemacht hat. Beides ist schlechter als
+   * kein Knopf.
+   *
+   * Die Annahme durch den Kunden bleibt ausdrücklich (AnnahmePanel):
+   * sie löst die Kaskade aus und darf kein Nebeneffekt sein.
+   */
   anfrage: {
-    titel: "Aufnahme planen",
-    hinweis: "Vor-Ort-Termin für Dachdaten und Machbarkeit.",
-    label: "Aufnahme starten",
-    nach: "aufnahme",
-    notiz: "Aufnahme begonnen.",
+    titel: "Aufnahme vor Ort",
+    hinweis:
+      "Im Reiter „Aufnahme“ starten — die Phase zieht dann von selbst mit.",
+    label: "",
   },
   aufnahme: {
     titel: "Angebot erstellen",
-    hinweis: "Positionen inline im Vorgang, kein Seitenwechsel.",
-    label: "Angebot erstellen",
-    nach: "angebot",
+    hinweis:
+      "Positionen im Reiter „Angebot“ zusammenstellen und verschicken. Sobald es raus ist, steht der Vorgang beim Angebot.",
+    label: "",
   },
   angebot: {
     titel: "Rückmeldung des Kunden",
@@ -158,12 +172,12 @@ export function Aktionspanel({
           offeneGates={offeneGates}
           darfSchreiben={darfSchreiben}
         />
-      ) : (
+      ) : phase === "abschluss" ? (
         <p className="rounded-input bg-panel px-4 py-3 text-[12.5px] text-muted">
           Der Vorgang ist in der letzten Phase. Schlussrechnung und Zahlung
           laufen über die Dokumente.
         </p>
-      )}
+      ) : null}
 
       {darfSchreiben ? (
         <VerlorenKnopf vorgangId={vorgangId} phase={phase} />

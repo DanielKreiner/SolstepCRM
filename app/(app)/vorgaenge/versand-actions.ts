@@ -7,6 +7,7 @@ import { belegPdf } from "@/lib/pdf/erzeugen";
 import { createPortalAccess } from "./kunde-actions";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { phaseMitziehen } from "@/lib/vorgang/phase-mitziehen";
 import {
   einreihen,
   kundeZumVorgang,
@@ -196,6 +197,21 @@ export async function angebotSenden(
     .from("vorgang")
     .update({ angebot_versendet_am: new Date().toISOString() })
     .eq("id", vorgangId);
+
+  /*
+   * Ein verschicktes Angebot IST das Angebot. Vorher stand der Vorgang
+   * danach noch in „Aufnahme", bis jemand im Überblick einen Knopf
+   * drückte — im Board also eine Phase zurück, obwohl der Kunde die Mail
+   * schon hatte.
+   */
+  await phaseMitziehen(admin, {
+    companyId: z1.me.companyId,
+    vorgangId,
+    userId: z1.me.id,
+    aus: ["anfrage", "aufnahme"],
+    nach: "angebot",
+    grund: "Angebot an den Kunden verschickt.",
+  });
 
   await admin.from("vorgang_event").insert({
     company_id: z1.me.companyId,

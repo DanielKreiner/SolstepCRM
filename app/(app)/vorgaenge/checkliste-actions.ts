@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { phaseMitziehen } from "@/lib/vorgang/phase-mitziehen";
 import { anhangSpeichern } from "@/lib/vorgang/chat";
 
 export type AufnahmeStatus = { error: string | null; ok: string | null };
@@ -110,6 +111,19 @@ export async function aufnahmeStarten(
     );
     if (pErr) return { error: `Punkte fehlgeschlagen: ${pErr.message}`, ok: null };
   }
+
+  /*
+   * Wer die Aufnahme startet, hat sie begonnen — dafür braucht es
+   * keinen zweiten Knopf im Überblick.
+   */
+  await phaseMitziehen(supabase, {
+    companyId: z1.me.companyId,
+    vorgangId,
+    userId: z1.me.id,
+    aus: ["anfrage"],
+    nach: "aufnahme",
+    grund: "Aufnahme vor Ort begonnen.",
+  });
 
   revalidatePath(`/vorgaenge/${vorgangId}`);
   return {
@@ -355,6 +369,20 @@ export async function aufnahmeAbschliessen(
     created_by: z1.me.id,
   });
 
+  /*
+   * Und die Phase zieht mit. Vorher musste jemand danach noch im
+   * Überblick „Angebot erstellen" drücken — der Vorgang stand also im
+   * Board eine Phase zurück, obwohl die Aufnahme fertig war.
+   */
+  await phaseMitziehen(supabase, {
+    companyId: z1.me.companyId,
+    vorgangId: parsed.data.vorgangId,
+    userId: z1.me.id,
+    aus: ["anfrage", "aufnahme"],
+    nach: "angebot",
+    grund: "Aufnahme vor Ort abgeschlossen.",
+  });
+
   revalidatePath(`/vorgaenge/${parsed.data.vorgangId}`);
-  return { error: null, ok: "Aufnahme abgeschlossen." };
+  return { error: null, ok: "Aufnahme abgeschlossen. Der Vorgang steht jetzt beim Angebot." };
 }
