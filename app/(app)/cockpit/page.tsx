@@ -288,9 +288,6 @@ function PageKopf({ firma, heute }: { firma: string; heute: string }) {
           Kalkulation. Der Weg führt deshalb über das Angebot.
         */}
         <LinkButton href="/vorgaenge">Vorgang anlegen</LinkButton>
-        <LinkButton href="/berichte" variant="ghost">
-          Berichte
-        </LinkButton>
       </div>
     </div>
   );

@@ -48,7 +48,7 @@ export function StockMoveForm({
     >
       <h2 className="text-[15px] font-semibold">Material buchen</h2>
       <p className="mt-1 mb-4 text-[12.5px] text-muted">
-        Der Bestand wird von der Datenbank fortgeschrieben.
+        Der Bestand ändert sich mit der Buchung.
       </p>
 
       <div className="flex flex-col gap-3">

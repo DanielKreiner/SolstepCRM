@@ -49,8 +49,6 @@ export async function Shell({
     { count: rechnungenOffen },
     { count: antraegeOffen },
     { count: korrekturenOffen },
-    { count: ticketsOffen },
-    { count: bewerberOffen },
   ] = await Promise.all([
     me.locationId
       ? supabase
@@ -81,14 +79,6 @@ export async function Shell({
       .from("time_correction")
       .select("id", { count: "exact", head: true })
       .eq("status", "requested"),
-    supabase
-      .from("service_ticket")
-      .select("id", { count: "exact", head: true })
-      .not("status", "in", "(closed,resolved)"),
-    supabase
-      .from("applicant")
-      .select("id", { count: "exact", head: true })
-      .not("stage", "in", "(zusage,abgelehnt)"),
   ]);
 
   const visibleAreas = Object.entries(me.perms)
@@ -101,8 +91,6 @@ export async function Shell({
     "/offene-posten": rechnungenOffen,
     "/zeiten": korrekturenOffen,
     "/abwesenheiten": antraegeOffen,
-    "/service": ticketsOffen,
-    "/bewerber": bewerberOffen,
   });
 
   return (

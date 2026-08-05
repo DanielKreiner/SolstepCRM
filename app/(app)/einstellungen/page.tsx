@@ -339,9 +339,8 @@ export default async function EinstellungenPage({
           {bereich === "rechte" ? (
             <Abschnitt titel="Rollen und Rechte">
               <p className="-mt-1 mb-4 text-[12.5px] text-muted">
-                Drei Zustände je Bereich. Durchgesetzt wird das in der Datenbank
-                über <span className="num">can()</span> — die Navigation blendet
-                nur zusätzlich aus.
+                Drei Zustände je Bereich. Was hier steht, gilt überall —
+                auch für jemanden, der eine Seite direkt aufruft.
               </p>
 
               <div className="overflow-x-auto">

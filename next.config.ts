@@ -16,6 +16,25 @@ const nextConfig: NextConfig = {
    * distDir für den Build lässt das Deployment ins Leere greifen.
    */
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  /*
+   * Alte Lesezeichen sollen nicht ins Leere laufen. Die Seiten dahinter
+   * gibt es nicht mehr — ihre Inhalte sind in „Zeiten", „Heute" und den
+   * Vorgang gewandert.
+   */
+  async redirects() {
+    return [
+      { source: "/zeiterfassung", destination: "/zeiten", permanent: false },
+      { source: "/stundenkonto", destination: "/zeiten?tab=konten", permanent: false },
+      { source: "/meine-zeiten", destination: "/m/zeiten", permanent: false },
+      { source: "/meine-dokumente", destination: "/m/dokumente", permanent: false },
+      { source: "/mein-einsatz", destination: "/m/heute", permanent: false },
+      { source: "/m/stempeln", destination: "/m/heute", permanent: false },
+      { source: "/dokumente", destination: "/mitarbeiter", permanent: false },
+      { source: "/berichte", destination: "/cockpit", permanent: false },
+      { source: "/chat", destination: "/vorgaenge", permanent: false },
+      { source: "/bewerber", destination: "/mitarbeiter", permanent: false },
+    ];
+  },
   typescript: {
     // Kein Build, der Typfehler durchwinkt.
     ignoreBuildErrors: false,

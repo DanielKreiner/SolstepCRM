@@ -357,8 +357,8 @@ function Linkkasten({ link }: { link: string | null }) {
         className="num w-full rounded-input border border-transparent bg-surface px-[11px] py-[9px] text-[11.5px] outline-0"
       />
       <p className="mt-2 text-[11px] text-faint">
-        Verschlüsselt gespeichert, geprüft wird gegen den Hash. Ein Leck der
-        Datenbank allein gibt ihn nicht preis.
+        Der Link gilt nur für diesen Kunden und lässt sich jederzeit
+        widerrufen.
       </p>
     </div>
   );
