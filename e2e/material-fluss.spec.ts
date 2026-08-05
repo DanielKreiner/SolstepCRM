@@ -462,6 +462,54 @@ test("13 — die Antwort an den Monteur enthält keine Einkaufspreise", async ({
 test("8 — Rückläufer entlasten den Vorgang und füllen das Lager", async ({
   page,
 }) => {
+  const db = admin();
+
+  /*
+   * Eigener Aufbau statt Erbe: den Einsatz und die Entnahme legte bis
+   * hierher der Beladelisten-Test an, und der steht auf fixme. Ein Test,
+   * dessen Vorbedingung ein anderer, übersprungener Test herstellt,
+   * scheitert ohne eigenen Fehler.
+   */
+  const { data: monteur } = await db
+    .from("app_user")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .eq("role", "monteur")
+    .eq("active", true)
+    .limit(1)
+    .single();
+
+  const heute = new Date().toISOString().slice(0, 10);
+  const { data: e } = await db
+    .from("einsatz")
+    .insert({
+      company_id: COMPANY_A,
+      art: "auftrag",
+      vorgang_id: z.vorgangId,
+      fahrzeug_id: z.fahrzeugId,
+      von: `${heute}T05:00:00Z`,
+      bis: `${heute}T14:00:00Z`,
+    })
+    .select("id")
+    .single();
+
+  await db.from("einsatz_person").insert({
+    company_id: COMPANY_A,
+    einsatz_id: e!.id,
+    user_id: monteur!.id,
+  });
+
+  /* 20 Module sind auf dem Vorgang — genau das, was zurückkommen kann. */
+  await db.from("lagerbewegung").insert({
+    company_id: COMPANY_A,
+    artikel_id: z.modulId,
+    vorgang_id: z.vorgangId,
+    typ: "entnahme",
+    menge: 20,
+    von_lagerort_id: z.hauptlager,
+    created_by: monteur!.id,
+  });
+
   const vorherLager = await bestand(z.modulId!, z.hauptlager!);
 
   await login(page, DEMO.monteur);
@@ -477,9 +525,15 @@ test("8 — Rückläufer entlasten den Vorgang und füllen das Lager", async ({
   await block.getByRole("button", { name: "Zurückbuchen" }).click();
   await expect(page.getByText("Zurückgebucht.")).toBeVisible({ timeout: 20_000 });
 
-  expect(await bestand(z.modulId!, z.hauptlager!)).toBe(vorherLager + 2);
+  /*
+   * Die Meldung kommt aus der Warteschlange und damit sofort — sie sagt
+   * "angenommen", nicht "gebucht". Gemessen wird deshalb mit Geduld, bis
+   * der Versand durch ist.
+   */
+  await expect
+    .poll(async () => bestand(z.modulId!, z.hauptlager!), { timeout: 20_000 })
+    .toBe(vorherLager + 2);
 
-  const db = admin();
   const { data: rueck } = await db
     .from("lagerbewegung")
     .select("ist_rueckgabe, vorgang_id")
