@@ -128,6 +128,29 @@ async function zeitenSeeden(
     .eq("company_id", COMPANY_A)
     .like("note", `${MARKE}%`);
 
+  /*
+   * Die Einsätze des letzten Laufs mit weg — sonst wächst die Plantafel
+   * bei jedem Seed um weitere hundert Montagen, die es nie gab. Erkennbar
+   * sind sie daran, dass keine Zeitbuchung mehr an ihnen hängt.
+   */
+  const { data: alteEinsaetze } = await admin
+    .from("einsatz")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .eq("art", "auftrag")
+    .eq("titel", "Montage");
+
+  for (const e of alteEinsaetze ?? []) {
+    const { count } = await admin
+      .from("time_entry")
+      .select("id", { count: "exact", head: true })
+      .eq("einsatz_id", e.id);
+    if ((count ?? 0) === 0) {
+      await admin.from("einsatz_person").delete().eq("einsatz_id", e.id);
+      await admin.from("einsatz").delete().eq("id", e.id);
+    }
+  }
+
   const { data: vorgaenge } = await admin
     .from("vorgang")
     .select("id, number, phase")
@@ -145,6 +168,13 @@ async function zeitenSeeden(
   if (ziele.length === 0) throw new Error("Keine laufenden Vorgänge gefunden.");
 
   const zeilen: Record<string, unknown>[] = [];
+  /*
+   * Die Einsätze entstehen mit vorgegebener id, damit die Zeitbuchungen
+   * im selben Durchlauf darauf zeigen können. Ein zweiter Roundtrip je
+   * Tag wäre siebzig Anfragen für nichts.
+   */
+  const einsaetze: Record<string, unknown>[] = [];
+  const einsatzPersonen: Record<string, unknown>[] = [];
 
   for (let tagIndex = 1; tagIndex <= 70; tagIndex++) {
     const tag = tagVor(tagIndex);
@@ -172,12 +202,35 @@ async function zeitenSeeden(
 
       const vorgang = ziele[(tagIndex + i) % ziele.length]!;
 
+      /*
+       * Jede Zeit hängt an einem Einsatz — ohne ihn gehört sie niemandem
+       * (Briefing 2.1). Ein Einsatz je Person und Tag, wie ihn die
+       * Plantafel auch anlegen würde.
+       */
+      const einsatzId = crypto.randomUUID();
+      einsaetze.push({
+        id: einsatzId,
+        company_id: COMPANY_A,
+        art: "auftrag",
+        vorgang_id: vorgang.id,
+        titel: "Montage",
+        von,
+        bis,
+        ganztaegig: false,
+      });
+      einsatzPersonen.push({
+        company_id: COMPANY_A,
+        einsatz_id: einsatzId,
+        user_id: u.id,
+      });
+
       if (dicht) {
         /* Anfahrt und Arbeit getrennt — so bucht die Monteur-App auch. */
         const fahrtBis = new Date(new Date(von).getTime() + 40 * 60_000).toISOString();
         zeilen.push({
           company_id: COMPANY_A,
           user_id: u.id,
+          einsatz_id: einsatzId,
           vorgang_id: vorgang.id,
           kind: "travel",
           started_at: von,
@@ -196,6 +249,7 @@ async function zeitenSeeden(
         zeilen.push({
           company_id: COMPANY_A,
           user_id: u.id,
+          einsatz_id: einsatzId,
           vorgang_id: vorgang.id,
           kind: "work",
           started_at: fahrtBis,
@@ -209,6 +263,7 @@ async function zeitenSeeden(
         zeilen.push({
           company_id: COMPANY_A,
           user_id: u.id,
+          einsatz_id: einsatzId,
           vorgang_id: vorgang.id,
           kind: "work",
           started_at: von,
@@ -222,13 +277,25 @@ async function zeitenSeeden(
     });
   }
 
-  /* In Blöcken, sonst wird die Anfrage zu gross. */
+  /* In Blöcken, sonst wird die Anfrage zu gross. Einsätze zuerst. */
+  for (let i = 0; i < einsaetze.length; i += 200) {
+    const { error } = await admin.from("einsatz").insert(einsaetze.slice(i, i + 200));
+    if (error) throw error;
+  }
+  for (let i = 0; i < einsatzPersonen.length; i += 200) {
+    const { error } = await admin
+      .from("einsatz_person")
+      .insert(einsatzPersonen.slice(i, i + 200));
+    if (error) throw error;
+  }
   for (let i = 0; i < zeilen.length; i += 200) {
     const { error } = await admin.from("time_entry").insert(zeilen.slice(i, i + 200));
     if (error) throw error;
   }
 
-  console.log(`  ${zeilen.length} Zeitbuchungen über zehn Wochen`);
+  console.log(
+    `  ${zeilen.length} Zeitbuchungen an ${einsaetze.length} Einsätzen über zehn Wochen`,
+  );
 }
 
 /* ------------------------------------------------------- KONTOBEWEGUNG */
