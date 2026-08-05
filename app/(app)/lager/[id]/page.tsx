@@ -215,7 +215,7 @@ export default async function ArtikelPage({
             href="/lager"
             className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
           >
-            Zum Lager
+            Zu den Artikeln
           </Link>
           </>
         }

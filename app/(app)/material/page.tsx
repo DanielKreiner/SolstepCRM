@@ -139,6 +139,18 @@ export default async function MaterialPage({
         subtitle="Kommissionieren, einbuchen, nachfüllen"
         actions={
           <>
+            {/*
+              Der Artikelstamm hing nach dem Navigationsumbau in der
+              Luft: die Sidebar zeigt "Material", verlinkt aber nur diese
+              Übersicht — und von hier führte kein Weg zu den Artikeln.
+              474 Stück, anlegbar und pflegbar, aber unerreichbar.
+            */}
+            <Link
+              href="/lager"
+              className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
+            >
+              Artikel
+            </Link>
             <Link
               href="/material/bestand"
               className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"

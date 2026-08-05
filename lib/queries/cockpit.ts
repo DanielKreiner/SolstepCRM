@@ -24,6 +24,18 @@ import {
  * brauchen.
  */
 
+/*
+ * Kurzfassung der Anliegen-Kategorien. Bewusst dieselben Worte wie auf
+ * /service — zwei Bezeichnungen für dasselbe Ticket sind zwei Tickets im
+ * Kopf des Lesers.
+ */
+const KATEGORIE_KURZ: Record<string, string> = {
+  stoerung: "Störung",
+  frage: "Frage",
+  beschwerde: "Beschwerde",
+  rechnung: "Rechnungsfrage",
+};
+
 export type Handlung = {
   ton: "kritisch" | "warn" | "doing";
   titel: string;
@@ -104,6 +116,7 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
     { data: lager },
     { data: zertifikate },
     { data: abwesend },
+    { data: anliegen },
   ] = await Promise.all([
     supabase
       .from("vorgang")
@@ -138,7 +151,12 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
       )
       .eq("status", "running")
       .order("started_at"),
-    supabase.from("v_stock_alert").select("id, sku, name, stock, min_stock"),
+    /*
+     * bestand statt stock: die alte Spalte wird nur noch von den
+     * Altwegen fortgeschrieben, der wahre Bestand entsteht seit 0051 aus
+     * den Lagerbewegungen.
+     */
+    supabase.from("v_stock_alert").select("id, sku, name, bestand, min_stock"),
     supabase
       .from("qualification")
       .select("id, name, valid_until, user:user_id ( name )")
@@ -151,6 +169,17 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
       .eq("status", "approved")
       .lte("from_date", heute)
       .gte("to_date", heute),
+    /*
+     * Offene Serviceanliegen. Der Navigationspunkt "Service" ist
+     * gestrichen — Serviceeinsätze leben in Planung und Vorgängen. Das
+     * Anliegen selbst entsteht aber vorher: ein Kunde meldet sich über
+     * das Portal. Stünde es nirgends, fiele es auf den Boden.
+     */
+    supabase
+      .from("service_ticket")
+      .select("id, number, category, body, severity, created_at, customer:customer_id ( name )")
+      .eq("status", "offen")
+      .order("created_at"),
   ]);
 
   const zeilen = (vorgaenge ?? []) as unknown as VorgangZeile[];
@@ -276,13 +305,41 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
     });
   }
 
-  type Alert = { id: string; sku: string; name: string; stock: string; min_stock: string };
+  type Alert = { id: string; sku: string; name: string; bestand: string; min_stock: string };
   for (const a of ((lager ?? []) as unknown as Alert[]).slice(0, 3)) {
     handlungsbedarf.push({
       ton: "warn",
       titel: `${a.name} unter Mindestbestand`,
-      detail: `${fmt(Number(a.stock))} von ${fmt(Number(a.min_stock))} · ${a.sku}`,
+      detail: `${fmt(Number(a.bestand))} von ${fmt(Number(a.min_stock))} · ${a.sku}`,
       href: "/lager",
+    });
+  }
+
+  type Anliegen = {
+    id: string;
+    number: string | null;
+    category: string | null;
+    body: string | null;
+    severity: number | null;
+    created_at: string;
+    customer: { name: string } | null;
+  };
+  for (const t of ((anliegen ?? []) as unknown as Anliegen[]).slice(0, 3)) {
+    const tage = tageSeit(t.created_at.slice(0, 10), heute);
+    handlungsbedarf.push({
+      /*
+       * Stufe 1 ist die Störung, die den Betrieb der Anlage anhält. Und
+       * ein Kunde, der seit einer Woche wartet, ist kein Hinweis mehr —
+       * egal, wie harmlos die Frage war.
+       */
+      ton: Number(t.severity) === 1 || tage >= 7 ? "kritisch" : "warn",
+      titel: `${KATEGORIE_KURZ[t.category ?? ""] ?? "Anliegen"}: ${
+        t.body?.trim().slice(0, 52) || (t.number ?? "ohne Betreff")
+      }`,
+      detail: `${t.customer?.name ?? "ohne Kunde"} · ${
+        tage === 0 ? "heute" : `seit ${tage} Tagen`
+      }`,
+      href: `/service/${t.id}`,
     });
   }
 

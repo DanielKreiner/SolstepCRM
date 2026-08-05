@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ArtikelAnlegen } from "./ArtikelForms";
 import { StockMoveForm } from "./StockMoveForm";
 
-export const metadata: Metadata = { title: "Lager" };
+export const metadata: Metadata = { title: "Artikel" };
 
 type Article = {
   id: string;
@@ -127,12 +127,21 @@ export default async function LagerPage({
 
   return (
     <>
+      {/*
+        "Artikel" und nicht "Lager": /material heisst schon Lager und
+        beantwortet die Frage des Tages — was muss heute in den Bus. Hier
+        steht der Stamm dahinter. Zwei Seiten mit demselben Titel sind
+        zwei Seiten, von denen man nie weiss, auf welcher man ist.
+      */}
       <PageHeader
-        title="Lager"
-        subtitle="Bestand, Artikel, Bewegungen, Bestellungen"
+        title="Artikel"
+        subtitle="Stammdaten, Bestand, Bewegungen"
         actions={
           <>
             {me.perms.lager === "write" ? <ArtikelAnlegen /> : null}
+            <LinkButton href="/material" variant="ghost">
+              Zum Lager
+            </LinkButton>
             <LinkButton href="/bestellungen" variant="ghost">
               Bestellvorschlag
             </LinkButton>

@@ -87,7 +87,8 @@ export async function Shell({
 
   const navBadges = nurEchte({
     "/vorgaenge": angeboteOffen,
-    "/lager": lowStock,
+    /* Der Punkt heisst "Material" — an /lager hing das Abzeichen ins Leere. */
+    "/material": lowStock,
     "/offene-posten": rechnungenOffen,
     "/zeiten": korrekturenOffen,
     "/abwesenheiten": antraegeOffen,

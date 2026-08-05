@@ -20,7 +20,7 @@ export async function GET(request: Request) {
       for (const mandant of await aktiveMandanten(admin)) {
         const { data: knapp } = await admin
           .from("v_stock_alert")
-          .select("id, sku, name, stock, min_stock, unit")
+          .select("id, sku, name, bestand, min_stock, unit")
           .eq("company_id", mandant.id);
 
         if (!knapp?.length) continue;
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
               user_id: u.id,
               kind: "stock_low",
               title: `${a.sku as string} unter Mindestbestand`,
-              body: `${a.stock as string} ${a.unit as string} von ${a.min_stock as string} — ${a.name as string}`,
+              body: `${a.bestand as string} ${a.unit as string} von ${a.min_stock as string} — ${a.name as string}`,
               link,
             });
           }
