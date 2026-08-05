@@ -137,8 +137,13 @@ async function zeitenSeeden(
     .from("einsatz")
     .select("id")
     .eq("company_id", COMPANY_A)
-    .eq("art", "auftrag")
-    .eq("titel", "Montage");
+    /*
+     * Auch die Sammel-Einsätze aus Migration 0057: sie tragen nichts als
+     * die Zuordnung der Alt-Zeiten. Nimmt der Seed diese Zeiten weg,
+     * bleiben leere Hüllen stehen und die Plantafel füllt sich mit
+     * Terminen, an denen niemand etwas vorhat.
+     */
+    .in("titel", ["Montage", "Migration Altdaten"]);
 
   for (const e of alteEinsaetze ?? []) {
     const { count } = await admin
