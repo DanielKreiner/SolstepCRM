@@ -363,19 +363,18 @@ test("5 — Zweimal annehmen erzeugt keinen zweiten Auftrag", async ({ page }) =
   expect(nachher?.length).toBe(vorher?.length);
 });
 
-test("6 — Ein Monteur sieht keine Beträge", async ({ page }) => {
+test("6 — Ein Monteur kommt gar nicht erst auf das Board", async ({ page }) => {
   await login(page, DEMO.monteur);
-  const antwort = await page.goto(`/vorgaenge/${zustand.vorgangId}`);
-
-  if ((antwort?.status() ?? 200) >= 400) return;
 
   /*
-   * Kein Betrag heisst ein Strich, nicht 0 €. Die View liefert der Rolle
-   * keine Zeile, und eine 0 wäre eine Aussage — und zwar eine falsche.
+   * Seit dem Navigationsumbau sieht die Montage ihre eigene App. Ein
+   * alter Link auf einen Vorgang landet nicht in einer Seite ohne
+   * Rechte, sondern dort, wo die Rolle hingehört — und damit auch
+   * nirgends an einem Auftragswert.
    */
-  await expect(
-    page.getByText("für diese Rolle nicht sichtbar"),
-  ).toBeVisible({ timeout: 15_000 });
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
+  await expect(page).toHaveURL(/\/m\/heute/, { timeout: 15_000 });
+  await expect(page.locator("body")).not.toContainText("Auftragswert netto");
 });
 
 test("7 — Terminiert wird in der Plantafel, der Vorgang zeigt den Termin", async ({

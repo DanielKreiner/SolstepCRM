@@ -74,7 +74,7 @@ async function buche(
 ): Promise<void> {
   // Der Tag steckt in der Adresse, nicht im Formular — die Seite zeigt
   // immer genau einen Tag, und der Link darauf soll teilbar sein.
-  await page.goto(`/zeiterfassung?tag=${TAG}`);
+  await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
   await page.getByLabel("Person").selectOption(zustand.userId!);
   await page.getByLabel("Beginn").fill(von);
   await page.getByLabel("Ende").fill(bis);

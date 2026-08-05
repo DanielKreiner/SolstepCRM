@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { BRAND } from "@/lib/brand";
 import { ausBytea, entschluesseln } from "@/lib/mail/crypto";
 import { markeAus, type Marke } from "@/lib/marke";
+import { zustellen } from "@/lib/mail/zustellen";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /*
@@ -187,6 +188,14 @@ export async function einreihen(
   if (error || !data) {
     return { ok: false, grund: error?.message ?? "Einreihen fehlgeschlagen." };
   }
+
+  /*
+   * Sofort zustellen. Die Warteschlange bleibt der Sicherungsanker —
+   * geht der Anbieter gerade nicht ran, holt der Cron es nach —, aber
+   * wer auf „senden" drückt, soll nicht zwei Minuten warten müssen.
+   */
+  await zustellen(admin, data.id as string);
+
   return { ok: true, id: data.id as string };
 }
 

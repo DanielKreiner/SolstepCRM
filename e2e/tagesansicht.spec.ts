@@ -31,7 +31,7 @@ test("Die Tagesansicht zeigt jede aktive Person, auch ohne Buchung", async ({
 }) => {
   await aufraeumen();
   await login(page, DEMO.gf);
-  await page.goto(`/zeiterfassung?tag=${TAG}`);
+  await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
 
   const db = admin();
   const { data: leute } = await db
@@ -73,7 +73,7 @@ test("Eine Buchung ohne Auftrag wird zur Prüfung markiert", async ({ page }) =>
   });
 
   await login(page, DEMO.gf);
-  await page.goto(`/zeiterfassung?tag=${TAG}`);
+  await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
 
   await expect(page.getByText("keine Zuordnung").first()).toBeVisible();
   await expect(
@@ -111,7 +111,7 @@ test("Über zehn Stunden ohne Pause gilt als unplausibel", async ({ page }) => {
   });
 
   await login(page, DEMO.gf);
-  await page.goto(`/zeiterfassung?tag=${TAG}`);
+  await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
 
   await expect(page.getByText("unplausibel").first()).toBeVisible();
   await expect(page.getByText("über 10 Stunden ohne Pause")).toBeVisible();
@@ -159,7 +159,7 @@ test("Mit gebuchter Pause ist derselbe Tag nicht mehr unplausibel", async ({
   ]);
 
   await login(page, DEMO.gf);
-  await page.goto(`/zeiterfassung?tag=${TAG}`);
+  await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
 
   await expect(page.getByText("über 10 Stunden ohne Pause")).toHaveCount(0);
 });
@@ -169,7 +169,7 @@ test("Ein Monteur sieht in der Tagesansicht nur sich selbst", async ({
 }) => {
   // Migration 0008: die Zeiten der Kollegen gehen ihn nichts an.
   await login(page, DEMO.monteur);
-  await page.goto(`/zeiterfassung?tag=${TAG}`);
+  await page.goto(`/zeiten?tab=heute&tag=${TAG}`);
 
   await expect(page.getByText("Michael Hofstätter")).toHaveCount(0);
   await expect(page.getByText("Sabine Reiter")).toHaveCount(0);

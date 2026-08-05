@@ -136,7 +136,7 @@ test("Ein Dokument mit ausstehender Unterschrift lässt sich bestätigen", async
 
   // Die betroffene Person darf selbst unterschreiben.
   await login(page, DEMO.monteur);
-  await page.goto("/meine-dokumente");
+  await page.goto("/m/dokumente");
 
   await expect(page.getByText("e2e-m10b-vertrag.pdf").first()).toBeVisible();
   await page
@@ -247,7 +247,7 @@ test("Meine Zeiten zeigen ausschließlich die eigenen Buchungen", async ({
   const uid = await userId(DEMO.monteur);
 
   await login(page, DEMO.monteur);
-  await page.goto("/meine-zeiten");
+  await page.goto("/m/zeiten");
 
   await expect(page.getByRole("heading", { name: "Meine Zeiten" })).toBeVisible();
 

@@ -176,7 +176,7 @@ test("Eine genehmigte Korrektur überschreibt nicht, sondern ersetzt", async ({
   expect(original!.duration_min).toBe(480);
 
   await login(page, DEMO.bauleitung);
-  await page.goto("/stundenkonto");
+  await page.goto("/zeiten?tab=konten");
 
   const eintrag = page.locator(`li[data-entry="${original!.id}"]`);
   await eintrag.getByLabel("Ende").fill("17:00");
@@ -273,7 +273,7 @@ test("Eine abgelehnte Korrektur lässt die Buchung unverändert", async ({
   });
 
   await login(page, DEMO.bauleitung);
-  await page.goto("/stundenkonto");
+  await page.goto("/zeiten?tab=konten");
 
   const karte = page.locator("li", { hasText: "E2E-M10 Wird abgelehnt" });
   await karte.getByRole("button", { name: "ablehnen" }).click();

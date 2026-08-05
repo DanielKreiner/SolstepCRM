@@ -32,7 +32,7 @@ test("Zeitbuchung mit Auftragsbezug erhöht die Iststunden des Auftrags", async 
   const id = await vorgangId(AUFTRAG);
 
   await login(page, DEMO.bauleitung);
-  await page.goto("/zeiterfassung");
+  await page.goto("/zeiten");
 
   const form = page.locator("form", { hasText: "Buchung anlegen" });
   await form.getByLabel("Beginn").fill("06:00");
@@ -67,7 +67,7 @@ test("Verdrehte Zeiten werden abgewiesen und nicht gespeichert", async ({
   const AUFTRAG = "A-2026-0042";
 
   await login(page, DEMO.bauleitung);
-  await page.goto("/zeiterfassung");
+  await page.goto("/zeiten");
 
   const form = page.locator("form", { hasText: "Buchung anlegen" });
   await form.getByLabel("Beginn").fill("10:00");

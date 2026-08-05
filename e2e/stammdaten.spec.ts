@@ -211,10 +211,12 @@ test("Eine doppelte Artikelnummer wird abgewiesen", async ({ page }) => {
 test("Ohne Schreibrecht gibt es keine Anlegen-Knöpfe", async ({ page }) => {
   await login(page, DEMO.monteur);
 
+  /*
+   * Das Board sieht die Montage seit dem Navigationsumbau gar nicht
+   * mehr — sie landet in ihrer eigenen App.
+   */
   await page.goto("/vorgaenge");
-  await expect(
-    page.getByRole("button", { name: "Vorgang anlegen" }),
-  ).toHaveCount(0);
+  await expect(page).toHaveURL(/\/m\/heute/, { timeout: 15_000 });
 
   await page.goto("/lager");
   await expect(page.getByRole("button", { name: "Artikel anlegen" })).toHaveCount(

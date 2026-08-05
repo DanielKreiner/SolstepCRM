@@ -60,14 +60,47 @@ export function Sammelbestellung({
     return [...gruppen.entries()];
   }, [zeilen]);
 
+  /*
+   * Auch ohne offenen Bedarf muss sich bestellen lassen: Lager
+   * auffüllen, Van-Stock nachfüllen, Werkzeug. Ohne diesen Weg wäre der
+   * einzige Zugang zu einer Bestellung ein Vorgang, der gerade etwas
+   * braucht — und das Lager stünde vor verschlossener Tür.
+   */
+  const leereBestellung = (
+    <form action={anlegen} className="flex flex-wrap items-center gap-2">
+      <select
+        name="lieferantId"
+        data-testid="leer-lieferant"
+        className="mr-2 cursor-pointer rounded-input border border-line bg-surface px-[11px] py-[8px] text-[13px] outline-0 focus:border-accent"
+      >
+        <option value="">Lieferant später</option>
+        {lieferanten.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="submit"
+        data-testid="leere-bestellung"
+        className="min-h-[38px] cursor-pointer rounded-pill border border-line bg-surface px-[20px] text-[12.5px] font-semibold text-ink transition-colors hover:bg-sunk"
+      >
+        Bestellung für das Lager anlegen
+      </button>
+    </form>
+  );
+
   if (zeilen.length === 0) {
     return (
       <section className="rounded-[20px] bg-surface p-5 shadow-soft">
         <h2 className="text-[15px] font-semibold">Nichts offen</h2>
-        <p className="mt-1 text-[12.5px] text-muted">
+        <p className="mt-1 mb-3 text-[12.5px] text-muted">
           Jede Bedarfsposition der laufenden Vorgänge ist gedeckt — im Lager,
-          bestellt oder schon auf der Baustelle.
+          bestellt oder schon auf der Baustelle. Für Lagerauffüllung und
+          Van-Stock geht es trotzdem weiter.
         </p>
+        {leereBestellung}
+        <Meldung status={status} />
       </section>
     );
   }
@@ -171,6 +204,13 @@ export function Sammelbestellung({
 
         <Meldung status={status} />
       </form>
+
+      <div className="mt-4 border-t border-line pt-4">
+        <p className="mb-2 text-[12.5px] text-muted">
+          Nichts davon dabei? Lager auffüllen, Van-Stock, Werkzeug:
+        </p>
+        {leereBestellung}
+      </div>
     </section>
   );
 }
