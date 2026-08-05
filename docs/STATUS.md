@@ -125,6 +125,31 @@ Im eigenen Code:
 - Eine `"use server"`-Datei exportierte eine Konstante. Der Build meldet das
   nicht, die Seite stürzt zur Laufzeit ab
 
+Nach dem Navigations- und Zeiten-Umbau — alles Regressionen, die der Umbau
+selbst hinterlassen hat und die kein Test mehr abdeckte:
+
+- **Offline-Stempeln war tot.** Die Warteschlange kannte `time_start` weiter,
+  der Server nahm sie an — nur füllte sie niemand mehr. Eine Baustelle ohne
+  Empfang verlor jede Buchung (CLAUDE.md 8, Meilenstein 5)
+- **Rundung und Pausenautomatik hatten keine Wirkung.** `lib/rules/zeitregeln`
+  hatte nach dem Umbau keinen einzigen Aufrufer; drei Schreibwege rechneten
+  `>= 360 ? 30 : 0` für sich. Eine Einstellung ohne Wirkung ist schlimmer als
+  keine
+- **Ortszeit hing an der Zeitzone des Servers.**
+  `new Date(x.toLocaleString(..., { timeZone }))` parst in der Zone des
+  Servers — auf Vercel (UTC) richtig, auf einem Rechner in Wien ein Versatz
+  von null. Betraf Nacherfassen, Tagesgrenze und Erinnerungs-Cron
+- **Das Lager war aus /bestellungen ausgesperrt** und konnte damit keinen
+  Wareneingang mehr buchen — bei gleichzeitig geltender Regel „kein
+  Wareneingang ohne Bestellung"
+- **Pausenbuchungen zählten als Arbeitszeit**, weil die neue Abfrage `kind`
+  gar nicht las
+- **Die Plausibilitätswarnungen aus SPEC 4.8 waren verschwunden** — über zehn
+  Stunden ohne Pause lief unbemerkt durch
+- **Eine genehmigte Zeitkorrektur landete als „gebucht"** und musste im
+  Wochenabschluss ein zweites Mal freigegeben werden
+- **Die Einsatznotiz kam beim Monteur nie an** — geladen, nie gerendert
+
 ## Befehle
 
 ```bash
