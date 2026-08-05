@@ -100,6 +100,16 @@ const OFFENE_PHASEN = new Set([
   "montage",
 ]);
 
+/**
+ * Wie viele Werktage der laufenden Woche schon vorbei sind — inklusive
+ * heute. Montag ergibt 1, Freitag und Wochenende ergeben 5.
+ */
+function werktageBisHeute(heute: string): number {
+  const wochentag = new Date(`${heute}T12:00:00`).getDay();
+  if (wochentag === 0) return 5;
+  return Math.min(5, wochentag);
+}
+
 export async function ladeCockpit(meineId: string): Promise<Cockpit> {
   const supabase = await createClient();
   const heute = viennaDay();
@@ -446,7 +456,19 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
     auslastung,
     auslastung4: mittlereAuslastung(auslastung, 4),
     kapazitaetProWoche,
-    stundenWoche: { ist: Math.round(istMin / 6) / 10, soll: kapazitaetProWoche },
+    stundenWoche: {
+      ist: Math.round(istMin / 6) / 10,
+      /*
+       * Das Soll bis HEUTE, nicht bis Freitag.
+       *
+       * Vorher stand hier die volle Wochenkapazität: am Mittwochvormittag
+       * meldete die Kachel ein Minus von zweihundert Stunden, weil zwei
+       * Tage gearbeitet und fünf gerechnet wurden. Eine Zahl, die von
+       * Montag bis Donnerstag immer alarmiert, sieht am Freitag niemand
+       * mehr an.
+       */
+      soll: Math.round(kapazitaetProWoche * (werktageBisHeute(heute) / 5) * 10) / 10,
+    },
     rechnungen: {
       offen: rechnungOffen,
       ueberfaellig: ueberfaellige.length,

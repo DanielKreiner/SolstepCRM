@@ -262,8 +262,6 @@ export async function planung(c: Ctx, liste: VorgangDemo[]): Promise<string[]> {
     !abwesend.some((a) => a.user_id === userId && a.from_date <= t && a.to_date >= t);
 
   const alleMonteure = c.leute.filter((l) => l.role === "monteur");
-  const verfuegbar = (t: string) => alleMonteure.filter((m) => kann(m.id, t));
-  const monteure = alleMonteure;
 
   const montage = liste.filter((v) => v.phase === "montage");
   const beauftragt = liste.filter((v) => v.phase === "beauftragt");
@@ -292,13 +290,20 @@ export async function planung(c: Ctx, liste: VorgangDemo[]): Promise<string[]> {
               : "Hubsteiger ist bestellt, steht ab 7 Uhr da."
             : null,
       });
-      /* Zwei Monteure je Baustelle — allein hebt niemand ein Modul aufs Dach. */
-      const team = verfuegbar(t);
+      /*
+       * Zwei Monteure je Baustelle — allein hebt niemand ein Modul aufs
+       * Dach. Und feste Teams: Baustelle 0 bekommt die ersten beiden,
+       * Baustelle 1 die nächsten. Vorher rotierte die Auswahl über alle
+       * Monteure, und derselbe Mann stand an einem Tag auf zwei
+       * ganztägigen Montagen — ein Zustand, den die Konfliktprüfung
+       * blockiert hätte und der in der Wochenansicht als sechzehn
+       * Stunden auftauchte.
+       */
+      const team = alleMonteure
+        .slice(vi * 2, vi * 2 + 2)
+        .filter((m) => kann(m.id, t));
       if (team.length === 0) continue;
-      besetzung.push({ einsatz: i, user: team[vi % team.length]!.id });
-      if (team.length > 1) {
-        besetzung.push({ einsatz: i, user: team[(vi + 1) % team.length]!.id });
-      }
+      for (const m of team) besetzung.push({ einsatz: i, user: m.id });
     }
   });
 
@@ -323,7 +328,14 @@ export async function planung(c: Ctx, liste: VorgangDemo[]): Promise<string[]> {
    * für den es die Kundenzuordnung am Einsatz gibt: die Anlage steht
    * seit Jahren, es gibt keinen laufenden Auftrag, jemand fährt hin.
    */
-  const service = c.plus(mo, 2);
+  /*
+   * Donnerstag, nicht Mittwoch: Mittwoch stehen beide Montageteams auf
+   * dem Dach, und der Serviceeinsatz landete beim Rückfall auf einem
+   * Monteur, der schon eine ganztägige Baustelle hatte. Zwei Orte
+   * gleichzeitig ist genau der Konflikt, den die Plantafel verhindern
+   * soll — er gehört nicht in die Demo.
+   */
+  const service = c.plus(mo, 3);
   const iService = einsaetze.length;
   einsaetze.push({
     company_id: c.company,
@@ -335,7 +347,23 @@ export async function planung(c: Ctx, liste: VorgangDemo[]): Promise<string[]> {
     bis: c.uhr(service, "16:00"),
     notiz: "Kunde ist ab 13 Uhr vor Ort, Zugang über die Werkstatt.",
   });
-  besetzung.push({ einsatz: iService, user: verfuegbar(service)[0]?.id ?? monteure[0]!.id });
+  /*
+   * Der Servicemann ist keiner der beiden Montageteams — sonst steht er
+   * am Nachmittag an zwei Orten.
+   */
+  const serviceTeam = alleMonteure.filter(
+    (m) =>
+      kann(m.id, service) &&
+      !besetzung.some(
+        (b) => b.user === m.id && (einsaetze[b.einsatz] as { von: string }).von.slice(0, 10) === service,
+      ),
+  );
+  /*
+   * Kein Rückfall auf irgendjemanden: ist wirklich niemand frei, fährt
+   * niemand — und der Einsatz bleibt unbesetzt sichtbar. Eine erfundene
+   * Besetzung wäre schlimmer als eine offene.
+   */
+  if (serviceTeam[0]) besetzung.push({ einsatz: iService, user: serviceTeam[0].id });
 
   /* Und ein interner Tag: Lager zählen. Auch das ist Kapazität. */
   const intern = c.plus(mo, 4);
@@ -367,9 +395,9 @@ export async function planung(c: Ctx, liste: VorgangDemo[]): Promise<string[]> {
       fahrzeug_id: c.fahrzeuge[vi % c.fahrzeuge.length]?.id ?? null,
       notiz: null,
     });
-    const frei2 = verfuegbar(t);
-    if (frei2.length === 0) return;
-    besetzung.push({ einsatz: i, user: frei2[vi % frei2.length]!.id });
+    const team2 = alleMonteure.slice(vi * 2, vi * 2 + 2).filter((m) => kann(m.id, t));
+    if (team2.length === 0) return;
+    for (const m of team2) besetzung.push({ einsatz: i, user: m.id });
   });
 
   const { data, error } = await c.db.from("einsatz").insert(einsaetze).select("id");
@@ -588,10 +616,80 @@ async function zeitenAufPlanung(
     }
   }
 
+  /*
+   * Wer diese Woche nicht auf einer geplanten Baustelle stand, hat
+   * trotzdem gearbeitet — Büro, Lager, Werkstatt. Ohne diese Buchungen
+   * zeigte die Kachel "Stunden diese Woche" ein Drittel des Erwarteten
+   * und sah aus, als hätte der halbe Betrieb freigenommen.
+   */
+  const gebucht = new Set(zeilen.map((z) => `${z.user_id as string}|${(z.started_at as string).slice(0, 10)}`));
+  const intern: Record<string, unknown>[] = [];
+
+  for (let n = 1; n <= 6; n++) {
+    const t = c.tag(-n);
+    if (t < c.montag() || !c.istWerktag(t)) continue;
+
+    for (const u of c.leute.filter((l) => l.role !== "gf")) {
+      if (gebucht.has(`${u.id}|${t}`) || istFrei(u.id, t)) continue;
+      const stunden = Math.round((u.weekly / 5) * 4) / 4;
+      const von = c.uhr(t, "07:30");
+      const bis = new Date(new Date(von).getTime() + stunden * 3600_000).toISOString();
+      intern.push({
+        einsatz: null,
+        von,
+        bis,
+        userId: u.id,
+        stunden,
+        tag: t,
+      });
+    }
+  }
+
+  /* Für jede dieser Buchungen ein interner Einsatz — Zeit ohne Einsatz gibt es nicht. */
+  if (intern.length > 0) {
+    const { data: neue, error: ee } = await c.db
+      .from("einsatz")
+      .insert(
+        intern.map((i) => ({
+          company_id: c.company,
+          art: "intern",
+          titel: "Werkstatt und Vorbereitung",
+          von: i.von,
+          bis: i.bis,
+        })),
+      )
+      .select("id");
+    if (ee) throw ee;
+
+    const ids2 = (neue as { id: string }[]).map((e) => e.id);
+    await c.db.from("einsatz_person").insert(
+      intern.map((i, k) => ({
+        company_id: c.company,
+        einsatz_id: ids2[k]!,
+        user_id: i.userId,
+      })),
+    );
+
+    intern.forEach((i, k) => {
+      zeilen.push({
+        company_id: c.company,
+        user_id: i.userId,
+        einsatz_id: ids2[k]!,
+        vorgang_id: null,
+        kind: "work",
+        started_at: i.von,
+        ended_at: i.bis,
+        status: "booked",
+        quelle: "manuell",
+        auto_break_min: Number(i.stunden) >= 6 ? 30 : 0,
+      });
+    });
+  }
+
   if (zeilen.length === 0) return;
   const { error } = await c.db.from("time_entry").insert(zeilen);
   if (error) throw error;
-  console.log(`  ${zeilen.length} Buchungen auf den geplanten Einsätzen dieser Woche`);
+  console.log(`  ${zeilen.length} Buchungen dieser Woche, davon ${intern.length} intern`);
 }
 
 /* -------------------------------------------------- ABWESENHEIT & SERVICE */
@@ -1007,4 +1105,53 @@ export async function verlauf(c: Ctx, liste: VorgangDemo[]): Promise<void> {
   }
 
   console.log(`  ${zeilen.length} Verlaufseinträge an den Vorgängen`);
+}
+
+/**
+ * Nachweise am Mitarbeiter — mit einem, der demnächst abläuft.
+ *
+ * Ohne sie steht auf der Mitarbeiterseite dreimal null und in jeder
+ * Zeile ein Strich: die Vorwarnung, der certificate-check-Cron und die
+ * Qualifikationsprüfung der Plantafel haben nichts, woran sie sich
+ * zeigen könnten. Und genau das ist der Grund, warum ein Betrieb so
+ * etwas führt — ein abgelaufener Nachweis auf dem Dach ist ein Problem,
+ * das niemand am Tag der Montage entdecken will.
+ */
+export async function nachweise(c: Ctx): Promise<void> {
+  const monteure = c.leute.filter((l) => l.role === "monteur");
+  const bauleitung = c.leute.find((l) => l.role === "bauleitung")!;
+  const lager = c.leute.find((l) => l.role === "lager")!;
+
+  await c.db.from("qualification").delete().eq("company_id", c.company);
+
+  const zeilen: Record<string, unknown>[] = [];
+  const dazu = (userId: string, name: string, gueltigBis: string | null) => {
+    zeilen.push({
+      company_id: c.company,
+      user_id: userId,
+      name,
+      issued_on: c.tag(-720),
+      valid_until: gueltigBis,
+    });
+  };
+
+  monteure.forEach((m, i) => {
+    /* Die Elektro-Unterweisung läuft jährlich — gestaffelt, wie im Betrieb. */
+    dazu(m.id, "Unterweisung Elektrotechnik §5 ETV", c.tag(120 + i * 45));
+    dazu(m.id, "PSA gegen Absturz", c.tag(200 + i * 30));
+  });
+
+  /* Einer läuft bald ab — dafür gibt es die Vorwarnung. */
+  if (monteure[0]) dazu(monteure[0].id, "Hubarbeitsbühne", c.tag(38));
+  /* Und einer ist abgelaufen. Das darf man sehen. */
+  if (monteure[1]) dazu(monteure[1].id, "Erste Hilfe (16 h)", c.tag(-21));
+
+  dazu(bauleitung.id, "Blitzschutz-Fachkraft", c.tag(400));
+  dazu(bauleitung.id, "Erste Hilfe (16 h)", c.tag(310));
+  dazu(lager.id, "Staplerschein", c.tag(560));
+
+  const { error } = await c.db.from("qualification").insert(zeilen);
+  if (error) throw error;
+
+  console.log(`  ${zeilen.length} Nachweise, einer läuft ab, einer ist abgelaufen`);
 }

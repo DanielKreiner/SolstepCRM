@@ -33,6 +33,7 @@ import {
   bestellungen,
   lagerbestand,
   mindestbestaende,
+  nachweise,
   planung,
   rechnungen,
   termine,
@@ -137,6 +138,7 @@ async function main(): Promise<void> {
   await zeiten(c, vs);
   await rechnungen(c, vs);
   await verlauf(c, vs);
+  await nachweise(c);
   await anliegen(c, vs);
 
   console.log("\nFertig. Anmelden mit gf@hofstaetter.example.com\n");

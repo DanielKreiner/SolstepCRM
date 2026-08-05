@@ -29,6 +29,7 @@ export type VorgangDemo = {
   phase: string;
   kunde: Kunde;
   kwp: number;
+  speicher: number;
 };
 
 /* ------------------------------------------------------------- VORGÄNGE */
@@ -88,18 +89,24 @@ export async function vorgaenge(c: Ctx): Promise<VorgangDemo[]> {
   const { data, error } = await c.db
     .from("vorgang")
     .insert(zeilen)
-    .select("id, number, phase, kwp, customer_id");
+    .select("id, number, phase, kwp, speicher_kwh, customer_id");
   if (error) throw error;
 
-  const liste = (data as { id: string; number: string; phase: string; kwp: number; customer_id: string }[]).map(
-    (v) => ({
-      id: v.id,
-      nummer: v.number,
-      phase: v.phase,
-      kwp: Number(v.kwp),
-      kunde: c.kunden.find((k) => k.id === v.customer_id)!,
-    }),
-  );
+  const liste = (data as {
+    id: string;
+    number: string;
+    phase: string;
+    kwp: number;
+    speicher_kwh: number | null;
+    customer_id: string;
+  }[]).map((v) => ({
+    id: v.id,
+    nummer: v.number,
+    phase: v.phase,
+    kwp: Number(v.kwp),
+    speicher: Number(v.speicher_kwh ?? 0),
+    kunde: c.kunden.find((k) => k.id === v.customer_id)!,
+  }));
 
   console.log(`  ${liste.length} Vorgänge über alle Phasen`);
   return liste;
@@ -134,6 +141,7 @@ export async function positionen(c: Ctx, liste: VorgangDemo[]): Promise<void> {
     .in("sku", [
       "MOD-JAS-440",
       "WR-FRO-10",
+      "SPE-BYD-10",
       "SH-10281",
       "SH-10289",
       "UK-K2-SD",
@@ -160,6 +168,15 @@ export async function positionen(c: Ctx, liste: VorgangDemo[]): Promise<void> {
     const bausteine: [string, number][] = [
       ["MOD-JAS-440", modulzahl],
       ["WR-FRO-10", v.kwp > 25 ? 2 : 1],
+      /*
+       * Der Speicher gehört in die Positionen, nicht nur in die
+       * Kopfdaten. Ohne ihn stand bei 9,84 kWp mit 10 kWh Speicher ein
+       * Auftragswert von 7.000 € — eine Zahl, die jedem PV-Betrieb in
+       * der ersten Minute auffällt. Ein Speicherturm fasst 10,2 kWh.
+       */
+      ...(v.speicher > 0
+        ? ([["SPE-BYD-10", Math.max(1, Math.round(v.speicher / 10.2))]] as [string, number][])
+        : []),
       ["SH-10281", modulzahl * 2],
       ["SH-10289", Math.ceil(modulzahl / 2)],
       ["UK-K2-SD", Math.ceil(modulzahl / 3)],
@@ -191,7 +208,11 @@ export async function positionen(c: Ctx, liste: VorgangDemo[]): Promise<void> {
       vorgang_id: v.id,
       sort: (sort += 10),
       bezeichnung: "Montage und Inbetriebnahme",
-      menge: Math.max(8, Math.round(v.kwp * 1.6)),
+      /*
+       * Rund 1,6 Stunden je kWp plus vier Stunden für den Speicher —
+       * die Faustzahl, mit der ein Betrieb kalkuliert.
+       */
+      menge: Math.max(8, Math.round(v.kwp * 1.6) + (v.speicher > 0 ? 4 : 0)),
       einheit: "Std",
       ep_netto: 68,
       kalk_ek: 42,
@@ -208,6 +229,32 @@ export async function positionen(c: Ctx, liste: VorgangDemo[]): Promise<void> {
       einheit: "Pauschale",
       ep_netto: 280,
       kalk_ek: 150,
+      kalk_stunden: 0,
+      ist_material: false,
+      pos_typ: "leistung",
+    });
+    zeilen.push({
+      company_id: c.company,
+      vorgang_id: v.id,
+      sort: (sort += 10),
+      bezeichnung: "Elektroinstallation, Zählerkasten und Netzanmeldung",
+      menge: 1,
+      einheit: "Pauschale",
+      ep_netto: v.kwp > 25 ? 2400 : 1450,
+      kalk_ek: v.kwp > 25 ? 1300 : 780,
+      kalk_stunden: 6,
+      ist_material: false,
+      pos_typ: "leistung",
+    });
+    zeilen.push({
+      company_id: c.company,
+      vorgang_id: v.id,
+      sort: (sort += 10),
+      bezeichnung: "Gerüst, Auf- und Abbau",
+      menge: 1,
+      einheit: "Pauschale",
+      ep_netto: 890,
+      kalk_ek: 620,
       kalk_stunden: 0,
       ist_material: false,
       pos_typ: "leistung",
