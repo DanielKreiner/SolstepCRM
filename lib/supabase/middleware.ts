@@ -31,8 +31,18 @@ const BETRIEBS_PREFIXES = [
   "/offene-posten",
   "/mitarbeiter",
   "/einstellungen",
-  "/bestellungen",
 ];
+
+/*
+ * /material, /lager und /bestellungen stehen bewusst nicht auf der Liste.
+ *
+ * Sie liegen im Betriebs-Layout, sind aber die Arbeitsfläche des
+ * Lageristen: er bestellt, bucht den Wareneingang ein und kommissioniert.
+ * Sperrte man ihm /bestellungen, bliebe die harte Regel des Moduls —
+ * kein Wareneingang ohne Bestellung — für genau die Person zu, die sie
+ * ausführen muss. Wer dort was darf, entscheidet weiterhin can(): der
+ * Monteur kommt über die Rollenprüfung nicht hinein, nicht über den Pfad.
+ */
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

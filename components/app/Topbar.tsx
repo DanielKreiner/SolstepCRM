@@ -16,6 +16,7 @@ type Props = {
     logoUrl: string | null;
     locationName: string;
     visibleAreas: string[];
+    rolle: string;
     badges?: Record<string, number>;
   };
 };

@@ -92,6 +92,7 @@ export default async function HeutePage() {
       kunde: e.vorgang?.customer?.name ?? null,
       kontakt: e.vorgang?.customer?.contact_person ?? null,
       telefon: e.vorgang?.customer?.phone ?? null,
+      notiz: e.notiz,
       team: e.personen
         .filter((p) => p.user_id !== me.id)
         .map((p) => p.user?.name)

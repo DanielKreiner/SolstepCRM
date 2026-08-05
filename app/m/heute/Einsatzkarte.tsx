@@ -15,6 +15,8 @@ export type Einsatz = {
   kunde: string | null;
   kontakt: string | null;
   telefon: string | null;
+  /** Was der Planer dazugeschrieben hat — Zufahrt, Schlüssel, Hund. */
+  notiz: string | null;
   team: string[];
   vorgangId: string | null;
   /** Wie viele Positionen die Beladeliste für diesen Vorgang zeigt. */
@@ -92,6 +94,18 @@ export function Einsatzkarte({
               </a>
             </>
           ) : null}
+        </p>
+      ) : null}
+
+      {/*
+        Die Notiz stand bisher in der Planung und kam nie an. Genau die
+        Sätze, die niemand zweimal erklärt — „Schlüssel beim Nachbarn",
+        „Zufahrt über den Hof" — sind die, die den Monteur sonst zum
+        Telefon greifen lassen.
+      */}
+      {einsatz.notiz ? (
+        <p className="mt-2 rounded-input bg-sunk px-3 py-2 text-[13.5px]">
+          {einsatz.notiz}
         </p>
       ) : null}
 

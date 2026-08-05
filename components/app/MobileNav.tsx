@@ -21,6 +21,7 @@ export function MobileNav(props: {
   logoUrl: string | null;
   locationName: string;
   visibleAreas: string[];
+  rolle: string;
   badges?: Record<string, number>;
 }) {
   const [offen, setOffen] = useState(false);

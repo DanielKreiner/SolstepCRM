@@ -288,7 +288,7 @@ test("3 — Die Annahme löst alles auf einmal aus", async ({ page }) => {
   expect(gates!.find((g) => g.key === "material")!.status).toBe("offen");
 });
 
-test("4 — Terminierung ist blockiert, solange Pflicht-Gates offen sind", async ({
+test("4 — Ein offenes Gate warnt, hält die Terminierung aber nicht auf", async ({
   page,
 }) => {
   const db = admin();
@@ -296,44 +296,38 @@ test("4 — Terminierung ist blockiert, solange Pflicht-Gates offen sind", async
   await page.goto(`/vorgaenge/${zustand.vorgangId}`);
 
   /*
-   * Terminiert wird seit dem Planungsumbau in der Plantafel. Im Vorgang
-   * steht dafür nur noch die Aufgabe — und sie wartet, solange
-   * Pflicht-Gates offen sind.
+   * Bis Migration 0056 sperrte jedes offene Pflicht-Gate den Termin. Das
+   * war praxisfern: Material, das noch nicht im Regal liegt, wird
+   * bestellt — der Termin muss trotzdem stehen, sonst kann niemand
+   * disponieren. Ein Gate, das jede Terminierung aufhält, wird nach zwei
+   * Wochen pauschal abgehakt und ist als Warnung dann wertlos.
    */
   const aufgabe = page
     .locator("section")
     .filter({ hasText: "Offene Aufgabe" })
     .first();
   await expect(aufgabe.getByText("Montage terminieren")).toBeVisible();
-  await expect(aufgabe.getByText("wartet")).toBeVisible();
-  await expect(
-    aufgabe.getByText(/Wird frei, sobald die Pflicht-Gates durch sind/),
-  ).toBeVisible();
+  await expect(aufgabe.getByText(/Terminieren geht trotzdem/)).toBeVisible();
+  await expect(page.getByTestId("terminieren")).toBeVisible();
 
-  // Die Aktion weist auch dann ab, wenn jemand den Knopf umgeht.
-  const { data: v } = await db
-    .from("vorgang")
-    .select("phase")
-    .eq("id", zustand.vorgangId!)
-    .single();
-  expect(v!.phase).toBe("beauftragt");
+  // Material bleibt offen und darf das auch.
+  const { data: gates } = await db
+    .from("vorgang_gate")
+    .select("key, status, blocking")
+    .eq("vorgang_id", zustand.vorgangId!);
+  const material = gates!.find((g) => g.key === "material")!;
+  expect(material.status).toBe("offen");
+  expect(material.blocking).toBe(false);
 
-  // Pflicht-Gates abhaken, dann wird der Knopf frei.
+  // Alles abgehakt: der Hinweis verschwindet, der Weg bleibt derselbe.
   await db
     .from("vorgang_gate")
     .update({ status: "erledigt" })
-    .eq("vorgang_id", zustand.vorgangId!)
-    .eq("blocking", true);
+    .eq("vorgang_id", zustand.vorgangId!);
 
   await page.reload();
-  const frei = page
-    .locator("section")
-    .filter({ hasText: "Offene Aufgabe" })
-    .first();
-  await expect(frei.getByText("offen", { exact: true })).toBeVisible();
-  await expect(
-    frei.getByRole("link", { name: /Plantafel/ }),
-  ).toBeVisible();
+  await expect(page.getByText(/Terminieren geht trotzdem/)).toHaveCount(0);
+  await expect(page.getByTestId("terminieren")).toBeVisible();
 });
 
 test("5 — Zweimal annehmen erzeugt keinen zweiten Auftrag", async ({ page }) => {
@@ -450,17 +444,36 @@ test("7 — Terminiert wird in der Plantafel, der Vorgang zeigt den Termin", asy
 test("8 — Der Monteur sieht seinen Einsatz mit Adresse und Material", async ({
   page,
 }) => {
-  await login(page, DEMO.monteur);
-  await page.goto("/mein-einsatz");
+  const db = admin();
 
-  await expect(page.getByText(zustand.nummer!).first()).toBeVisible({
-    timeout: 15_000,
-  });
+  /*
+   * "Heute" zeigt genau das: den Einsatz von heute. Der Termin aus Test 7
+   * liegt in der Zukunft, damit er in der Plantafel sichtbar bleibt —
+   * für diese Prüfung wandert er auf den heutigen Tag.
+   */
+  const heute = new Date().toISOString().slice(0, 10);
+  await db
+    .from("einsatz")
+    .update({ von: `${heute}T05:00:00Z`, bis: `${heute}T14:00:00Z` })
+    .eq("vorgang_id", zustand.vorgangId!);
+
+  // Ohne Baustellenadresse gibt es keinen Kartenlink zu prüfen.
+  await db
+    .from("vorgang")
+    .update({ adresse: "Kirchengasse 12", plz: "4020", ort: "Linz" })
+    .eq("id", zustand.vorgangId!);
+
+  await login(page, DEMO.monteur);
+  await page.goto("/m/heute");
+
+  const kunde = await kundenName();
+  await expect(page.getByText(kunde!).first()).toBeVisible({ timeout: 15_000 });
+
   // Adresse als Kartenlink — mit dem Handschuh tippt niemand ab.
+  await expect(page.getByRole("link", { name: /Kirchengasse/ })).toBeVisible();
+  // Was der Planer dazugeschrieben hat, muss auf der Baustelle ankommen.
   await expect(page.getByText("Schlüssel beim Nachbarn.")).toBeVisible();
-  await expect(
-    page.getByText(/Material · \d+ Positionen/).first(),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Beladeliste" })).toBeVisible();
 
   /*
    * Kein Board und keine Beträge. Beides ist keine Frage der Anzeige:
@@ -491,17 +504,31 @@ test("9 — Das Lager sieht den Bedarf, aber keine Beträge", async ({ page }) =
     vorgang_id: zustand.vorgangId!,
     artikel_id: artikel!.id,
     bezeichnung: artikel!.name as string,
-    menge: 7,
+    /*
+     * Absichtlich mehr, als je im Regal liegt: nur ungedeckter Bedarf
+     * läuft in den Bestellvorschlag, und genau der soll hier geprüft
+     * werden.
+     */
+    menge: 9999,
     einheit: (artikel!.unit as string) ?? "Stk",
     herkunft: "angebot",
   });
 
+  /*
+   * Der Vorgang selbst gehört zur Betriebs-App; das Lager arbeitet seit
+   * dem Navigationsumbau in seinen eigenen Screens. Der ungedeckte
+   * Bedarf läuft dort in den Bestellvorschlag — mit Menge und
+   * Bezeichnung, ohne einen einzigen Preis.
+   */
   await login(page, DEMO.lager);
-  await page.goto(`/vorgaenge/${zustand.vorgangId}?tab=material`);
+  await page.goto("/bestellungen");
 
-  await expect(page.getByRole("heading", { name: "Bedarfsliste" })).toBeVisible();
-  await expect(page.getByText(artikel!.name as string).first()).toBeVisible();
+  await expect(page.getByText(artikel!.name as string).first()).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByText(zustand.nummer!).first()).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Auftragswert netto");
+  await expect(page.locator("body")).not.toContainText("EK");
 });
 test("10 — Schlussrechnung, Zahlung und die Offene-Posten-Liste", async ({
   page,

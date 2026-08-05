@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
-import { NAV, isActive } from "@/lib/nav";
+import {
+  NAV,
+  appFuerRolle,
+  isActive,
+  navFuerMitarbeiter,
+  type NavGroup,
+} from "@/lib/nav";
 import { Firmenlogo } from "@/components/ui/Firmenlogo";
 
 type Props = {
@@ -12,6 +18,8 @@ type Props = {
   locationName: string;
   /** Bereiche, die diese Rolle mindestens lesen darf. */
   visibleAreas: string[];
+  /** Entscheidet, welche der beiden Navigationen gilt. */
+  rolle: string;
   badges?: Record<string, number>;
 };
 
@@ -20,10 +28,22 @@ export function Sidebar({
   logoUrl,
   locationName,
   visibleAreas,
+  rolle,
   badges = {},
 }: Props) {
   const pathname = usePathname();
   const allowed = new Set(visibleAreas);
+
+  /*
+   * Das Lager arbeitet in /material und /bestellungen — beides liegt im
+   * Betriebs-Layout, gehört aber zur Mitarbeiter-App. Ohne diese
+   * Fallunterscheidung sah der Lagerist dort die vollen neun Punkte und
+   * lief bei jedem Klick in die Umleitung zurück auf /m/heute.
+   */
+  const gruppen: NavGroup[] =
+    appFuerRolle(rolle) === "mitarbeiter"
+      ? [{ title: "Meins", items: navFuerMitarbeiter(rolle) }]
+      : NAV;
 
   return (
     <aside className="flex w-[var(--sidebar-w)] shrink-0 flex-col overflow-hidden rounded-panel bg-surface shadow-soft">
@@ -47,7 +67,7 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pt-3 pb-2">
-        {NAV.map((group) => {
+        {gruppen.map((group) => {
           const items = group.items.filter(
             (i) => i.area === null || allowed.has(i.area),
           );

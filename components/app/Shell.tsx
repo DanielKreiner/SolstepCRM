@@ -102,6 +102,7 @@ export async function Shell({
           logoUrl={marke.logoUrl}
           locationName={location?.name ?? "Alle Standorte"}
           visibleAreas={visibleAreas}
+          rolle={me.role}
           badges={navBadges}
         />
       </div>
@@ -116,6 +117,7 @@ export async function Shell({
             logoUrl: marke.logoUrl,
             locationName: location?.name ?? "Alle Standorte",
             visibleAreas,
+            rolle: me.role,
             badges: navBadges,
           }}
         />
