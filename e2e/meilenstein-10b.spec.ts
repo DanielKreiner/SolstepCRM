@@ -263,5 +263,21 @@ test("Meine Zeiten zeigen ausschließlich die eigenen Buchungen", async ({
 
   // Der Testfall taugt nur, wenn es überhaupt fremde Buchungen gibt.
   expect(alle ?? 0).toBeGreaterThan(eigene ?? 0);
-  await expect(page.getByText("nur die eigenen Buchungen")).toBeVisible();
+
+  /*
+   * Geprüft wird die Wirkung, nicht ein Hinweistext: kein Name eines
+   * Kollegen steht auf der Seite. Ein Satz "nur die eigenen Buchungen"
+   * liesse sich hinschreiben, ohne dass er stimmt.
+   */
+  const { data: kollegen } = await admin()
+    .from("app_user")
+    .select("name")
+    .eq("company_id", COMPANY_A)
+    .eq("active", true)
+    .neq("id", uid);
+
+  const body = page.locator("body");
+  for (const k of kollegen ?? []) {
+    await expect(body, k.name as string).not.toContainText(k.name as string);
+  }
 });

@@ -185,6 +185,15 @@ export async function korrigieren(
       von: z.string().min(4),
       bis: z.string().min(4),
       grund: z.string().trim().min(3, "Ohne Begründung wird nicht korrigiert."),
+      /*
+       * Nur der Genehmigungsweg setzt das. Wer einen Antrag genehmigt,
+       * hat genau diese Uhrzeiten gerade angesehen — die Ersatzbuchung
+       * noch einmal in den Wochenabschluss zu schicken, würde die eben
+       * erteilte Freigabe still wieder einkassieren. Missbrauchen liesse
+       * sich das Feld nur mit demselben Recht, das auch zum Genehmigen
+       * berechtigt.
+       */
+      genehmigt: z.enum(["ja"]).optional(),
     })
     .safeParse(Object.fromEntries(formData));
 
@@ -231,7 +240,7 @@ export async function korrigieren(
     kind: alt.kind,
     started_at: von,
     ended_at: bis,
-    status: "booked",
+    status: d.genehmigt === "ja" ? "approved" : "booked",
     quelle: "korrektur",
     auto_break_min: dauer >= 360 ? 30 : 0,
     replaces_id: alt.id,
@@ -310,6 +319,7 @@ export async function antragEntscheiden(
   daten.set("von", wunsch.von);
   daten.set("bis", wunsch.bis);
   daten.set("grund", (antrag.reason as string) ?? "Antrag genehmigt");
+  daten.set("genehmigt", "ja");
 
   const ergebnis = await korrigieren({ error: null, ok: null }, daten);
   if (ergebnis.error) return ergebnis;

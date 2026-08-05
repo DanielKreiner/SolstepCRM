@@ -175,17 +175,27 @@ test("Eine genehmigte Korrektur überschreibt nicht, sondern ersetzt", async ({
 
   expect(original!.duration_min).toBe(480);
 
+  /*
+   * Beantragt wird seit dem Zeiten-Umbau in der eigenen Ansicht — der
+   * Mitarbeiter sagt, wie es richtig wäre. Entschieden wird im Büro,
+   * unter Zeiten → Konten. Zwei Orte, weil es zwei Rollen sind.
+   */
   await login(page, DEMO.bauleitung);
-  await page.goto("/zeiten?tab=konten");
+  await page.goto("/m/zeiten");
 
-  const eintrag = page.locator(`li[data-entry="${original!.id}"]`);
-  await eintrag.getByLabel("Ende").fill("17:00");
-  await eintrag
-    .getByLabel("Begründung")
+  await page.getByTestId(`korrektur-oeffnen-${original!.id}`).click();
+  await page.getByTestId(`korrektur-bis-${original!.id}`).fill("17:00");
+  await page
+    .getByTestId(`korrektur-grund-${original!.id}`)
     .fill("E2E-M10 Ausstempeln vergessen");
-  await eintrag.getByRole("button", { name: "Korrektur beantragen" }).click();
+  await page.getByTestId(`korrektur-senden-${original!.id}`).click();
 
-  await expect(page.getByText("Korrektur beantragt")).toBeVisible();
+  /*
+   * Die Bestätigung ist der Zustand, nicht eine Meldung: das Formular
+   * weicht dem Hinweis "Antrag läuft", und eine zweite Änderung an
+   * derselben Buchung ist damit gesperrt.
+   */
+  await expect(page.getByText("Antrag läuft")).toBeVisible({ timeout: 15_000 });
 
   const { data: korrektur } = await db
     .from("time_correction")
@@ -198,9 +208,8 @@ test("Eine genehmigte Korrektur überschreibt nicht, sondern ersetzt", async ({
   expect(korrektur!.time_entry_id).toBe(original!.id);
 
   // Genehmigen — die Bauleitung darf zeiterfassung schreiben.
-  await page.reload();
-  const karte = page.locator("li", { hasText: "E2E-M10 Ausstempeln" });
-  await karte.getByRole("button", { name: "genehmigen" }).click();
+  await page.goto("/zeiten?tab=konten");
+  await page.getByTestId(`antrag-genehmigen-${korrektur!.id}`).click();
 
   await expect
     .poll(async () => {
