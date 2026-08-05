@@ -340,6 +340,53 @@ export type KontoPerson = {
  * Ursache falsch — eine Korrekturbuchung auf das Ergebnis verdeckt sie
  * nur.
  */
+/**
+ * Alle genehmigten Zeiten eines Zeitraums — seitenweise.
+ *
+ * PostgREST liefert höchstens tausend Zeilen und sagt es nicht: die
+ * Antwort ist einfach kürzer. Ein Zehn-Personen-Betrieb erreicht die
+ * Grenze nach etwa fünf Monaten, und ab da fehlten dem Saldo die
+ * ältesten Buchungen — jeder Mitarbeiter stand dann mit hunderten
+ * Minusstunden da, ohne dass irgendwo ein Fehler auftauchte. Genau die
+ * Sorte Zahl, der man glaubt, weil sie so genau aussieht.
+ */
+async function alleZeiten(
+  supabase: Client,
+  ab: string,
+): Promise<
+  {
+    user_id: string;
+    started_at: string;
+    duration_min: number | null;
+    auto_break_min: number;
+  }[]
+> {
+  const SEITE = 1000;
+  const alle: {
+    user_id: string;
+    started_at: string;
+    duration_min: number | null;
+    auto_break_min: number;
+  }[] = [];
+
+  for (let von = 0; ; von += SEITE) {
+    const { data, error } = await supabase
+      .from("time_entry")
+      .select("user_id, started_at, duration_min, auto_break_min")
+      .eq("status", "approved")
+      .gte("started_at", ab)
+      .order("started_at")
+      .range(von, von + SEITE - 1);
+
+    if (error) throw new Error(`Zeitkonten: ${error.message}`);
+    const zeilen = (data ?? []) as unknown as typeof alle;
+    alle.push(...zeilen);
+    if (zeilen.length < SEITE) break;
+  }
+
+  return alle;
+}
+
 export async function konten(
   supabase: Client,
   d: { bis: string },
@@ -351,7 +398,7 @@ export async function konten(
     monate.push(dd.toISOString().slice(0, 7));
   }
 
-  const [{ data: leute }, { data: roh }, { data: abwesenheiten }, { data: korrekturen }] =
+  const [{ data: leute }, roh, { data: abwesenheiten }, { data: korrekturen }] =
     await Promise.all([
       supabase
         .from("app_user")
@@ -360,11 +407,7 @@ export async function konten(
         )
         .eq("active", true)
         .order("name"),
-      supabase
-        .from("time_entry")
-        .select("user_id, started_at, duration_min, auto_break_min, status")
-        .eq("status", "approved")
-        .gte("started_at", `${monate[0]}-01T00:00:00Z`),
+      alleZeiten(supabase, `${monate[0]}-01T00:00:00Z`),
       supabase
         .from("absence")
         .select("user_id, kind, from_date, to_date, half_day")
@@ -376,12 +419,7 @@ export async function konten(
         .eq("status", "requested"),
     ]);
 
-  const zeiten = (roh ?? []) as unknown as {
-    user_id: string;
-    started_at: string;
-    duration_min: number | null;
-    auto_break_min: number;
-  }[];
+  const zeiten = roh;
 
   const abwesend = (abwesenheiten ?? []) as unknown as {
     user_id: string;
@@ -436,7 +474,11 @@ export async function konten(
           return s + zahl;
         }, 0);
 
-      const arbeitstage = arbeitstageImMonat(monat, region);
+      /*
+       * Der laufende Monat zählt nur bis heute. Sonst steht am Ersten
+       * jeder mit einem vollen Monatssoll im Minus.
+       */
+      const arbeitstage = arbeitstageImMonat(monat, region, d.bis);
       const sollMin = Math.round(Math.max(0, arbeitstage - freieTage) * tagesSoll);
 
       return { monat, istMin, sollMin };

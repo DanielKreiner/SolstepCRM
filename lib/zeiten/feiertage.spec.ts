@@ -59,3 +59,22 @@ describe("arbeitstageImMonat", () => {
     expect(arbeitstageImMonat("2026-10", "DE-BY")).toBe(22);
   });
 });
+
+describe("arbeitstageImMonat mit Stichtag", () => {
+  it("zählt den laufenden Monat nur bis heute", () => {
+    /*
+     * 05.08.2026 ist ein Mittwoch. Bis dahin: Mo 3., Di 4., Mi 5. — drei
+     * Arbeitstage, nicht die einundzwanzig des ganzen Monats.
+     */
+    expect(arbeitstageImMonat("2026-08", "AT-4", "2026-08-05")).toBe(3);
+  });
+
+  it("lässt vergangene Monate voll zählen", () => {
+    const voll = arbeitstageImMonat("2026-07", "AT-4");
+    expect(arbeitstageImMonat("2026-07", "AT-4", "2026-08-05")).toBe(voll);
+  });
+
+  it("zählt ohne Stichtag wie bisher", () => {
+    expect(arbeitstageImMonat("2026-08", "AT-4")).toBeGreaterThan(15);
+  });
+});

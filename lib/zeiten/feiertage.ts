@@ -97,13 +97,29 @@ export function istArbeitstag(tag: string, region: string | null): boolean {
 }
 
 /** Arbeitstage eines Monats „2026-08" ohne Wochenende und Feiertage. */
-export function arbeitstageImMonat(monat: string, region: string | null): number {
+export function arbeitstageImMonat(
+  monat: string,
+  region: string | null,
+  /**
+   * Bis zu diesem Tag zählen — für den laufenden Monat.
+   *
+   * Ohne ihn trägt der aktuelle Monat sein volles Soll, während erst
+   * drei Tage gearbeitet wurden: am Ersten jedes Monats stünde jeder
+   * Mitarbeiter mit einem ganzen Monatssoll im Minus, und der Saldo wäre
+   * in den ersten drei Wochen unbrauchbar. Gefragt ist, was BIS HEUTE
+   * zu leisten war.
+   */
+  bisTag?: string,
+): number {
   const [jahr, m] = monat.split("-").map(Number);
   if (!jahr || !m) return 0;
   const letzter = new Date(Date.UTC(jahr, m, 0)).getUTCDate();
 
+  const grenze =
+    bisTag && bisTag.slice(0, 7) === monat ? Number(bisTag.slice(8, 10)) : letzter;
+
   let zahl = 0;
-  for (let t = 1; t <= letzter; t++) {
+  for (let t = 1; t <= Math.min(letzter, grenze); t++) {
     const tag = `${monat}-${String(t).padStart(2, "0")}`;
     if (istArbeitstag(tag, region)) zahl++;
   }

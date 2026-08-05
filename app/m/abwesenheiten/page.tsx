@@ -1,25 +1,34 @@
 import type { Metadata } from "next";
 import { Pill, type Tone } from "@/components/ui/Pill";
-import { date } from "@/lib/format";
+import { date, viennaDay } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
+import { Antrag } from "./Antrag";
 
 export const metadata: Metadata = { title: "Abwesenheiten" };
 
 /**
- * Die eigenen freien Tage.
+ * Die eigenen freien Tage — ansehen und beantragen.
  *
- * Nur ansehen: eingetragen wird im Büro. Wer selbst eintragen könnte,
- * hätte Urlaub, von dem die Planung nichts weiss.
+ * Beantragt wurde bisher im Büro, was in der Praxis heisst: der Monteur
+ * ruft an und jemand tippt es ab. Zwischen Anruf und Eintrag steht in
+ * der Plantafel jemand, der nicht kommt.
  */
 
+/*
+ * Die Schlüssel sind die des Enums absence_kind — vacation, sick,
+ * leave_comp, care, school, special. Vorher standen hier deutsche
+ * Wörter, die es in der Datenbank nie gab: jede Zeile zeigte statt
+ * "Urlaub" das rohe "vacation". Der Fehler fiel nicht auf, weil eine
+ * Beschriftungstabelle ohne Treffer nichts meldet, sondern durchreicht.
+ */
 const ART: Record<string, string> = {
-  urlaub: "Urlaub",
-  krank: "Krankenstand",
-  zeitausgleich: "Zeitausgleich",
-  sonder: "Sonderurlaub",
-  schulung: "Schulung",
-  unbezahlt: "Unbezahlt",
+  vacation: "Urlaub",
+  sick: "Krankenstand",
+  leave_comp: "Zeitausgleich",
+  care: "Pflege",
+  school: "Schulung",
+  special: "Sonderurlaub",
 };
 
 const TON: Record<string, Tone> = {
@@ -71,7 +80,7 @@ export default async function AbwesenheitenPage() {
    * noch kein freier Tag.
    */
   const verbraucht = liste
-    .filter((a) => a.kind === "urlaub" && a.status === "approved")
+    .filter((a) => a.kind === "vacation" && a.status === "approved")
     .reduce((s, a) => {
       const tage =
         (new Date(a.to_date).getTime() - new Date(a.from_date).getTime()) /
@@ -90,8 +99,10 @@ export default async function AbwesenheitenPage() {
         Abwesenheiten
       </h1>
       <p className="mb-4 text-[13px] text-muted">
-        Eintragen kann sie das Büro — hier siehst du deinen Stand.
+        Dein Stand — und der Weg, Neues zu melden.
       </p>
+
+      <Antrag heute={viennaDay()} />
 
       <div className="mb-4 grid grid-cols-2 gap-[10px]">
         <div className="rounded-[20px] bg-surface p-5 shadow-soft">
