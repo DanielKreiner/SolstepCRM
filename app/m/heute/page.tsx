@@ -5,6 +5,7 @@ import { beladeliste } from "@/lib/material/beladeliste";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { addDays, endOfViennaDay, startOfViennaDay } from "@/lib/time";
+import { Antrag } from "@/app/m/abwesenheiten/Antrag";
 import { Einsatzkarte, OhnePlan, type Einsatz } from "./Einsatzkarte";
 
 export const metadata: Metadata = { title: "Heute" };
@@ -164,6 +165,17 @@ export default async function HeutePage() {
               label: `${time(e.von)} · ${e.vorgang?.customer?.name ?? e.titel ?? "Einsatz"}`,
             }))}
         />
+      </div>
+
+      {/*
+        Urlaub und Krankmeldung stehen auf dem Startbildschirm.
+        Wer krank ist, öffnet nicht erst einen Reiter — er nimmt das
+        Handy in die Hand und will es in zwei Schritten los sein. Und
+        zwischen Anruf im Büro und Eintrag steht in der Plantafel sonst
+        jemand, der nicht kommt.
+      */}
+      <div className="mb-6">
+        <Antrag heute={heute} kompakt />
       </div>
 
       {kommende.length > 0 ? (

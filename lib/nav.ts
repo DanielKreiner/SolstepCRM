@@ -54,6 +54,17 @@ export const NAV: NavGroup[] = [
       { label: "Vorgänge", href: "/vorgaenge", icon: "pipelines", area: "pipelines" },
       { label: "Planung", href: "/planung", icon: "dispo", area: "pipelines" },
       { label: "Material", href: "/material", icon: "lager", area: "pipelines" },
+      /*
+       * Service steht wieder in der Navigation.
+       *
+       * Das Briefing hatte den Punkt gestrichen, weil Serviceeinsätze in
+       * Planung und Vorgängen leben. Das stimmt für den EINSATZ — nicht
+       * für das ANLIEGEN, das vorher entsteht: ein Kunde meldet eine
+       * Störung über das Portal, und bis jemand daraus einen Termin
+       * macht, hat sie sonst keinen Ort. Offene Anliegen lagen damit
+       * nirgends, wo man sie findet.
+       */
+      { label: "Service", href: "/service", icon: "chat", area: "pipelines" },
       { label: "Zeiten", href: "/zeiten", icon: "zeit", area: "zeiterfassung" },
       { label: "Abwesenheiten", href: "/abwesenheiten", icon: "abwesenheit", area: null },
       { label: "Rechnungen", href: "/offene-posten", icon: "rechnungen", area: "rechnungen" },

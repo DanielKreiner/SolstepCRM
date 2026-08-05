@@ -48,6 +48,7 @@ export async function Shell({
     { count: angeboteOffen },
     { count: rechnungenOffen },
     { count: antraegeOffen },
+    { count: anliegenOffen },
     { count: korrekturenOffen },
   ] = await Promise.all([
     me.locationId
@@ -76,6 +77,10 @@ export async function Shell({
       .select("id", { count: "exact", head: true })
       .eq("status", "requested"),
     supabase
+      .from("service_ticket")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "offen"),
+    supabase
       .from("time_correction")
       .select("id", { count: "exact", head: true })
       .eq("status", "requested"),
@@ -92,6 +97,8 @@ export async function Shell({
     "/offene-posten": rechnungenOffen,
     "/zeiten": korrekturenOffen,
     "/abwesenheiten": antraegeOffen,
+    /* Ein offenes Anliegen ist ein Kunde, der wartet. */
+    "/service": anliegenOffen,
   });
 
   return (

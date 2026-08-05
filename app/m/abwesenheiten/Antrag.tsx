@@ -18,7 +18,18 @@ const LEER = { error: null, ok: null };
  * BEANTRAGT und wartet auf eine Entscheidung, Krankenstand wird
  * GEMELDET und gilt sofort. Wer krank ist, fragt nicht um Erlaubnis.
  */
-export function Antrag({ heute }: { heute: string }) {
+export function Antrag({
+  heute,
+  /**
+   * Auf dem Startbildschirm zurückhaltender: dort ist der Einsatz die
+   * Hauptsache, nicht der Urlaub. Zwei ruhige Knöpfe statt eines
+   * farbigen, der mit dem Stempeln um Aufmerksamkeit streitet.
+   */
+  kompakt = false,
+}: {
+  heute: string;
+  kompakt?: boolean;
+}) {
   const [status, senden] = useActionState(requestAbsence, LEER);
   const [offen, setOffen] = useState<"vacation" | "sick" | null>(null);
 
@@ -26,12 +37,17 @@ export function Antrag({ heute }: { heute: string }) {
 
   if (!offen) {
     return (
-      <div className="mb-4 flex gap-2">
+      <div className={kompakt ? "flex gap-2" : "mb-4 flex gap-2"}>
         <button
           type="button"
           data-testid="urlaub-beantragen"
           onClick={() => setOffen("vacation")}
-          className="min-h-[52px] flex-1 cursor-pointer rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-5 text-[14.5px] font-semibold text-white"
+          className={[
+            "min-h-[52px] flex-1 cursor-pointer rounded-pill px-5 text-[14.5px] font-semibold",
+            kompakt
+              ? "border border-line bg-surface text-ink"
+              : "border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] text-white",
+          ].join(" ")}
         >
           Urlaub beantragen
         </button>
@@ -50,7 +66,12 @@ export function Antrag({ heute }: { heute: string }) {
   const krank = offen === "sick";
 
   return (
-    <section className="mb-4 rounded-[20px] bg-surface p-5 shadow-soft">
+    <section
+      className={[
+        "rounded-[20px] bg-surface p-5 shadow-soft",
+        kompakt ? "" : "mb-4",
+      ].join(" ")}
+    >
       <h2 className="text-[16px] font-semibold">
         {krank ? "Krankenstand melden" : "Urlaub beantragen"}
       </h2>
