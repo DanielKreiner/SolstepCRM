@@ -17,6 +17,10 @@ interface Zeile {
   anbieter: string;
   zoom: number;
   plan: unknown;
+  foto_pfad: string | null;
+  foto_breite: number | null;
+  foto_hoehe: number | null;
+  foto_meter_pro_pixel: number | null;
 }
 
 export default async function PlanerProjektPage({
@@ -32,7 +36,10 @@ export default async function PlanerProjektPage({
 
   const { data } = await supabase
     .from("planer_projekt")
-    .select("id, name, adresse, ursprung_lat, ursprung_lon, anbieter, zoom, plan")
+    .select(
+      "id, name, adresse, ursprung_lat, ursprung_lon, anbieter, zoom, plan, " +
+        "foto_pfad, foto_breite, foto_hoehe, foto_meter_pro_pixel",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -60,6 +67,26 @@ export default async function PlanerProjektPage({
     ? gewaehlt
     : "basemap";
 
+  /*
+   * Drohnenfotos liegen in einem privaten Bucket: sie zeigen das Haus
+   * eines namentlich bekannten Kunden. Der Browser bekommt deshalb eine
+   * befristet signierte Adresse, keine dauerhaft öffentliche.
+   */
+  let foto = null as PlanerProjekt["foto"];
+  if (zeile.foto_pfad && zeile.foto_breite && zeile.foto_hoehe) {
+    const { data: signiert } = await supabase.storage
+      .from("planer-fotos")
+      .createSignedUrl(zeile.foto_pfad, 60 * 60 * 8);
+    if (signiert?.signedUrl) {
+      foto = {
+        url: signiert.signedUrl,
+        breite: zeile.foto_breite,
+        hoehe: zeile.foto_hoehe,
+        meterProPixel: zeile.foto_meter_pro_pixel ? Number(zeile.foto_meter_pro_pixel) : null,
+      };
+    }
+  }
+
   const projekt: PlanerProjekt = {
     id: zeile.id,
     name: zeile.name,
@@ -68,6 +95,7 @@ export default async function PlanerProjektPage({
     anbieter,
     zoom: Number(zeile.zoom),
     plan: planLesen(zeile.plan),
+    foto,
   };
 
   return (

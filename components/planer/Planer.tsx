@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Leinwand, type Werkzeug } from "./Leinwand";
+import { type FotoQuelle, Leinwand, type Werkzeug } from "./Leinwand";
+import { FotoLeiste } from "./FotoLeiste";
 import { FlaechenPanel } from "./FlaechenPanel";
-import { ansichtMerken, planSpeichern } from "@/app/(app)/planer/actions";
+import { ansichtMerken, fotoKalibrieren, planSpeichern } from "@/app/(app)/planer/actions";
 import {
   ANBIETER,
   type AnbieterId,
@@ -43,6 +44,7 @@ export interface PlanerProjekt {
   anbieter: AnbieterId;
   zoom: number;
   plan: Plan;
+  foto: FotoQuelle | null;
 }
 
 const PHASEN = [
@@ -79,6 +81,19 @@ export function Planer({
   /* Unter lg liegt das Panel über der Karte statt daneben — bei 834 px
      blieben sonst von der Zeichenfläche keine 250 px übrig. */
   const [panelOffen, setPanelOffen] = useState(false);
+  const [foto, setFoto] = useState<FotoQuelle | null>(projekt.foto);
+
+  /*
+   * Hochladen und Entfernen laufen über Serveraktionen mit
+   * revalidatePath; der neue Stand kommt also als Eigenschaft herein.
+   * Abhängig NUR von Adresse und Bildmassen, nicht vom Massstab: eine
+   * gerade vorgenommene Kalibrierung darf ein nachlaufender
+   * Serverdurchlauf nicht wieder überschreiben.
+   */
+  useEffect(() => {
+    setFoto(projekt.foto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projekt.foto?.url, projekt.foto?.breite, projekt.foto?.hoehe]);
 
   const [verlauf, setVerlauf] = useState<Verlauf<Plan>>(() => verlaufStart(projekt.plan));
   const plan = verlauf.gegenwart;
@@ -174,6 +189,66 @@ export function Planer({
     return () => window.removeEventListener("keydown", taste);
   }, [schrittVor, schrittZurueck]);
 
+  /*
+   * Nachkalibrieren skaliert die vorhandene Geometrie mit — sonst
+   * stünden Dachflächen, die auf dem falschen Massstab gezeichnet
+   * wurden, plötzlich neben dem Haus. Gefragt wird nur, wenn schon
+   * etwas gezeichnet ist und der Massstab sich wirklich ändert.
+   */
+  const onKalibriert = useCallback(
+    async (meterProPixel: number, faktor: number) => {
+      const schonGezeichnet = plan.flaechen.length > 0;
+      const warKalibriert = foto?.meterProPixel != null;
+      let skalieren = false;
+      if (schonGezeichnet && warKalibriert && Math.abs(faktor - 1) > 0.001) {
+        skalieren = window.confirm(
+          `Der Massstab ändert sich um den Faktor ${faktor.toFixed(3).replace(".", ",")}. ` +
+            "Sollen die bereits gezeichneten Flächen mitskaliert werden?",
+        );
+      }
+
+      setFoto((f) => (f ? { ...f, meterProPixel } : f));
+
+      /*
+       * Zoom gegenläufig nachführen. Mit dem Massstab ändert sich, wie
+       * viele Meter das Foto abdeckt — ohne Ausgleich schrumpft oder
+       * wächst es beim Kalibrieren schlagartig, und der Nutzer sucht die
+       * Stelle wieder, an der er gerade gemessen hat.
+       *
+       * Nebeneffekt, der fachlich zählt: danach entspricht dieselbe
+       * Strecke auf dem Schirm wieder derselben Stelle im Bild. Nur so
+       * misst die Gegenprobe wirklich das Foto und nicht die Kamera.
+       */
+      setZoom((z) =>
+        Math.max(ZOOM_GRENZEN.min, Math.min(ZOOM_GRENZEN.max, z - Math.log2(faktor))),
+      );
+      setGemerkt("speichert");
+      const { ok } = await fotoKalibrieren({
+        id: projekt.id,
+        meterProPixel,
+        geometrieSkalieren: skalieren,
+        faktor,
+      });
+      setGemerkt(ok ? "ruhe" : "fehler");
+      if (ok && skalieren) {
+        const skaliert: Plan = {
+          ...plan,
+          flaechen: plan.flaechen.map((fl) => ({
+            ...fl,
+            punkte: fl.punkte.map((q) => ({ x: q.x * faktor, y: q.y * faktor })),
+            hindernisse: fl.hindernisse.map((h) => ({
+              ...h,
+              punkte: h.punkte.map((q) => ({ x: q.x * faktor, y: q.y * faktor })),
+            })),
+          })),
+        };
+        setVerlauf((v) => verlaufSetzen(v, skaliert));
+        letzterPlan.current = JSON.stringify(skaliert);
+      }
+    },
+    [foto, plan, projekt.id],
+  );
+
   const onKamera = useCallback(
     (k: { zoom: number; mitte: Meter }) => {
       setZoom(k.zoom);
@@ -226,14 +301,18 @@ export function Planer({
           </div>
         ) : null}
 
-        <AnbieterLeiste
-          aktiv={anbieter}
-          staende={staende}
-          onWahl={(id) => {
-            setAnbieter(id);
-            ansichtSichern({ anbieter: id, zoom });
-          }}
-        />
+        {foto ? (
+          <FotoBadge foto={foto} />
+        ) : (
+          <AnbieterLeiste
+            aktiv={anbieter}
+            staende={staende}
+            onWahl={(id) => {
+              setAnbieter(id);
+              ansichtSichern({ anbieter: id, zoom });
+            }}
+          />
+        )}
 
         <div className="hidden shrink-0 items-center gap-1 sm:flex">
           <KopfKnopf zeichen="−" beschriftung="Weiter weg"
@@ -279,8 +358,17 @@ export function Planer({
             onPanel={() => setPanelOffen((o) => !o)}
           />
 
+          {schreibrecht ? (
+            <FotoLeiste
+              projektId={projekt.id}
+              foto={foto}
+              werkzeug={werkzeug}
+              onWerkzeug={setWerkzeug}
+            />
+          ) : null}
+
           <div className="relative min-h-0 flex-1">
-            {verfuegbar(anbieter) ? (
+            {foto || verfuegbar(anbieter) ? (
               <Leinwand
                 ursprung={projekt.ursprung}
                 anbieter={anbieter}
@@ -288,6 +376,8 @@ export function Planer({
                 plan={plan}
                 werkzeug={schreibrecht ? werkzeug : "auswahl"}
                 fang={fang}
+                foto={foto}
+                onKalibriert={onKalibriert}
                 aktiv={aktiv}
                 onAktiv={setAktiv}
                 onPlan={onPlan}
@@ -524,5 +614,25 @@ function NichtEingerichtet({ stand }: { stand: AnbieterStand | undefined }) {
         </p>
       </div>
     </div>
+  );
+}
+
+/** Im Kopf steht bei Fotobetrieb die Quelle statt der Anbieterleiste. */
+function FotoBadge({ foto }: { foto: FotoQuelle }) {
+  const kalibriert = foto.meterProPixel != null;
+  return (
+    <span
+      className={[
+        "shrink-0 rounded-pill px-3 py-1 text-[12.5px]",
+        kalibriert ? "bg-sunk text-ink" : "bg-s-crit text-white font-semibold",
+      ].join(" ")}
+      title={
+        kalibriert
+          ? "Drohnenfoto mit bekanntem Massstab"
+          : "Drohnenfoto ohne Massstab — Längen sind geschätzt"
+      }
+    >
+      Drohnenfoto{kalibriert ? "" : " (ungenau)"}
+    </span>
   );
 }

@@ -149,3 +149,153 @@ export async function planSpeichern(daten: { id: string; plan: unknown }): Promi
 
   return { ok: !error };
 }
+
+/* ── Drohnenfoto (Briefing 2.3) ──────────────────────────────────── */
+
+const BUCKET = "planer-fotos";
+/** Was ein Browser zuverlässig als Bild dekodiert. */
+const FOTO_TYPEN = new Set(["image/jpeg", "image/png", "image/webp"]);
+/** Drohnenaufnahmen sind gross; 25 MB decken 48-Megapixel-Bilder ab. */
+const FOTO_MAX = 25 * 1024 * 1024;
+
+export async function fotoHochladen(_prev: PlanerState, formData: FormData): Promise<PlanerState> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const id = z.string().uuid().safeParse(formData.get("id"));
+  if (!id.success) return { error: "Projekt nicht gefunden.", ok: null };
+
+  const datei = formData.get("foto");
+  if (!(datei instanceof File) || datei.size === 0) return { error: "Keine Datei gewählt.", ok: null };
+  if (!FOTO_TYPEN.has(datei.type)) {
+    return { error: "Nur JPEG, PNG oder WebP.", ok: null };
+  }
+  if (datei.size > FOTO_MAX) {
+    return { error: "Höchstens 25 MB. Das Foto vorher verkleinern.", ok: null };
+  }
+
+  const breite = Number(formData.get("breite"));
+  const hoehe = Number(formData.get("hoehe"));
+  if (!Number.isInteger(breite) || !Number.isInteger(hoehe) || breite < 1 || hoehe < 1) {
+    return { error: "Bildmasse fehlen.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const endung = (datei.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const pfad = `${z1.me.companyId}/${id.data}/foto.${endung || "jpg"}`;
+
+  const { error: hochladen } = await supabase.storage
+    .from(BUCKET)
+    .upload(pfad, new Uint8Array(await datei.arrayBuffer()), {
+      contentType: datei.type,
+      upsert: true,
+    });
+  if (hochladen) return { error: "Hochladen fehlgeschlagen.", ok: null };
+
+  /*
+   * Kalibrierfaktor bewusst auf null: ein frisch hochgeladenes Foto hat
+   * keinen bekannten Massstab. Jede Länge daraus wäre geraten, und ein
+   * geratener Massstab ist schlimmer als gar keiner — er sieht aus wie
+   * eine Messung.
+   */
+  const { error } = await supabase
+    .from("planer_projekt")
+    .update({
+      foto_pfad: pfad,
+      foto_breite: breite,
+      foto_hoehe: hoehe,
+      foto_meter_pro_pixel: null,
+    })
+    .eq("id", id.data);
+  if (error) return { error: "Foto konnte nicht gespeichert werden.", ok: null };
+
+  revalidatePath(`/planer/${id.data}`);
+  return { error: null, ok: "Foto hochgeladen — jetzt kalibrieren." };
+}
+
+/**
+ * Massstab setzen.
+ *
+ * `faktor` ist das Verhältnis zwischen neuem und altem Massstab. Beim
+ * Nachkalibrieren wandert damit auf Wunsch die gesamte Geometrie mit:
+ * wer nachträglich merkt, dass die Referenzstrecke falsch war, will
+ * nicht jede Dachkante neu ziehen (Briefing 2.3).
+ */
+export async function fotoKalibrieren(daten: {
+  id: string;
+  meterProPixel: number;
+  geometrieSkalieren: boolean;
+  faktor: number;
+}): Promise<{ ok: boolean }> {
+  const z1 = await zugang();
+  if (!z1.ok) return { ok: false };
+
+  const geprueft = z
+    .object({
+      id: z.string().uuid(),
+      // 1 mm bis 10 m je Bildpunkt — alles ausserhalb ist ein Vertipper.
+      meterProPixel: z.number().positive().min(0.001).max(10),
+      geometrieSkalieren: z.boolean(),
+      faktor: z.number().positive().min(0.001).max(1000),
+    })
+    .safeParse(daten);
+  if (!geprueft.success) return { ok: false };
+
+  const supabase = await createClient();
+  const felder: Record<string, unknown> = {
+    foto_meter_pro_pixel: geprueft.data.meterProPixel,
+  };
+
+  if (geprueft.data.geometrieSkalieren) {
+    const { data } = await supabase
+      .from("planer_projekt")
+      .select("plan")
+      .eq("id", geprueft.data.id)
+      .maybeSingle();
+    const alt = planSchema.safeParse((data as { plan: unknown } | null)?.plan);
+    if (alt.success) {
+      const f = geprueft.data.faktor;
+      felder.plan = {
+        ...alt.data,
+        flaechen: alt.data.flaechen.map((flaeche) => ({
+          ...flaeche,
+          punkte: flaeche.punkte.map((p) => ({ x: p.x * f, y: p.y * f })),
+          hindernisse: flaeche.hindernisse.map((h) => ({
+            ...h,
+            punkte: h.punkte.map((p) => ({ x: p.x * f, y: p.y * f })),
+            abstand: h.abstand,
+          })),
+        })),
+      };
+    }
+  }
+
+  const { error } = await supabase.from("planer_projekt").update(felder).eq("id", geprueft.data.id);
+  return { ok: !error };
+}
+
+export async function fotoEntfernen(_prev: PlanerState, formData: FormData): Promise<PlanerState> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const id = z.string().uuid().safeParse(formData.get("id"));
+  if (!id.success) return { error: "Projekt nicht gefunden.", ok: null };
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("planer_projekt")
+    .select("foto_pfad")
+    .eq("id", id.data)
+    .maybeSingle();
+
+  const pfad = (data as { foto_pfad: string | null } | null)?.foto_pfad;
+  if (pfad) await supabase.storage.from(BUCKET).remove([pfad]);
+
+  await supabase
+    .from("planer_projekt")
+    .update({ foto_pfad: null, foto_breite: null, foto_hoehe: null, foto_meter_pro_pixel: null })
+    .eq("id", id.data);
+
+  revalidatePath(`/planer/${id.data}`);
+  return { error: null, ok: "Foto entfernt — es gilt wieder die Karte." };
+}

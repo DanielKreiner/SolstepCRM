@@ -185,7 +185,7 @@ test.describe("Planer — Zeichnen", () => {
   test("Hindernis liegt auf der Fläche — sonst wird es abgelehnt", async ({ page }) => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Kaminweg 8");
-    await zeichneRechteck(page, 170, 110);
+    await zeichneRechteck(page, 140, 80);
 
     const mitte = await stelle(page, 0, 0);
     await page.getByRole("button", { name: /Hindernis aufziehen/ }).click();
@@ -202,9 +202,14 @@ test.describe("Planer — Zeichnen", () => {
      * taucht in keiner Rechnung auf. Er darf nicht still entstehen.
      */
     await page.getByRole("button", { name: /Hindernis aufziehen/ }).click();
-    await page.mouse.move(mitte.x + 260, mitte.y + 200);
+    /*
+     * Deutlich neben der Fläche (die reicht bis ±140/±80), aber weit
+     * genug INNERHALB der Zeichenfläche: endet der Zug ausserhalb, geht
+     * das Loslassen an ein anderes Element und der Test wird sprunghaft.
+     */
+    await page.mouse.move(mitte.x + 190, mitte.y + 120);
     await page.mouse.down();
-    await page.mouse.move(mitte.x + 310, mitte.y + 250, { steps: 8 });
+    await page.mouse.move(mitte.x + 235, mitte.y + 160, { steps: 8 });
     await page.mouse.up();
 
     await expect(

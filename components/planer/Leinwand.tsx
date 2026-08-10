@@ -49,7 +49,32 @@ import {
  * React-Durchlauf mitten in der Bewegung.
  */
 
-export type Werkzeug = "auswahl" | "flaeche" | "hindernis" | "messen";
+export type Werkzeug =
+  | "auswahl"
+  | "flaeche"
+  | "hindernis"
+  | "messen"
+  /** Referenzstrecke ziehen und ihre wahre Länge eingeben. */
+  | "kalibrieren"
+  /** Zweite Strecke quer dazu — deckt ein verzerrtes Foto auf. */
+  | "gegenprobe";
+
+export interface FotoQuelle {
+  url: string;
+  breite: number;
+  hoehe: number;
+  /** Meter je Bildpunkt. Null = hochgeladen, aber nicht kalibriert. */
+  meterProPixel: number | null;
+}
+
+/**
+ * Vorläufiger Massstab für ein unkalibriertes Foto: das Bild soll rund
+ * 60 m überspannen. Nur damit überhaupt etwas zu sehen ist — jede Länge
+ * daraus ist geraten, und die Oberfläche sagt das auch.
+ */
+export function vorlaeufigerMassstab(breite: number): number {
+  return 60 / Math.max(1, breite);
+}
 
 export interface LeinwandProps {
   ursprung: { lat: number; lon: number };
@@ -58,6 +83,9 @@ export interface LeinwandProps {
   plan: Plan;
   werkzeug: Werkzeug;
   fang: FangOptionen;
+  /** Gesetzt: das Foto ersetzt die Karte (Briefing 2.3). */
+  foto: FotoQuelle | null;
+  onKalibriert: (meterProPixel: number, faktor: number) => void;
   aktiv: string | null;
   onAktiv: (id: string | null) => void;
   /** `schritt` legt einen Rückschritt an; false für Zwischenstände beim Ziehen. */
@@ -106,18 +134,69 @@ export function Leinwand(p: LeinwandProps) {
     | null
   >(null);
 
+  /** Referenzstrecke gezogen — jetzt fehlt ihre wahre Länge. */
+  const [kalibrierEingabe, setKalibrierEingabe] = useState<
+    { art: "kalibrieren" | "gegenprobe"; gemessen: number; x: number; y: number; wert: string } | null
+  >(null);
+
   const [maszEingabe, setMaszEingabe] = useState<
     { flaeche: string; kante: number; x: number; y: number; wert: string } | null
   >(null);
 
   const neuZeichnen = useRef(false);
   const bilder = useRef(new Map<string, HTMLImageElement>());
+  const fotoBild = useRef<HTMLImageElement | null>(null);
 
   /* ── Kacheln ─────────────────────────────────────────────────── */
+
+  /** Das Foto liegt an der Stelle der Kacheln, mittig um den Ursprung. */
+  const legeFoto = useCallback(() => {
+    const schicht = kachelSchicht.current;
+    const f = stand.current.foto;
+    if (!schicht || !f) return;
+
+    // Alte Kacheln müssen weg, sonst scheinen sie unter dem Foto durch.
+    for (const [, b] of bilder.current) b.remove();
+    bilder.current.clear();
+
+    let bild = fotoBild.current;
+    if (!bild || bild.dataset.quelle !== f.url) {
+      bild?.remove();
+      bild = new Image();
+      bild.dataset.quelle = f.url;
+      bild.decoding = "async";
+      bild.draggable = false;
+      bild.style.position = "absolute";
+      bild.style.left = "0";
+      bild.style.top = "0";
+      bild.style.transformOrigin = "0 0";
+      bild.addEventListener("error", () => setMeldung("Das Foto konnte nicht geladen werden."));
+      bild.src = f.url;
+      schicht.appendChild(bild);
+      fotoBild.current = bild;
+    }
+
+    const mpp = f.meterProPixel ?? vorlaeufigerMassstab(f.breite);
+    const breiteM = f.breite * mpp;
+    const hoeheM = f.hoehe * mpp;
+    const k = kamera.current;
+    // Linke obere Ecke im Metersystem — das Foto sitzt mittig um den Ursprung.
+    const ecke = meterZuBild(k, { x: -breiteM / 2, y: hoeheM / 2 });
+    const s = 1 / meterProPixel(k.ursprung.lat, k.zoom);
+    bild.style.width = `${breiteM * s}px`;
+    bild.style.height = `${hoeheM * s}px`;
+    bild.style.transform = `translate3d(${ecke.x}px, ${ecke.y}px, 0)`;
+  }, []);
 
   const legeKacheln = useCallback(() => {
     const schicht = kachelSchicht.current;
     if (!schicht) return;
+    if (stand.current.foto) return legeFoto();
+    // Zurück auf die Karte: ein liegengebliebenes Foto verdeckt sie sonst.
+    if (fotoBild.current) {
+      fotoBild.current.remove();
+      fotoBild.current = null;
+    }
     const k = kamera.current;
     const grenze = anbieterZu(stand.current.anbieter).maxStufe;
     const gebraucht = new Set<string>();
@@ -153,7 +232,7 @@ export function Leinwand(p: LeinwandProps) {
       b.remove();
       bilder.current.delete(schluessel);
     }
-  }, []);
+  }, [legeFoto]);
 
   /* ── Geometrie ───────────────────────────────────────────────── */
 
@@ -202,7 +281,7 @@ export function Leinwand(p: LeinwandProps) {
   /* Neuzeichnen, wenn sich Plan, Auswahl oder Werkzeug ändern. */
   useEffect(() => {
     anstossen();
-  }, [p.plan, p.aktiv, p.werkzeug, anstossen]);
+  }, [p.plan, p.aktiv, p.werkzeug, p.foto, anstossen]);
 
   /* ── Grösse, Anbieter, Ursprung ──────────────────────────────── */
 
@@ -423,7 +502,7 @@ export function Leinwand(p: LeinwandProps) {
       }
 
       const s = stand.current;
-      if (s.werkzeug === "messen") {
+      if (s.werkzeug === "messen" || s.werkzeug === "kalibrieren" || s.werkzeug === "gegenprobe") {
         const m = bildZuMeter(kamera.current, bp);
         messung.current = { von: m, nach: m };
         zieht.current = { art: "messen" };
@@ -578,6 +657,22 @@ export function Leinwand(p: LeinwandProps) {
       }
       if (z?.art === "messen") {
         zieht.current = null;
+        const strecke = messung.current;
+        if (
+          strecke &&
+          (s.werkzeug === "kalibrieren" || s.werkzeug === "gegenprobe") &&
+          laenge(strecke.von, strecke.nach) > 0.01
+        ) {
+          const a = meterZuBild(kamera.current, strecke.von);
+          const b = meterZuBild(kamera.current, strecke.nach);
+          setKalibrierEingabe({
+            art: s.werkzeug,
+            gemessen: laenge(strecke.von, strecke.nach),
+            x: (a.x + b.x) / 2,
+            y: (a.y + b.y) / 2,
+            wert: "",
+          });
+        }
         return;
       }
       zieht.current = null;
@@ -764,6 +859,67 @@ export function Leinwand(p: LeinwandProps) {
         </div>
       ) : null}
 
+      {kalibrierEingabe ? (
+        <form
+          className="absolute z-20"
+          style={{ left: kalibrierEingabe.x - 96, top: kalibrierEingabe.y - 34 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            const echt = Number(kalibrierEingabe.wert.replace(",", "."));
+            const gemessen = kalibrierEingabe.gemessen;
+            if (Number.isFinite(echt) && echt > 0 && gemessen > 0) {
+              const verhaeltnis = echt / gemessen;
+              if (kalibrierEingabe.art === "kalibrieren") {
+                const f = stand.current.foto;
+                const alt = f?.meterProPixel ?? vorlaeufigerMassstab(f?.breite ?? 1);
+                stand.current.onKalibriert(alt * verhaeltnis, verhaeltnis);
+              } else {
+                /*
+                 * Gegenprobe ändert den Massstab NICHT. Sie sagt nur, ob
+                 * das Foto in beide Richtungen gleich massstäblich ist —
+                 * bei einer schrägen Aufnahme ist es das nicht, und dann
+                 * ist jede Länge quer zur Referenz falsch.
+                 */
+                const abweichung = Math.abs(verhaeltnis - 1) * 100;
+                setMeldung(
+                  abweichung > 3
+                    ? `Foto ist verzerrt: ${abweichung.toFixed(1).replace(".", ",")} % Abweichung quer zur Referenz. Möglichst senkrecht von oben aufnehmen.`
+                    : `Gegenprobe stimmt — ${abweichung.toFixed(1).replace(".", ",")} % Abweichung.`,
+                );
+              }
+            }
+            messung.current = null;
+            setKalibrierEingabe(null);
+            stand.current.onWerkzeug("auswahl");
+            anstossen();
+          }}
+        >
+          <div className="rounded-card border border-accent bg-surface p-2 shadow-soft">
+            <p className="mb-1 text-[11px] text-muted">
+              {kalibrierEingabe.art === "kalibrieren" ? "Wahre Länge dieser Strecke" : "Wahre Länge der Gegenprobe"}
+            </p>
+            <input
+              autoFocus
+              aria-label={
+                kalibrierEingabe.art === "kalibrieren"
+                  ? "Wahre Länge der Referenzstrecke in Metern"
+                  : "Wahre Länge der Gegenprobe in Metern"
+              }
+              placeholder="z. B. 8,00"
+              value={kalibrierEingabe.wert}
+              onChange={(e) => setKalibrierEingabe({ ...kalibrierEingabe, wert: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  messung.current = null;
+                  setKalibrierEingabe(null);
+                }
+              }}
+              className="num h-8 w-[176px] rounded-input border border-line bg-sunk px-2 text-center text-[13px] tabular-nums outline-none focus:border-accent"
+            />
+          </div>
+        </form>
+      ) : null}
+
       {kachelFehler ? (
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
           <p className="rounded-pill bg-surface/95 px-3 py-1.5 text-[12.5px] shadow-soft">
@@ -788,7 +944,11 @@ export function Leinwand(p: LeinwandProps) {
                 ? "Rechteck über das Hindernis ziehen — Kamin, Fenster, Gaube."
                 : p.werkzeug === "messen"
                   ? "Strecke ziehen. Esc beendet das Messen."
-                  : ""}
+                  : p.werkzeug === "kalibrieren"
+                    ? "Eine Strecke ziehen, deren wahre Länge du kennst — Firstlänge, Garagentor, Auto."
+                    : p.werkzeug === "gegenprobe"
+                      ? "Zweite Strecke QUER zur ersten ziehen. Weicht sie ab, ist das Foto schräg aufgenommen."
+                      : ""}
           </p>
         </div>
       ) : null}
@@ -818,8 +978,13 @@ export function Leinwand(p: LeinwandProps) {
         ) : null}
       </div>
 
+      {/*
+        Quellenangabe nur für die Karte. Im Fotobetrieb stand hier
+        weiterhin „basemap.at" — eine Zuschreibung an einen Anbieter,
+        dessen Bild gar nicht zu sehen ist.
+      */}
       <p className="pointer-events-none absolute bottom-3 right-3 text-[11px] text-muted/80">
-        {quelle.quelle}
+        {p.foto ? "eigenes Drohnenfoto" : quelle.quelle}
       </p>
     </div>
   );
