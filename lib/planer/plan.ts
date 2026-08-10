@@ -86,13 +86,51 @@ const technikSchema = z.object({
   modul: z.string().uuid().nullable().default(null),
 });
 
+/*
+ * Die Eingaben der Wirtschaftlichkeit (Briefing 7).
+ *
+ * Sie gehören zum Plan, nicht in eine eigene Tabelle: Verbrauch und
+ * Strompreis sind Aussagen ÜBER DIESES HAUS, die im Gespräch entstehen
+ * und mit dem Angebot zusammen erhalten bleiben müssen. Wer eine Woche
+ * später die Planung öffnet, muss dieselbe Zahl sehen, die der Kunde
+ * genannt hat.
+ *
+ * `null` heisst überall: noch nicht angefasst, also gilt die
+ * Vorbelegung des Betriebs. Ein einmal getippter Wert bleibt dagegen
+ * stehen — auch wenn nebenan die Region wechselt (Abnahmetest 19).
+ */
+const wirtschaftSchema = z.object({
+  verbrauchKwh: z.number().finite().nonnegative().nullable().default(null),
+  /** Welche Verbrauchs-Chips aktiv sind, für die Anzeige. */
+  chips: z.array(z.string()).default([]),
+  strompreis: z.number().finite().nonnegative().nullable().default(null),
+  verguetung: z.number().finite().nonnegative().nullable().default(null),
+  anlagenpreis: z.number().finite().nonnegative().nullable().default(null),
+  foerderung: z.number().finite().nonnegative().nullable().default(null),
+  region: z.string().nullable().default(null),
+  /** Ob die Rechnung mit Speicher gezeigt wird. */
+  mitSpeicher: z.boolean().default(false),
+});
+
 export const planSchema = z.object({
   version: z.number().default(PLAN_VERSION),
   flaechen: z.array(flaecheSchema).default([]),
   gruppen: z.array(gruppeSchema).default([]),
   strings: z.array(strangSchema).default([]),
   technik: technikSchema.default({ wechselrichter: null, speicher: null, modul: null }),
+  wirtschaft: wirtschaftSchema.default({
+    verbrauchKwh: null,
+    chips: [],
+    strompreis: null,
+    verguetung: null,
+    anlagenpreis: null,
+    foerderung: null,
+    region: null,
+    mitSpeicher: false,
+  }),
 });
+
+export type Wirtschaft = z.infer<typeof wirtschaftSchema>;
 
 export interface Strang {
   id: string;
@@ -115,6 +153,7 @@ export type Plan = {
   gruppen: Modulgruppe[];
   strings: Strang[];
   technik: Technik;
+  wirtschaft: Wirtschaft;
 };
 
 export function leererPlan(): Plan {
@@ -124,6 +163,16 @@ export function leererPlan(): Plan {
     gruppen: [],
     strings: [],
     technik: { wechselrichter: null, speicher: null, modul: null },
+    wirtschaft: {
+      verbrauchKwh: null,
+      chips: [],
+      strompreis: null,
+      verguetung: null,
+      anlagenpreis: null,
+      foerderung: null,
+      region: null,
+      mitSpeicher: false,
+    },
   };
 }
 

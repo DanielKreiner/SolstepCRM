@@ -6,6 +6,11 @@ import type {
   GeraetSpeicher,
   GeraetWr,
 } from "@/components/planer/TechnikPanel";
+import type {
+  FoerderRegion,
+  WirtschaftVorgabe,
+} from "@/components/planer/WirtschaftPanel";
+import { MODELL } from "@/lib/planer/wirtschaft";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { ANBIETER, type AnbieterId, stand } from "@/lib/planer/anbieter";
@@ -107,12 +112,60 @@ export default async function PlanerProjektPage({
    * Stammdaten für die Auslegung. Eigene Geräte UND der gemeinsame
    * Katalog — die RLS-Policy liefert beides.
    */
-  const [{ data: geraeteModule }, { data: geraeteWr }, { data: geraeteSpeicher }] =
-    await Promise.all([
-      supabase.from("planer_modul").select("*").order("hersteller").order("bezeichnung"),
-      supabase.from("planer_wechselrichter").select("*").order("hersteller").order("bezeichnung"),
-      supabase.from("planer_speicher").select("*").order("hersteller").order("bezeichnung"),
-    ]);
+  const [
+    { data: geraeteModule },
+    { data: geraeteWr },
+    { data: geraeteSpeicher },
+    { data: vorgabeZeile },
+    { data: foerderZeilen },
+  ] = await Promise.all([
+    supabase.from("planer_modul").select("*").order("hersteller").order("bezeichnung"),
+    supabase.from("planer_wechselrichter").select("*").order("hersteller").order("bezeichnung"),
+    supabase.from("planer_speicher").select("*").order("hersteller").order("bezeichnung"),
+    supabase
+      .from("planer_wirtschaft_vorgabe")
+      .select("verlust_prozent, steigerung, strompreis, verguetung, preisstaffel, speicher_eur_pro_kwh")
+      .maybeSingle(),
+    supabase.from("planer_foerderung").select("region, betrag, hinweis").order("region"),
+  ]);
+
+  /*
+   * PostgREST liefert numeric als Zeichenkette. Einmal beim Hereinkommen
+   * umwandeln — sonst rechnet irgendwo weiter unten jemand "0.28" + 1
+   * und bekommt "0.281".
+   *
+   * Fehlt die Vorgabezeile (neuer Mandant), gelten die Werte aus dem
+   * Modell. Der Planer soll auch ohne eingerichtete Einstellungen
+   * rechnen.
+   */
+  const roh = vorgabeZeile as {
+    verlust_prozent: string | number;
+    steigerung: string | number;
+    strompreis: string | number;
+    verguetung: string | number;
+    preisstaffel: unknown;
+    speicher_eur_pro_kwh: string | number;
+  } | null;
+
+  const staffel = Array.isArray(roh?.preisstaffel)
+    ? (roh.preisstaffel as Array<{ ab_kwp: unknown; eur_pro_kwp: unknown }>).map((st) => ({
+        ab_kwp: Number(st.ab_kwp),
+        eur_pro_kwp: Number(st.eur_pro_kwp),
+      }))
+    : [];
+
+  const vorgabe: WirtschaftVorgabe = {
+    verlustProzent: roh ? Number(roh.verlust_prozent) : 14,
+    steigerung: roh ? Number(roh.steigerung) : MODELL.strompreisSteigerung,
+    strompreis: roh ? Number(roh.strompreis) : 0.28,
+    verguetung: roh ? Number(roh.verguetung) : 0.08,
+    preisstaffel: staffel,
+    speicherEurProKwh: roh ? Number(roh.speicher_eur_pro_kwh) : 0,
+  };
+
+  const regionen: FoerderRegion[] = (
+    (foerderZeilen ?? []) as Array<{ region: string; betrag: string | number; hinweis: string | null }>
+  ).map((r) => ({ region: r.region, betrag: Number(r.betrag), hinweis: r.hinweis }));
 
   return (
     <Planer
@@ -124,6 +177,8 @@ export default async function PlanerProjektPage({
         wechselrichter: (geraeteWr ?? []) as unknown as GeraetWr[],
         speicher: (geraeteSpeicher ?? []) as unknown as GeraetSpeicher[],
       }}
+      vorgabe={vorgabe}
+      regionen={regionen}
     />
   );
 }

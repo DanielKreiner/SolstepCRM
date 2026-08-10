@@ -11,6 +11,15 @@ import {
   TechnikPanel,
 } from "./TechnikPanel";
 import { FotoLeiste } from "./FotoLeiste";
+import { Ergebnis } from "./Ergebnis";
+import { useErtrag } from "./useErtrag";
+import {
+  type FoerderRegion,
+  gilt,
+  preisVorschlag,
+  WirtschaftPanel,
+  type WirtschaftVorgabe,
+} from "./WirtschaftPanel";
 import { ansichtMerken, fotoKalibrieren, planSpeichern } from "@/app/(app)/planer/actions";
 import {
   ANBIETER,
@@ -21,6 +30,7 @@ import {
 import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
 import { anzahlModule, kwp } from "@/lib/planer/module";
+import { num } from "@/lib/format";
 import type { Plan } from "@/lib/planer/plan";
 import {
   kannVor,
@@ -61,7 +71,7 @@ const PHASEN = [
   { nr: 1 as const, mark: "1", label: "Dach", fertig: true },
   { nr: 2 as const, mark: "2", label: "Belegung", fertig: true },
   { nr: 3 as const, mark: "3", label: "Technik", fertig: true },
-  { nr: 4 as const, mark: "4", label: "Ertrag", fertig: false },
+  { nr: 4 as const, mark: "4", label: "Ertrag", fertig: true },
   { nr: 5 as const, mark: "5", label: "Übergabe", fertig: false },
 ];
 
@@ -80,11 +90,15 @@ export function Planer({
   staende,
   schreibrecht,
   geraete,
+  vorgabe,
+  regionen,
 }: {
   projekt: PlanerProjekt;
   staende: AnbieterStand[];
   schreibrecht: boolean;
   geraete: { module: GeraetModul[]; wechselrichter: GeraetWr[]; speicher: GeraetSpeicher[] };
+  vorgabe: WirtschaftVorgabe;
+  regionen: FoerderRegion[];
 }) {
   const [anbieter, setAnbieter] = useState<AnbieterId>(projekt.anbieter);
   const [zoom, setZoom] = useState(projekt.zoom);
@@ -92,8 +106,12 @@ export function Planer({
   const [aktiv, setAktiv] = useState<string | null>(null);
   const [aktiveGruppe, setAktiveGruppe] = useState<string | null>(null);
   const [aktiverStrang, setAktiverStrang] = useState<string | null>(null);
-  /* Phase 1 zeichnet und belegt, Phase 3 legt die Technik fest. */
-  const [phase, setPhase] = useState<1 | 3>(1);
+  /*
+   * Phase 1 zeichnet und belegt, Phase 3 legt die Technik fest, Phase 4
+   * rechnet. In Phase 4 tritt die Karte ganz zurück — dort wird nicht
+   * mehr geplant, sondern gezeigt, und der Kunde schaut mit.
+   */
+  const [phase, setPhase] = useState<1 | 3 | 4>(1);
   const [fang, setFang] = useState<FangOptionen>(FANG_STANDARD);
   const [gemerkt, setGemerkt] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
   const [mitte, setMitte] = useState<Meter>({ x: 0, y: 0 });
@@ -271,10 +289,48 @@ export function Planer({
   const dach = plan.flaechen.reduce((s, f) => s + dachflaeche(f.punkte, f.neigung), 0);
   const modulzahl = plan.gruppen.reduce((s, g) => s + anzahlModule(g), 0);
   const leistung = plan.gruppen.reduce((s, g) => s + kwp(g), 0);
+  /*
+   * Ertrag der Anlage, laufend nachgeführt. Der Hook fragt je Fläche
+   * und erst 800 ms nach der letzten Änderung — beim Ziehen am
+   * Neigungsregler rechnet er solange aus dem letzten Wert hoch und
+   * markiert das mit einer Tilde.
+   */
+  const ertrag = useErtrag(plan, projekt.ursprung, vorgabe.verlustProzent);
+
+  const gewaehlterSpeicher = geraete.speicher.find((sp) => sp.id === plan.technik.speicher);
+  const speicherKwh = gewaehlterSpeicher ? Number(gewaehlterSpeicher.nutzbar_kwh) : 0;
+
+  const w = plan.wirtschaft;
+  const wirtschaftWerte = {
+    verbrauchKwh: gilt(w.verbrauchKwh, 4500),
+    strompreis: gilt(w.strompreis, vorgabe.strompreis),
+    verguetung: gilt(w.verguetung, vorgabe.verguetung),
+    anlagenpreis: gilt(
+      w.anlagenpreis,
+      preisVorschlag(vorgabe, leistung, speicherKwh, w.mitSpeicher),
+    ),
+    foerderung: gilt(w.foerderung, regionen.find((r) => r.region === w.region)?.betrag ?? 0),
+  };
+
+  const tilde = ertrag.vorlaeufig ? "~" : "";
   const kennzahlen = [
     { wert: `${dach.toFixed(0)} m²`, label: "DACHFLÄCHE" },
     { wert: String(modulzahl), label: "MODULE" },
     { wert: `${leistung.toFixed(2).replace(".", ",")}`, label: "KWP" },
+    /*
+     * Der Ertrag steht in derselben Leiste wie die Module: er ist die
+     * Zahl, nach der als Erstes gefragt wird. Die Tilde davor heisst,
+     * dass gerade noch gerechnet wird — sie ist wichtiger als sie
+     * aussieht, denn ohne sie hielte man einen Zwischenwert für den
+     * endgültigen.
+     */
+    {
+      wert:
+        ertrag.anlage.jahresertragKwh > 0
+          ? `${tilde}${num(Math.round(ertrag.anlage.jahresertragKwh))}`
+          : "—",
+      label: ertrag.quelle === "geschaetzt" ? "KWH/JAHR ~" : "KWH/JAHR",
+    },
   ];
 
   return (
@@ -365,14 +421,15 @@ export function Planer({
              * unanklickbar — kein Knopf, der ins Leere führt.
              */
             const anklickbar = ph.fertig;
-            const aktivePhase = ph.nr === 3 ? phase === 3 : ph.nr <= 2 && phase === 1;
+            const aktivePhase =
+              ph.nr === 3 ? phase === 3 : ph.nr === 4 ? phase === 4 : ph.nr <= 2 && phase === 1;
             return (
             <button
               key={ph.nr}
               type="button"
               disabled={!anklickbar}
               aria-pressed={aktivePhase}
-              onClick={() => setPhase(ph.nr === 3 ? 3 : 1)}
+              onClick={() => setPhase(ph.nr === 3 ? 3 : ph.nr === 4 ? 4 : 1)}
               className={[
                 "flex w-16 flex-col items-center gap-1 rounded-[11px] pb-[7px] pt-[9px]",
                 aktivePhase ? "bg-accent-sunk" : "",
@@ -400,7 +457,35 @@ export function Planer({
           })}
         </nav>
 
-        {/* ── Zeichenfläche, dunkel ────────────────────────────────── */}
+        {/* ── Ergebnisfläche (Phase 4) ─────────────────────────────── */}
+        {phase === 4 ? (
+          /*
+           * In Phase 4 tritt die Karte ganz zurück. Hier wird nicht mehr
+           * geplant, sondern gezeigt — und zwar hell, weil der Kunde
+           * mitschaut und die dunkle Zeichenfläche in einem Wohnzimmer
+           * am Tablet unangenehm blendet.
+           */
+          <div className="min-w-0 flex-1 bg-app">
+            <Ergebnis
+              ertragKwh={ertrag.anlage.jahresertragKwh}
+              verbrauchKwh={wirtschaftWerte.verbrauchKwh}
+              speicherKwh={speicherKwh}
+              strompreis={wirtschaftWerte.strompreis}
+              verguetung={wirtschaftWerte.verguetung}
+              anlagenpreis={wirtschaftWerte.anlagenpreis}
+              foerderung={wirtschaftWerte.foerderung}
+              steigerung={vorgabe.steigerung}
+              mitSpeicher={plan.wirtschaft.mitSpeicher}
+              onMitSpeicher={(an) =>
+                onPlan({ ...plan, wirtschaft: { ...plan.wirtschaft, mitSpeicher: an } }, true)
+              }
+              geschaetzt={ertrag.quelle === "geschaetzt"}
+              vorlaeufig={ertrag.vorlaeufig}
+              speicherVerfuegbar={speicherKwh > 0}
+            />
+          </div>
+        ) : (
+        /* ── Zeichenfläche, dunkel ────────────────────────────────── */
         <div className="relative min-w-0 flex-1 bg-pl-flaeche">
           {foto || verfuegbar(anbieter) ? (
             <Leinwand
@@ -531,11 +616,37 @@ export function Planer({
             </button>
           ) : null}
         </div>
+        )}
 
         {/* ── Panel, 344 px ───────────────────────────────────────── */}
         {panelOffen ? (
           <div className="absolute inset-y-0 right-0 z-30 flex w-[var(--pl-panel-breite)] max-w-[86%] shadow-soft lg:static lg:z-auto lg:shadow-none">
-            {phase === 3 ? (
+            {phase === 4 ? (
+              <aside className="flex w-full flex-col border-l border-line bg-panel">
+                <div className="flex items-center px-4 pb-2.5 pt-3.5">
+                  <h2 className="text-[15px] font-extrabold">Deine Angaben</h2>
+                  <button
+                    type="button"
+                    onClick={() => setPanelOffen(false)}
+                    aria-label="Seitenleiste schliessen"
+                    className="ml-auto flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[15px] text-muted hover:bg-sunk lg:hidden"
+                  >
+                    ›
+                  </button>
+                </div>
+                <div className="flex-1 overflow-auto px-4 pb-4">
+                  <WirtschaftPanel
+                    plan={plan}
+                    onPlan={(naechster) => onPlan(naechster, true)}
+                    vorgabe={vorgabe}
+                    regionen={regionen}
+                    anlageKwp={leistung}
+                    speicherKwh={speicherKwh}
+                    schreibrecht={schreibrecht}
+                  />
+                </div>
+              </aside>
+            ) : phase === 3 ? (
               <aside className="flex w-full flex-col border-l border-line bg-panel">
                 <div className="flex items-center px-4 pb-2.5 pt-3.5">
                   <h2 className="text-[15px] font-extrabold">Technik</h2>

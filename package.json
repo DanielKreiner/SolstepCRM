@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:planer": "playwright test e2e/planer.spec.ts e2e/planer-zeichnen.spec.ts e2e/planer-foto.spec.ts e2e/planer-belegung.spec.ts e2e/planer-stammdaten.spec.ts e2e/planer-technik.spec.ts",
+    "test:e2e:planer": "playwright test e2e/planer",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
     "db:diff": "supabase db diff",

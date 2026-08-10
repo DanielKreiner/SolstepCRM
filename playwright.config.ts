@@ -34,9 +34,18 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    // Eigener Port und eigenes Build-Verzeichnis, damit ein laufender
-    // Dev-Server auf 3000 nicht gestört wird.
-    command: `NEXT_DIST_DIR=.next-e2e next dev --port ${PORT}`,
+    /*
+     * Eigener Port und eigenes Build-Verzeichnis, damit ein laufender
+     * Dev-Server auf 3000 nicht gestört wird.
+     *
+     * Der grössere Heap ist kein Luxus: Der Dev-Server kompiliert jede
+     * Route beim ersten Aufruf und behält sie im Speicher. Ab rund
+     * vierzig Tests reichte der Standardwert nicht mehr — der Prozess
+     * starb mitten im Lauf, und alle folgenden Tests scheiterten binnen
+     * Millisekunden mit ERR_CONNECTION_REFUSED. Das sah nach einem
+     * Fehler in der Anwendung aus und war keiner.
+     */
+    command: `NODE_OPTIONS=--max-old-space-size=6144 NEXT_DIST_DIR=.next-e2e next dev --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}/login`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

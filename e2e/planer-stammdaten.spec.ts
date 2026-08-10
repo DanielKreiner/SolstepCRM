@@ -174,6 +174,12 @@ test.describe("Planer — Stammdaten", () => {
 
     await page.getByRole("button", { name: "Hinzufügen" }).click();
     await expect(page.getByText(/Testspeicher 10 gespeichert/)).toBeVisible();
-    await expect(page.getByText(/1 WR/)).toBeVisible();
+    /*
+     * In der Zeile des eigenen Speichers prüfen. „1 WR" steht auch bei
+     * jedem anderen Speicher mit genau einem passenden Wechselrichter —
+     * ein Treffer irgendwo auf der Seite sagt nichts über diesen hier.
+     */
+    const zeile = page.locator("li", { hasText: "Testspeicher 10" }).first();
+    await expect(zeile).toContainText("1 WR");
   });
 });
