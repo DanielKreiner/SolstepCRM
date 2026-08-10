@@ -116,7 +116,16 @@ test.describe("Planer — Stammdaten", () => {
 
     await page.getByRole("button", { name: "Hinzufügen" }).click();
     await expect(page.getByText(/Test 10.0 gespeichert/)).toBeVisible();
-    await expect(page.getByText(/2 MPPT/)).toBeVisible();
+
+    /*
+     * In der Zeile des eigenen Geräts prüfen, nicht auf der Seite.
+     * Seit der Übernahme aus dem Lager stehen hier Dutzende Geräte, und
+     * „2 MPPT" trifft die meisten davon — ein Treffer irgendwo sagte
+     * nichts darüber, ob DIESER Wechselrichter zwei Tracker bekam.
+     */
+    const zeile = page.locator("li", { hasText: "Test 10.0" }).first();
+    await expect(zeile).toContainText("2 MPPT");
+    await expect(zeile).toContainText("10 kW AC");
   });
 
   test("MPP-Fenster verkehrt herum wird abgelehnt", async ({ page }) => {

@@ -1,13 +1,15 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { num } from "@/lib/format";
 import {
+  ausLagerUebernehmen,
   geraetLoeschen,
   katalogKopieren,
   modulSpeichern,
   speicherSpeichern,
   type StammState,
+  type UebernahmeBericht,
   wechselrichterSpeichern,
 } from "./planer-actions";
 
@@ -131,6 +133,8 @@ export function PlanerStammdaten({
 
   return (
     <div className="flex flex-col gap-4">
+      {schreibrecht ? <AusLager /> : null}
+
       <div className="flex gap-0.5 self-start rounded-pill bg-sunk p-1" role="group" aria-label="Geräteart">
         {(
           [
@@ -650,5 +654,96 @@ function Feld({
       <span className="text-[11.5px] font-semibold text-muted">{label}</span>
       {children}
     </label>
+  );
+}
+
+
+/* ── Übernahme aus dem Lager ───────────────────────────────────── */
+
+/**
+ * Die gepflegten Lagerartikel als Planer-Geräte übernehmen.
+ *
+ * Der Bericht danach ist der eigentliche Nutzen: er sagt nicht nur, wie
+ * viele Geräte entstanden sind, sondern bei welchen Artikeln WELCHER
+ * Datenblattwert fehlt. Damit lässt sich gezielt nachtragen, statt alles
+ * von Hand einzugeben.
+ */
+function AusLager() {
+  const [bericht, setBericht] = useState<UebernahmeBericht | null>(null);
+  const [laeuft, starten] = useTransition();
+  const [alleLuecken, setAlleLuecken] = useState(false);
+
+  const luecken = bericht?.luecken ?? [];
+  const sichtbar = alleLuecken ? luecken : luecken.slice(0, 8);
+
+  return (
+    <section className="rounded-card border border-line bg-surface p-4">
+      <h4 className="text-[13.5px] font-bold">Aus dem Lager übernehmen</h4>
+      <p className="mt-1 max-w-2xl text-[12.5px] leading-[1.5] text-muted">
+        Liest Module, Wechselrichter und Speicher aus dem Artikelstamm und legt sie als
+        Planer-Geräte an. Übernommen wird nur, was im Artikel belegt dasteht — was fehlt, steht
+        danach als Liste da. Bereits übernommene Artikel werden aktualisiert, nicht verdoppelt.
+      </p>
+
+      <button
+        type="button"
+        disabled={laeuft}
+        onClick={() => starten(async () => setBericht(await ausLagerUebernehmen()))}
+        className="mt-3 flex h-10 items-center rounded-[10px] bg-accent px-4 text-[13.5px] font-bold text-white transition-colors hover:bg-accent-to disabled:opacity-50"
+      >
+        {laeuft ? "Liest das Lager …" : "Artikel übernehmen"}
+      </button>
+
+      {bericht?.fehler ? (
+        <p className="mt-3 text-[12.5px] font-semibold text-s-crit">{bericht.fehler}</p>
+      ) : null}
+
+      {bericht && !bericht.fehler ? (
+        <div className="mt-3">
+          <p className="text-[13px] font-semibold">
+            {bericht.angelegt.module} Module · {bericht.angelegt.wechselrichter} Wechselrichter ·{" "}
+            {bericht.angelegt.speicher} Speicher übernommen
+          </p>
+
+          {bericht.uebersprungen > 0 ? (
+            <p className="mt-1 text-[12.5px] text-muted">
+              {bericht.uebersprungen} Artikel übergangen — Kabelsätze, Halter und Zubehör, die in
+              denselben Kategorien liegen, aber keine Geräte sind.
+            </p>
+          ) : null}
+
+          {luecken.length > 0 ? (
+            <>
+              <p className="mt-2 text-[12.5px] text-muted">
+                Bei {luecken.length} Artikeln fehlen Datenblattwerte. Sie sind NICHT übernommen —
+                ein geschätzter Wert wäre hier gefährlicher als eine Lücke.
+              </p>
+              <ul className="mt-2 flex flex-col gap-1">
+                {sichtbar.map((l) => (
+                  <li key={`${l.art}-${l.sku}`} className="text-[12px] leading-[1.45]">
+                    <span className="num text-muted">{l.sku}</span>{" "}
+                    <span className="font-semibold">{l.name}</span>{" "}
+                    <span className="text-muted">— fehlt: {l.fehlt.join(", ")}</span>
+                  </li>
+                ))}
+              </ul>
+              {luecken.length > sichtbar.length ? (
+                <button
+                  type="button"
+                  onClick={() => setAlleLuecken(true)}
+                  className="mt-2 text-[12px] text-accent-ink hover:underline"
+                >
+                  alle {luecken.length} anzeigen
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p className="mt-2 text-[12.5px] text-muted">
+              Alle Artikel hatten vollständige Werte.
+            </p>
+          )}
+        </div>
+      ) : null}
+    </section>
   );
 }

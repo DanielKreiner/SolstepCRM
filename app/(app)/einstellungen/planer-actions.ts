@@ -316,3 +316,99 @@ function fehlertext(fehler: z.ZodError): string {
     ? `${erstes.path.join(" ")}: ${erstes.message}`
     : erstes.message;
 }
+
+/* ── Übernahme aus dem Lager (Briefing 5.1, 8.2) ─────────────────── */
+
+export interface UebernahmeBericht {
+  angelegt: { module: number; wechselrichter: number; speicher: number };
+  luecken: Array<{ art: string; sku: string; name: string; fehlt: string[] }>;
+  /** Artikel, die gar keine Geräte sind — Kabelsätze, Halter, Zubehör. */
+  uebersprungen: number;
+  fehler: string | null;
+}
+
+/**
+ * Die Artikel aus dem Lager als Planer-Geräte anlegen.
+ *
+ * Übernommen wird NUR, was im Artikel belegt dasteht. Was fehlt, kommt
+ * als Liste zurück, damit es gezielt nachgetragen werden kann — geraten
+ * wird nichts. Eine erfundene DC-Grenze ergibt einen String, der im
+ * Winter den Wechselrichter überspannt, und niemand würde es merken.
+ *
+ * Bereits übernommene Artikel werden aktualisiert, nicht verdoppelt
+ * (eindeutiger Index auf company_id + artikel_id, Migration 0065).
+ */
+export async function ausLagerUebernehmen(): Promise<UebernahmeBericht> {
+  const leer = { module: 0, wechselrichter: 0, speicher: 0 };
+  const nichts = { angelegt: leer, luecken: [], uebersprungen: 0 };
+  const z1 = await zugang();
+  if (!z1.ok) return { ...nichts, fehler: z1.status.error };
+
+  const { moduleAusArtikeln, speicherAusArtikeln, wechselrichterAusArtikeln } = await import(
+    "@/lib/planer/uebernahme"
+  );
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("article")
+    .select("id, sku, name, manufacturer, category, datasheet_url, modul_wp, wr_kw, tech_specs")
+    .eq("active", true)
+    .in("category", ["PV-Module", "Module", "Wechselrichter", "Speicher"]);
+  if (error) return { ...nichts, fehler: "Lager konnte nicht gelesen werden." };
+
+  type Zeile = Parameters<typeof moduleAusArtikeln>[0][number];
+  const artikel = (data ?? []) as unknown as Zeile[];
+  const nach = (...kategorien: string[]) =>
+    artikel.filter((a) => kategorien.includes(a.category ?? ""));
+
+  const modulListe = moduleAusArtikeln(nach("PV-Module", "Module"));
+  const wr = wechselrichterAusArtikeln(nach("Wechselrichter"));
+  const speicher = speicherAusArtikeln(nach("Speicher"));
+
+  const firma = z1.me.companyId;
+  const angelegt = { ...leer };
+
+  /*
+   * Ein fehlgeschlagenes Schreiben muss sichtbar werden.
+   *
+   * Der erste Anlauf prüfte den Fehler mit `if (!e)` und liess den
+   * Zähler sonst auf 0 stehen. Die Oberfläche meldete dann „0 Module
+   * übernommen", als wäre nichts Passendes im Lager gewesen — während
+   * in Wahrheit jeder Upsert am partiellen Index scheiterte (Migration
+   * 0065). Falsche Ruhe ist schlimmer als eine Fehlermeldung.
+   */
+  let schreibfehler: string | null = null;
+  const schreibe = async <T extends object>(
+    tabelle: "planer_modul" | "planer_wechselrichter" | "planer_speicher",
+    zeilen: T[],
+  ): Promise<number> => {
+    if (zeilen.length === 0) return 0;
+    const { error: e } = await supabase
+      .from(tabelle)
+      .upsert(
+        zeilen.map((z) => ({ ...z, company_id: firma })),
+        { onConflict: "company_id,artikel_id" },
+      );
+    if (e) {
+      schreibfehler ??= `Schreiben nach ${tabelle} fehlgeschlagen: ${e.message}`;
+      return 0;
+    }
+    return zeilen.length;
+  };
+
+  angelegt.module = await schreibe("planer_modul", modulListe.fertig);
+  angelegt.wechselrichter = await schreibe("planer_wechselrichter", wr.fertig);
+  angelegt.speicher = await schreibe("planer_speicher", speicher.fertig);
+
+  revalidatePath("/einstellungen");
+  return {
+    angelegt,
+    luecken: [
+      ...modulListe.luecken.map((l) => ({ art: "Modul", ...l })),
+      ...wr.luecken.map((l) => ({ art: "Wechselrichter", ...l })),
+      ...speicher.luecken.map((l) => ({ art: "Speicher", ...l })),
+    ],
+    uebersprungen: modulListe.uebersprungen + wr.uebersprungen + speicher.uebersprungen,
+    fehler: schreibfehler,
+  };
+}
