@@ -41,9 +41,17 @@ test.describe("Planer — Stammdaten", () => {
     await page.getByRole("button", { name: "Hinzufügen" }).click();
 
     await expect(page.getByText(/Prüfhersteller Testmodul 440 gespeichert/)).toBeVisible();
-    // In der Liste steht der Koeffizient wieder als %/K — nicht als 0,0025.
-    await expect(page.getByText(/-0,250 %\/K/)).toBeVisible();
-    await expect(page.getByText(/Uoc 39,4 V/)).toBeVisible();
+
+    /*
+     * Auf die EIGENE Zeile prüfen, nicht auf den Text irgendwo: in den
+     * Stammdaten stehen auch Geräte aus anderen Suiten mit denselben
+     * Werten. Ein Treffer „irgendwo" wäre kein Beleg dafür, dass dieses
+     * Modul richtig gespeichert wurde.
+     */
+    const zeile = page.locator("li", { hasText: "Prüfhersteller Testmodul 440" }).first();
+    // Der Koeffizient steht wieder als %/K da — nicht als 0,0025.
+    await expect(zeile).toContainText("-0,250 %/K");
+    await expect(zeile).toContainText("Uoc 39,4 V");
   });
 
   test("Widersprüchliche Spannungen werden im Klartext abgelehnt", async ({ page }) => {

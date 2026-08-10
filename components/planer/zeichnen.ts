@@ -307,6 +307,8 @@ export function zeichneGruppe(
   g: Modulgruppe,
   f: Dachflaeche,
   gewaehlt: boolean,
+  /** Modulschlüssel → Stringfarbe. Fehlt einer, bleibt das Modul neutral. */
+  stringFarben?: Map<string, string>,
 ) {
   const aus = new Set(g.aus);
   // Klein gezeichnete Module brauchen keinen Rand — sonst ist das Feld
@@ -330,7 +332,8 @@ export function zeichneGruppe(
       ctx.closePath();
 
       if (an) {
-        ctx.fillStyle = FARBEN.modul;
+        const farbe = stringFarben?.get(`${g.id}/${r}:${c}`);
+        ctx.fillStyle = farbe ?? FARBEN.modul;
         ctx.fill();
         if (feineLinie) {
           ctx.strokeStyle = FARBEN.modulRand;

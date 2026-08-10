@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type FotoQuelle, Leinwand, type Werkzeug } from "./Leinwand";
 import { FlaechenPanel } from "./FlaechenPanel";
+import {
+  type GeraetModul,
+  type GeraetSpeicher,
+  type GeraetWr,
+  TechnikPanel,
+} from "./TechnikPanel";
 import { FotoLeiste } from "./FotoLeiste";
 import { ansichtMerken, fotoKalibrieren, planSpeichern } from "@/app/(app)/planer/actions";
 import {
@@ -52,11 +58,11 @@ export interface PlanerProjekt {
 }
 
 const PHASEN = [
-  { nr: 1, mark: "1", label: "Dach", fertig: true },
-  { nr: 2, mark: "2", label: "Belegung", fertig: false },
-  { nr: 3, mark: "3", label: "Technik", fertig: false },
-  { nr: 4, mark: "4", label: "Ertrag", fertig: false },
-  { nr: 5, mark: "5", label: "Übergabe", fertig: false },
+  { nr: 1 as const, mark: "1", label: "Dach", fertig: true },
+  { nr: 2 as const, mark: "2", label: "Belegung", fertig: true },
+  { nr: 3 as const, mark: "3", label: "Technik", fertig: true },
+  { nr: 4 as const, mark: "4", label: "Ertrag", fertig: false },
+  { nr: 5 as const, mark: "5", label: "Übergabe", fertig: false },
 ];
 
 const WERKZEUGE: Array<{ id: Werkzeug; glyph: string; label: string; titel: string }> = [
@@ -65,6 +71,7 @@ const WERKZEUGE: Array<{ id: Werkzeug; glyph: string; label: string; titel: stri
   { id: "hindernis", glyph: "▣", label: "Hindernis", titel: "Hindernis aufziehen (Kamin, Fenster)" },
   { id: "modul", glyph: "⬓", label: "Modul", titel: "Einzelnes Modul frei setzen oder zurückholen" },
   { id: "teilen", glyph: "⧉", label: "Teilen", titel: "Teil der Gruppe als eigene Gruppe abtrennen" },
+  { id: "string", glyph: "⚡", label: "String", titel: "Module dem gewählten String zuordnen" },
   { id: "messen", glyph: "↔", label: "Messen", titel: "Strecke messen" },
 ];
 
@@ -72,16 +79,21 @@ export function Planer({
   projekt,
   staende,
   schreibrecht,
+  geraete,
 }: {
   projekt: PlanerProjekt;
   staende: AnbieterStand[];
   schreibrecht: boolean;
+  geraete: { module: GeraetModul[]; wechselrichter: GeraetWr[]; speicher: GeraetSpeicher[] };
 }) {
   const [anbieter, setAnbieter] = useState<AnbieterId>(projekt.anbieter);
   const [zoom, setZoom] = useState(projekt.zoom);
   const [werkzeug, setWerkzeug] = useState<Werkzeug>("auswahl");
   const [aktiv, setAktiv] = useState<string | null>(null);
   const [aktiveGruppe, setAktiveGruppe] = useState<string | null>(null);
+  const [aktiverStrang, setAktiverStrang] = useState<string | null>(null);
+  /* Phase 1 zeichnet und belegt, Phase 3 legt die Technik fest. */
+  const [phase, setPhase] = useState<1 | 3>(1);
   const [fang, setFang] = useState<FangOptionen>(FANG_STANDARD);
   const [gemerkt, setGemerkt] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
   const [mitte, setMitte] = useState<Meter>({ x: 0, y: 0 });
@@ -346,20 +358,35 @@ export function Planer({
           className="z-20 hidden w-[var(--pl-stepper-breite)] shrink-0 flex-col items-center gap-1 border-r border-line bg-panel pt-3.5 sm:flex"
           aria-label="Planungsphasen"
         >
-          {PHASEN.map((ph) => (
-            <div
+          {PHASEN.map((ph) => {
+            /*
+             * Dach und Belegung teilen sich das Flächen-Panel; Technik
+             * hat ein eigenes. Was noch nicht gebaut ist, bleibt
+             * unanklickbar — kein Knopf, der ins Leere führt.
+             */
+            const anklickbar = ph.fertig;
+            const aktivePhase = ph.nr === 3 ? phase === 3 : ph.nr <= 2 && phase === 1;
+            return (
+            <button
               key={ph.nr}
+              type="button"
+              disabled={!anklickbar}
+              aria-pressed={aktivePhase}
+              onClick={() => setPhase(ph.nr === 3 ? 3 : 1)}
               className={[
                 "flex w-16 flex-col items-center gap-1 rounded-[11px] pb-[7px] pt-[9px]",
-                ph.fertig ? "bg-accent-sunk" : "",
+                aktivePhase ? "bg-accent-sunk" : "",
+                anklickbar ? "hover:bg-sunk" : "cursor-default",
               ].join(" ")}
             >
               <span
                 className={[
                   "num flex h-[26px] w-[26px] items-center justify-center rounded-pill border-[1.5px] text-[12px] font-bold",
-                  ph.fertig
+                  aktivePhase
                     ? "border-accent bg-accent text-white"
-                    : "border-line-strong/40 bg-surface text-muted",
+                    : ph.fertig
+                      ? "border-accent/50 bg-surface text-accent-ink"
+                      : "border-line-strong/40 bg-surface text-muted",
                 ].join(" ")}
               >
                 {ph.mark}
@@ -368,8 +395,9 @@ export function Planer({
                 {ph.label}
               </span>
               {!ph.fertig ? <span className="text-[9px] text-muted/50">folgt</span> : null}
-            </div>
-          ))}
+            </button>
+            );
+          })}
         </nav>
 
         {/* ── Zeichenfläche, dunkel ────────────────────────────────── */}
@@ -388,6 +416,7 @@ export function Planer({
               onAktiv={setAktiv}
               aktiveGruppe={aktiveGruppe}
               onAktiveGruppe={setAktiveGruppe}
+              aktiverStrang={aktiverStrang}
               onPlan={onPlan}
               onWerkzeug={setWerkzeug}
               onKamera={onKamera}
@@ -410,7 +439,8 @@ export function Planer({
                  */
                 const gesperrt =
                   (w.id === "hindernis" && (plan.flaechen.length === 0 || !aktiv)) ||
-                  ((w.id === "modul" || w.id === "teilen") && !aktiveGruppe);
+                  ((w.id === "modul" || w.id === "teilen") && !aktiveGruppe) ||
+                  (w.id === "string" && !aktiverStrang);
                 const an = werkzeug === w.id;
                 return (
                   <button
@@ -421,7 +451,9 @@ export function Planer({
                       gesperrt
                         ? w.id === "hindernis"
                           ? "Zuerst eine Dachfläche auswählen."
-                          : "Zuerst eine Modulgruppe auswählen."
+                          : w.id === "string"
+                            ? "Zuerst einen String anlegen oder auswählen."
+                            : "Zuerst eine Modulgruppe auswählen."
                         : w.titel
                     }
                     aria-label={w.titel}
@@ -503,28 +535,56 @@ export function Planer({
         {/* ── Panel, 344 px ───────────────────────────────────────── */}
         {panelOffen ? (
           <div className="absolute inset-y-0 right-0 z-30 flex w-[var(--pl-panel-breite)] max-w-[86%] shadow-soft lg:static lg:z-auto lg:shadow-none">
-            <FlaechenPanel
-              plan={plan}
-              aktiv={aktiv}
-              onAktiv={setAktiv}
-              onPlan={onPlan}
-              mitte={mitte}
-              schreibrecht={schreibrecht}
-              aktiveGruppe={aktiveGruppe}
-              onAktiveGruppe={setAktiveGruppe}
-              breitengrad={projekt.ursprung.lat}
-              onSchliessen={() => setPanelOffen(false)}
-              foto={
-                schreibrecht ? (
-                  <FotoLeiste
-                    projektId={projekt.id}
-                    foto={foto}
-                    werkzeug={werkzeug}
-                    onWerkzeug={setWerkzeug}
+            {phase === 3 ? (
+              <aside className="flex w-full flex-col border-l border-line bg-panel">
+                <div className="flex items-center px-4 pb-2.5 pt-3.5">
+                  <h2 className="text-[15px] font-extrabold">Technik</h2>
+                  <button
+                    type="button"
+                    onClick={() => setPanelOffen(false)}
+                    aria-label="Seitenleiste schliessen"
+                    className="ml-auto flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[15px] text-muted hover:bg-sunk lg:hidden"
+                  >
+                    ›
+                  </button>
+                </div>
+                <div className="flex-1 overflow-auto px-4 pb-4">
+                  <TechnikPanel
+                    plan={plan}
+                    onPlan={onPlan}
+                    module={geraete.module}
+                    wechselrichter={geraete.wechselrichter}
+                    speicher={geraete.speicher}
+                    aktiverStrang={aktiverStrang}
+                    onAktiverStrang={setAktiverStrang}
+                    schreibrecht={schreibrecht}
                   />
-                ) : null
-              }
-            />
+                </div>
+              </aside>
+            ) : (
+              <FlaechenPanel
+                plan={plan}
+                aktiv={aktiv}
+                onAktiv={setAktiv}
+                onPlan={onPlan}
+                mitte={mitte}
+                schreibrecht={schreibrecht}
+                aktiveGruppe={aktiveGruppe}
+                onAktiveGruppe={setAktiveGruppe}
+                breitengrad={projekt.ursprung.lat}
+                onSchliessen={() => setPanelOffen(false)}
+                foto={
+                  schreibrecht ? (
+                    <FotoLeiste
+                      projektId={projekt.id}
+                      foto={foto}
+                      werkzeug={werkzeug}
+                      onWerkzeug={setWerkzeug}
+                    />
+                  ) : null
+                }
+              />
+            )}
           </div>
         ) : null}
       </div>

@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Planer, type PlanerProjekt } from "@/components/planer/Planer";
+import type {
+  GeraetModul,
+  GeraetSpeicher,
+  GeraetWr,
+} from "@/components/planer/TechnikPanel";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { ANBIETER, type AnbieterId, stand } from "@/lib/planer/anbieter";
@@ -98,11 +103,27 @@ export default async function PlanerProjektPage({
     foto,
   };
 
+  /*
+   * Stammdaten für die Auslegung. Eigene Geräte UND der gemeinsame
+   * Katalog — die RLS-Policy liefert beides.
+   */
+  const [{ data: geraeteModule }, { data: geraeteWr }, { data: geraeteSpeicher }] =
+    await Promise.all([
+      supabase.from("planer_modul").select("*").order("hersteller").order("bezeichnung"),
+      supabase.from("planer_wechselrichter").select("*").order("hersteller").order("bezeichnung"),
+      supabase.from("planer_speicher").select("*").order("hersteller").order("bezeichnung"),
+    ]);
+
   return (
     <Planer
       projekt={projekt}
       staende={staende}
       schreibrecht={me.perms.planer === "write"}
+      geraete={{
+        module: (geraeteModule ?? []) as unknown as GeraetModul[],
+        wechselrichter: (geraeteWr ?? []) as unknown as GeraetWr[],
+        speicher: (geraeteSpeicher ?? []) as unknown as GeraetSpeicher[],
+      }}
     />
   );
 }

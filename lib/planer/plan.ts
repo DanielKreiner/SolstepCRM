@@ -66,24 +66,65 @@ const gruppeSchema = z.object({
   frei: z.record(z.string(), meterSchema).default({}),
 });
 
+/*
+ * Ein String ist eine geordnete Menge Module an einem MPP-Tracker
+ * (Briefing 5.2). Die Module stehen als Schlüssel „gruppe/reihe:spalte"
+ * darin — nicht als Kopie ihrer Werte: verschiebt jemand die Gruppe,
+ * bleibt die Zuordnung gültig.
+ */
+const strangSchema = z.object({
+  id: z.string(),
+  name: z.string().default("String"),
+  mppt: z.number().int().min(0).max(23).default(0),
+  module: z.array(z.string()).default([]),
+});
+
+/** Gewählte Geräte. Verweise auf planer_modul / _wechselrichter / _speicher. */
+const technikSchema = z.object({
+  wechselrichter: z.string().uuid().nullable().default(null),
+  speicher: z.string().uuid().nullable().default(null),
+  modul: z.string().uuid().nullable().default(null),
+});
+
 export const planSchema = z.object({
   version: z.number().default(PLAN_VERSION),
   flaechen: z.array(flaecheSchema).default([]),
   gruppen: z.array(gruppeSchema).default([]),
-  /* Ab Stufe 4. Hier schon vorgesehen, damit das Dokument nicht später
-     seine Form wechselt und alte Stände ungültig werden. */
-  strings: z.array(z.unknown()).default([]),
+  strings: z.array(strangSchema).default([]),
+  technik: technikSchema.default({ wechselrichter: null, speicher: null, modul: null }),
 });
+
+export interface Strang {
+  id: string;
+  name: string;
+  /** Index des MPP-Trackers am gewählten Wechselrichter. */
+  mppt: number;
+  /** Modulschlüssel „gruppe/reihe:spalte". */
+  module: string[];
+}
+
+export interface Technik {
+  wechselrichter: string | null;
+  speicher: string | null;
+  modul: string | null;
+}
 
 export type Plan = {
   version: number;
   flaechen: Dachflaeche[];
   gruppen: Modulgruppe[];
-  strings: unknown[];
+  strings: Strang[];
+  technik: Technik;
 };
 
 export function leererPlan(): Plan {
-  return { version: PLAN_VERSION, flaechen: [], gruppen: [], strings: [] };
+  return {
+    version: PLAN_VERSION,
+    flaechen: [],
+    gruppen: [],
+    strings: [],
+    technik: { wechselrichter: null, speicher: null, modul: null },
+  };
 }
 
 /** Aus der Datenbank gelesenes Dokument prüfen; bei Unsinn leer starten. */
@@ -314,4 +355,40 @@ export function planKennzahlen(plan: Plan): { flaechen: number; hindernisse: num
     flaechen: plan.flaechen.length,
     hindernisse: plan.flaechen.reduce((s, f) => s + f.hindernisse.length, 0),
   };
+}
+
+
+/*
+ * ── Module und Strings ─────────────────────────────────────────────
+ */
+
+/** Schlüssel eines Moduls — die Kennung, unter der Strings es führen. */
+export function modulSchluessel(gruppe: string, reihe: number, spalte: number): string {
+  return `${gruppe}/${reihe}:${spalte}`;
+}
+
+/**
+ * Farben der Strings.
+ *
+ * Das Briefing erlaubt ausdrücklich neue Farben NUR hier (Abschnitt 13).
+ * Sechs kräftige, gut unterscheidbare Töne; danach beginnt die Reihe von
+ * vorn — mehr als sechs Strings gleichzeitig zu verfolgen, schafft
+ * ohnehin niemand am Bildschirm.
+ */
+export const STRING_FARBEN = [
+  "#7fd1c8",
+  "#e8952b",
+  "#8465c4",
+  "#3e9e6b",
+  "#d2543f",
+  "#3e7bc6",
+] as const;
+
+export function strangFarbe(index: number): string {
+  return STRING_FARBEN[((index % STRING_FARBEN.length) + STRING_FARBEN.length) % STRING_FARBEN.length]!;
+}
+
+/** Zu welchem String gehört ein Modul? Null, wenn zu keinem. */
+export function strangVon(plan: Plan, schluessel: string): Strang | null {
+  return plan.strings.find((s) => s.module.includes(schluessel)) ?? null;
 }

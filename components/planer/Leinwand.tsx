@@ -25,7 +25,13 @@ import {
   schneidetSichSelbst,
   setzeKantenlaenge,
 } from "@/lib/planer/flaeche";
-import { naechsteId, naechsterFlaechenName, type Plan } from "@/lib/planer/plan";
+import {
+  modulSchluessel,
+  naechsteId,
+  naechsterFlaechenName,
+  type Plan,
+  strangFarbe,
+} from "@/lib/planer/plan";
 import { anbieter as anbieterZu, type AnbieterId, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
@@ -79,7 +85,9 @@ export type Werkzeug =
   /** Einzelne Module frei ziehen und zurücksetzen. */
   | "modul"
   /** Auswahlrechteck ziehen und daraus eine eigene Gruppe machen. */
-  | "teilen";
+  | "teilen"
+  /** Module dem gewählten String zuordnen — „malen" laut Briefing 5.2. */
+  | "string";
 
 export interface FotoQuelle {
   url: string;
@@ -112,6 +120,8 @@ export interface LeinwandProps {
   onAktiv: (id: string | null) => void;
   aktiveGruppe: string | null;
   onAktiveGruppe: (id: string | null) => void;
+  /** Welcher String gerade gemalt wird. */
+  aktiverStrang: string | null;
   /** `schritt` legt einen Rückschritt an; false für Zwischenstände beim Ziehen. */
   onPlan: (plan: Plan, schritt: boolean) => void;
   onWerkzeug: (w: Werkzeug) => void;
@@ -177,6 +187,7 @@ export function Leinwand(p: LeinwandProps) {
     | { art: "erweitern"; gruppe: string; richtung: "oben" | "unten" | "links" | "rechts"; start: Meter; angewandt: number }
     | { art: "modul"; gruppe: string; reihe: number; spalte: number }
     | { art: "auswahl"; von: Meter }
+    | { art: "malen" }
     | { art: "messen" }
     | { art: "schwenk" }
     | null
@@ -304,9 +315,18 @@ export function Leinwand(p: LeinwandProps) {
     for (const f of stand.current.plan.flaechen) zeichneFlaeche(ctx, sicht, f);
 
     // Module über die Flächen — sie liegen ja auch darauf.
+    /*
+     * Farbe je Modul aus seiner String-Zugehörigkeit. Ohne String bleibt
+     * es neutral — so sieht man auf einen Blick, was noch offen ist.
+     */
+    const farben = new Map<string, string>();
+    stand.current.plan.strings.forEach((st, i) => {
+      for (const m of st.module) farben.set(m, strangFarbe(i));
+    });
+
     for (const g of stand.current.plan.gruppen) {
       const f = stand.current.plan.flaechen.find((x) => x.id === g.flaeche);
-      if (f) zeichneGruppe(ctx, k, g, f, stand.current.aktiveGruppe === g.id);
+      if (f) zeichneGruppe(ctx, k, g, f, stand.current.aktiveGruppe === g.id, farben);
     }
 
     if (entwurf.current.length > 0) {
@@ -393,8 +413,15 @@ export function Leinwand(p: LeinwandProps) {
     /*
      * Griffe der gewählten Gruppe zuerst: sie liegen über allem und sind
      * klein — wer sie trifft, meint sie.
+     *
+     * ABER nur im Auswahl-Werkzeug. Die Griffe gehören zur Auswahl; mit
+     * einem anderen Werkzeug in der Hand fingen sie sonst Klicks ab, die
+     * dem Modul darunter galten. Beim String-Werkzeug verschluckten sie
+     * die Zuordnung, und ein Zug am Griff schrumpfte die Gruppe, statt
+     * Module zu färben — die Module waren danach weg.
      */
-    const gewaehlt = s.plan.gruppen.find((g) => g.id === s.aktiveGruppe);
+    const gewaehlt =
+      s.werkzeug === "auswahl" ? s.plan.gruppen.find((g) => g.id === s.aktiveGruppe) : undefined;
     if (gewaehlt) {
       const gf = s.plan.flaechen.find((x) => x.id === gewaehlt.flaeche);
       const rahmen = gf ? gruppenRahmen(k, gewaehlt, gf) : null;
@@ -557,6 +584,48 @@ export function Leinwand(p: LeinwandProps) {
     anstossen();
   }, [aendereFlaeche, anstossen]);
 
+  /**
+   * Ein Modul dem aktiven String zuschlagen — oder herausnehmen, wenn es
+   * schon drin ist. Beim Ziehen wird jedes berührte Modul einmal
+   * behandelt; ohne die Merkliste flackerte es zwischen drin und
+   * draussen, solange der Finger daraufsteht.
+   */
+  const gemalt = useRef(new Set<string>());
+
+  const malenAnStrang = useCallback((gruppe: string, reihe: number, spalte: number) => {
+    const s = stand.current;
+    if (!s.aktiverStrang) {
+      setMeldung("Zuerst einen String anlegen oder auswählen.");
+      return;
+    }
+    const schluessel = modulSchluessel(gruppe, reihe, spalte);
+    if (gemalt.current.has(schluessel)) return;
+    gemalt.current.add(schluessel);
+
+    const strang = s.plan.strings.find((x) => x.id === s.aktiverStrang);
+    if (!strang) return;
+    const drin = strang.module.includes(schluessel);
+
+    s.onPlan(
+      {
+        ...s.plan,
+        strings: s.plan.strings.map((x) => {
+          if (x.id === strang.id) {
+            return {
+              ...x,
+              module: drin
+                ? x.module.filter((m) => m !== schluessel)
+                : [...x.module, schluessel],
+            };
+          }
+          // Ein Modul gehört zu genau einem String — aus den anderen raus.
+          return drin ? x : { ...x, module: x.module.filter((m) => m !== schluessel) };
+        }),
+      },
+      false,
+    );
+  }, []);
+
   /* ── Eingabe ─────────────────────────────────────────────────── */
 
   useEffect(() => {
@@ -592,6 +661,7 @@ export function Leinwand(p: LeinwandProps) {
       const bp = ortVon(e);
       zeiger.set(e.pointerId, bp);
       bewegt = 0;
+      gemalt.current.clear();
 
       if (zeiger.size === 2) {
         const [a, b] = [...zeiger.values()];
@@ -627,6 +697,17 @@ export function Leinwand(p: LeinwandProps) {
       }
 
       const t = treffer(bp);
+      if (s.werkzeug === "string") {
+        /*
+         * Immer malen, auch wenn der Strich neben der Belegung beginnt.
+         * Sonst schwenkte ein Zug, der knapp neben dem ersten Modul
+         * ansetzt, nur die Karte — und man wundert sich, warum nichts
+         * eingefärbt wird.
+         */
+        if (t?.art === "modul") malenAnStrang(t.gruppe, t.reihe, t.spalte);
+        zieht.current = { art: "malen" };
+        return;
+      }
       if (t?.art === "griff") {
         zieht.current =
           t.welcher === "drehen"
@@ -743,6 +824,12 @@ export function Leinwand(p: LeinwandProps) {
           (alt) => ({ ...alt, punkte: alt.punkte.map((pp, i) => (i === z.index ? ziel : pp)) }),
           false,
         );
+        return;
+      }
+
+      if (z.art === "malen") {
+        const t = treffer(jetzt);
+        if (t?.art === "modul") malenAnStrang(t.gruppe, t.reihe, t.spalte);
         return;
       }
 
@@ -870,6 +957,13 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = null;
         return;
       }
+      if (z?.art === "malen") {
+        zieht.current = null;
+        // Einen Rückschritt für den ganzen Zug, nicht je Modul.
+        s.onPlan(s.plan, true);
+        return;
+      }
+
       if (z?.art === "drehen" || z?.art === "erweitern") {
         zieht.current = null;
         const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
@@ -1091,6 +1185,11 @@ export function Leinwand(p: LeinwandProps) {
       }
 
       const t = treffer(bp);
+      if (s.werkzeug === "string" && t?.art === "modul") {
+        malenAnStrang(t.gruppe, t.reihe, t.spalte);
+        zieht.current = { art: "malen" };
+        return;
+      }
       if (t?.art === "griff") {
         zieht.current =
           t.welcher === "drehen"
@@ -1173,7 +1272,7 @@ export function Leinwand(p: LeinwandProps) {
       el.removeEventListener("wheel", rad);
       window.removeEventListener("keydown", taste);
     };
-  }, [aendereFlaeche, anstossen, entwurfAbschliessen, treffer]);
+  }, [aendereFlaeche, anstossen, entwurfAbschliessen, malenAnStrang, treffer]);
 
   useEffect(() => {
     if (!meldung) return;
@@ -1335,6 +1434,8 @@ export function Leinwand(p: LeinwandProps) {
                 ? "Hindernis aufziehen"
                 : p.werkzeug === "modul"
                   ? "Einzelnes Modul versetzen"
+                  : p.werkzeug === "string"
+                  ? "Module dem String zuordnen"
                   : p.werkzeug === "teilen"
                     ? "Gruppe teilen"
                     : p.werkzeug === "messen"
@@ -1355,6 +1456,8 @@ export function Leinwand(p: LeinwandProps) {
                 ? "Rechteck über Kamin, Fenster oder Gaube ziehen."
                 : p.werkzeug === "modul"
                   ? "Ein Modul aus dem Raster ziehen — Antippen setzt es zurück."
+                  : p.werkzeug === "string"
+                  ? "Über die Module fahren. Nochmal darüber nimmt sie wieder heraus."
                   : p.werkzeug === "teilen"
                     ? "Rechteck über einen Teil der gewählten Gruppe ziehen."
                     : p.werkzeug === "messen"
