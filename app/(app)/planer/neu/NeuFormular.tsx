@@ -57,7 +57,7 @@ export function NeuFormular() {
             className="mt-1.5 h-10 w-full rounded-input border border-line bg-surface px-3 text-[14px] outline-none focus:border-accent"
             required
           />
-          <p className="mono mt-3 text-[11.5px] tabular-nums text-muted">
+          <p className="num mt-3 text-[11.5px] tabular-nums text-muted">
             {ort.lat.toFixed(6)} / {ort.lon.toFixed(6)}
           </p>
 
@@ -74,7 +74,7 @@ export function NeuFormular() {
       ) : null}
 
       {stand.error ? (
-        <p className="mt-4 text-center text-[13px] text-danger">{stand.error}</p>
+        <p className="mt-4 text-center text-[13px] text-s-crit">{stand.error}</p>
       ) : null}
     </form>
   );

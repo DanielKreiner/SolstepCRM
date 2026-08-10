@@ -4,6 +4,7 @@ import { Planer, type PlanerProjekt } from "@/components/planer/Planer";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { ANBIETER, type AnbieterId, stand } from "@/lib/planer/anbieter";
+import { planLesen } from "@/lib/planer/plan";
 
 export const metadata: Metadata = { title: "Planer" };
 
@@ -15,6 +16,7 @@ interface Zeile {
   ursprung_lon: number;
   anbieter: string;
   zoom: number;
+  plan: unknown;
 }
 
 export default async function PlanerProjektPage({
@@ -30,7 +32,7 @@ export default async function PlanerProjektPage({
 
   const { data } = await supabase
     .from("planer_projekt")
-    .select("id, name, adresse, ursprung_lat, ursprung_lon, anbieter, zoom")
+    .select("id, name, adresse, ursprung_lat, ursprung_lon, anbieter, zoom, plan")
     .eq("id", id)
     .maybeSingle();
 
@@ -65,7 +67,14 @@ export default async function PlanerProjektPage({
     ursprung: { lat: Number(zeile.ursprung_lat), lon: Number(zeile.ursprung_lon) },
     anbieter,
     zoom: Number(zeile.zoom),
+    plan: planLesen(zeile.plan),
   };
 
-  return <Planer projekt={projekt} staende={staende} />;
+  return (
+    <Planer
+      projekt={projekt}
+      staende={staende}
+      schreibrecht={me.perms.planer === "write"}
+    />
+  );
 }

@@ -75,7 +75,7 @@ export default async function PlanerPage() {
                 className="block overflow-hidden rounded-card border border-line bg-surface transition-colors hover:border-accent"
               >
                 <div className="flex h-28 items-center justify-center bg-sunk">
-                  <span className="mono text-[12px] text-muted">
+                  <span className="num text-[12px] text-muted">
                     {p.kwp > 0 ? `${p.kwp.toString().replace(".", ",")} kWp` : "noch keine Belegung"}
                   </span>
                 </div>
@@ -84,7 +84,7 @@ export default async function PlanerPage() {
                   <p className="mt-0.5 truncate text-[12.5px] text-muted">
                     {p.adresse ?? "ohne Adresse"}
                   </p>
-                  <p className="mono mt-2 text-[11px] text-muted/80">
+                  <p className="num mt-2 text-[11px] text-muted/80">
                     {p.status === "uebergeben" ? "übergeben" : "Entwurf"}
                   </p>
                 </div>

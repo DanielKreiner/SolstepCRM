@@ -75,7 +75,7 @@ export function Adresssuche({
         onChange={(e) => setSuche(e.target.value)}
         placeholder="Adresse eingeben — Straße, Hausnummer, Ort"
         aria-label="Adresse suchen"
-        className="h-14 w-full rounded-pill border border-line bg-surface px-6 text-[16px] shadow-card outline-none focus:border-accent"
+        className="h-14 w-full rounded-pill border border-line bg-surface px-6 text-[16px] shadow-soft outline-none focus:border-accent"
       />
 
       {laeuft ? (
@@ -85,7 +85,7 @@ export function Adresssuche({
       ) : null}
 
       {treffer.length > 0 ? (
-        <ul className="absolute z-10 mt-2 w-full overflow-hidden rounded-card border border-line bg-surface shadow-card">
+        <ul className="absolute z-10 mt-2 w-full overflow-hidden rounded-card border border-line bg-surface shadow-soft">
           {treffer.map((t) => (
             <li key={`${t.lat},${t.lon}`}>
               <button

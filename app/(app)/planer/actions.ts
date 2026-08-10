@@ -6,6 +6,7 @@ import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { ANBIETER } from "@/lib/planer/anbieter";
 import { ZOOM_GRENZEN } from "@/lib/planer/geo";
+import { planSchema } from "@/lib/planer/plan";
 
 export type PlanerState = { error: string | null; ok: string | null; id?: string };
 
@@ -118,4 +119,33 @@ export async function projektLoeschen(_prev: PlanerState, formData: FormData): P
 
   revalidatePath("/planer");
   return { error: null, ok: "Projekt gelöscht." };
+}
+
+/**
+ * Den Planungsstand sichern.
+ *
+ * Geprüft wird mit demselben Schema wie beim Lesen: was hier hineinkommt,
+ * stammt aus dem Browser und ist damit nichts, worauf man sich verlässt.
+ * Ein Dokument mit halber Geometrie wäre zwar gültiges jsonb, würde aber
+ * beim nächsten Öffnen als leerer Plan gelesen — der Kunde hätte seine
+ * Dachflächen verloren, ohne dass irgendwo ein Fehler stand.
+ *
+ * Ohne revalidatePath: das läuft im Hintergrund während des Planens, ein
+ * Seitenneuaufbau würde die Leinwand mitten im Zeichnen zurücksetzen.
+ */
+export async function planSpeichern(daten: { id: string; plan: unknown }): Promise<{ ok: boolean }> {
+  const z1 = await zugang();
+  if (!z1.ok) return { ok: false };
+
+  const id = z.string().uuid().safeParse(daten.id);
+  const plan = planSchema.safeParse(daten.plan);
+  if (!id.success || !plan.success) return { ok: false };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("planer_projekt")
+    .update({ plan: plan.data })
+    .eq("id", id.data);
+
+  return { ok: !error };
 }
