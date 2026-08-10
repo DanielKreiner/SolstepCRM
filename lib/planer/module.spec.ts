@@ -6,6 +6,12 @@ import {
   aktiveZellen,
   anzahlModule,
   autoBelegen,
+  erweitere,
+  fangeAufRaster,
+  insRasterZurueck,
+  modulMitte,
+  setzeFrei,
+  teileGruppe,
   eckenUm,
   kwp,
   modulEcken,
@@ -401,5 +407,137 @@ describe("Zählen und Zellen", () => {
     // Die frei gezogene Zelle wird nicht als Ziel angeboten.
     const nahAmUrsprung = naechsteZelle(g, f, rasterMitte(g, f, 0, 0))!;
     expect(nahAmUrsprung).not.toEqual({ reihe: 0, spalte: 0 });
+  });
+});
+
+describe("Gruppe umformen", () => {
+  const f = dach();
+
+  it("wächst nach oben und rechts, ohne Zellen zu verschieben", () => {
+    const g = gruppe({ spalten: 3, reihen: 2, aus: [zelle(0, 0)] });
+    const hoch = erweitere(g, f, "oben", 1);
+    expect(hoch.reihen).toBe(3);
+    expect(hoch.anker).toEqual(g.anker);
+    // Die abgeschaltete Zelle bleibt dieselbe.
+    expect(hoch.aus).toEqual([zelle(0, 0)]);
+
+    const breit = erweitere(g, f, "rechts", 2);
+    expect(breit.spalten).toBe(5);
+    expect(breit.aus).toEqual([zelle(0, 0)]);
+  });
+
+  it("verschiebt Anker UND Zellnummern beim Wachsen nach unten", () => {
+    /*
+     * Der heikle Fall: unten kommt eine Reihe dazu, damit wird aus
+     * Reihe 0 die Reihe 1. Ohne Mitverschieben zeigte die abgeschaltete
+     * Zelle danach auf ein anderes Modul — still und ohne Fehlermeldung.
+     */
+    const g = gruppe({ spalten: 3, reihen: 2, aus: [zelle(0, 1)], frei: { [zelle(1, 2)]: { x: 9, y: 9 } } });
+    const runter = erweitere(g, f, "unten", 1);
+
+    expect(runter.reihen).toBe(3);
+    expect(runter.aus).toEqual([zelle(1, 1)]);
+    expect(runter.frei[zelle(2, 2)]).toEqual({ x: 9, y: 9 });
+    // Der Anker wandert um genau eine Reihenhöhe nach unten (südwärts).
+    const m = planMasse(g, f);
+    expect(runter.anker.y).toBeCloseTo(g.anker.y - (m.laengs + g.reihenabstand), 9);
+
+    // Und die Zelle, die vorher (0,1) war, liegt jetzt an derselben Stelle.
+    expect(rasterMitte(runter, f, 1, 1).y).toBeCloseTo(rasterMitte(g, f, 0, 1).y, 9);
+  });
+
+  it("verschiebt beim Wachsen nach links die Spalten", () => {
+    const g = gruppe({ spalten: 2, reihen: 2, aus: [zelle(1, 0)] });
+    const links = erweitere(g, f, "links", 1);
+    expect(links.spalten).toBe(3);
+    expect(links.aus).toEqual([zelle(1, 1)]);
+    expect(rasterMitte(links, f, 1, 1).x).toBeCloseTo(rasterMitte(g, f, 1, 0).x, 9);
+  });
+
+  it("wirft beim Verkleinern nur die weggefallenen Zellen weg", () => {
+    const g = gruppe({ spalten: 3, reihen: 3, aus: [zelle(2, 2), zelle(0, 0)] });
+    const kleiner = erweitere(g, f, "oben", -1);
+    expect(kleiner.reihen).toBe(2);
+    // Reihe 2 gibt es nicht mehr, Zelle (0,0) schon.
+    expect(kleiner.aus).toEqual([zelle(0, 0)]);
+  });
+
+  it("lässt sich nicht auf null schrumpfen", () => {
+    const g = gruppe({ spalten: 2, reihen: 1 });
+    expect(erweitere(g, f, "oben", -5)).toEqual(g);
+  });
+});
+
+describe("Gruppe teilen", () => {
+  const f = dach();
+
+  it("trennt einen Block ab und schaltet ihn in der alten Gruppe aus", () => {
+    const g = gruppe({ spalten: 4, reihen: 3 });
+    const teil = teileGruppe(
+      g, f,
+      [{ reihe: 1, spalte: 2 }, { reihe: 2, spalte: 3 }],
+      "g2", "Feld 2",
+    )!;
+    expect(teil).not.toBeNull();
+
+    // Der umschliessende Block ist 2 × 2.
+    expect(teil.neu.reihen).toBe(2);
+    expect(teil.neu.spalten).toBe(2);
+    expect(anzahlModule(teil.neu)).toBe(4);
+
+    // In der alten Gruppe fehlen genau diese vier.
+    expect(anzahlModule(teil.alt)).toBe(12 - 4);
+
+    // Und sie liegen weiterhin an derselben Stelle.
+    expect(rasterMitte(teil.neu, f, 0, 0).x).toBeCloseTo(rasterMitte(g, f, 1, 2).x, 9);
+    expect(rasterMitte(teil.neu, f, 0, 0).y).toBeCloseTo(rasterMitte(g, f, 1, 2).y, 9);
+  });
+
+  it("nimmt abgeschaltete Module in den neuen Block mit", () => {
+    const g = gruppe({ spalten: 3, reihen: 3, aus: [zelle(1, 1)] });
+    const teil = teileGruppe(g, f, [{ reihe: 1, spalte: 1 }, { reihe: 2, spalte: 2 }], "g2", "F2")!;
+    // (1,1) wird zu (0,0) — und bleibt abgeschaltet.
+    expect(teil.neu.aus).toContain(zelle(0, 0));
+    expect(anzahlModule(teil.neu)).toBe(3);
+  });
+
+  it("teilt nicht, wenn die ganze Gruppe gewählt ist", () => {
+    const g = gruppe({ spalten: 2, reihen: 2 });
+    const alle = [
+      { reihe: 0, spalte: 0 }, { reihe: 0, spalte: 1 },
+      { reihe: 1, spalte: 0 }, { reihe: 1, spalte: 1 },
+    ];
+    expect(teileGruppe(g, f, alle, "g2", "F2")).toBeNull();
+    expect(teileGruppe(g, f, [], "g2", "F2")).toBeNull();
+  });
+});
+
+describe("Einzelmodul frei setzen", () => {
+  const f = dach();
+
+  it("löst ein Modul aus dem Raster und holt es zurück", () => {
+    const g = gruppe({ spalten: 2, reihen: 2 });
+    const raster = rasterMitte(g, f, 0, 1);
+
+    const frei = setzeFrei(g, 0, 1, { x: 8, y: 6 });
+    expect(modulMitte(frei, f, 0, 1)).toEqual({ x: 8, y: 6 });
+    // Die anderen bleiben im Raster.
+    expect(modulMitte(frei, f, 0, 0)).toEqual(rasterMitte(g, f, 0, 0));
+
+    const zurueck = insRasterZurueck(frei, 0, 1);
+    expect(modulMitte(zurueck, f, 0, 1)).toEqual(raster);
+    // Es zählt weiter zur Gruppe — frei heisst nicht gelöscht.
+    expect(anzahlModule(zurueck)).toBe(4);
+  });
+
+  it("fängt beim Ziehen aufs Raster ein, wenn es nah genug ist", () => {
+    const g = gruppe({ spalten: 2, reihen: 2, frei: { [zelle(0, 0)]: { x: 9, y: 9 } } });
+    const ziel = rasterMitte(g, f, 1, 1);
+    const nah = { x: ziel.x + 0.05, y: ziel.y + 0.05 };
+
+    expect(fangeAufRaster(g, f, nah, 0.2)).toEqual(ziel);
+    // Weit weg bleibt frei.
+    const weit = { x: ziel.x + 2, y: ziel.y };
+    expect(fangeAufRaster(g, f, weit, 0.2)).toEqual(weit);
   });
 });

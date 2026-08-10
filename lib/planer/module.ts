@@ -530,3 +530,158 @@ export function naechsterRandpunkt(p: Meter, ecken: Meter[]): Meter {
   }
   return beste;
 }
+
+/*
+ * ── Gruppe umformen ────────────────────────────────────────────────
+ */
+
+export type Richtung = "oben" | "unten" | "links" | "rechts";
+
+/**
+ * Gruppe an einer Kante erweitern oder verkleinern (Briefing 4.1).
+ *
+ * Nach oben und rechts wächst das Raster einfach weiter. Nach unten und
+ * links muss der Anker mitwandern UND alle Zellnummern verschieben sich
+ * — sonst zeigen abgeschaltete und frei gesetzte Module plötzlich auf
+ * andere Plätze. Genau daran scheitert so etwas sonst still.
+ */
+export function erweitere(
+  g: Modulgruppe,
+  f: Dachflaeche,
+  richtung: Richtung,
+  anzahl = 1,
+): Modulgruppe {
+  if (anzahl === 0) return g;
+  const a = achsen(g, f);
+  const m = planMasse(g, f);
+  const schrittQuer = m.quer + g.spaltenabstand;
+  const schrittLaengs = m.laengs + g.reihenabstand;
+
+  const laengsRichtung = richtung === "oben" || richtung === "unten";
+  const neueZahl = Math.max(
+    0,
+    (laengsRichtung ? g.reihen : g.spalten) + anzahl,
+  );
+  if (neueZahl === 0) return g;
+
+  // Wächst die Gruppe nach unten oder links, verschiebt sich der Nullpunkt.
+  const verschiebt = richtung === "unten" || richtung === "links";
+  const versatz = verschiebt ? anzahl : 0;
+
+  let anker = g.anker;
+  if (verschiebt) {
+    const achse = laengsRichtung ? a.laengs : a.quer;
+    const schritt = laengsRichtung ? schrittLaengs : schrittQuer;
+    anker = { x: g.anker.x - achse.x * schritt * anzahl, y: g.anker.y - achse.y * schritt * anzahl };
+  }
+
+  const verschiebeSchluessel = (s: string): string | null => {
+    const [r, c] = s.split(":").map(Number) as [number, number];
+    const neuR = laengsRichtung ? r + versatz : r;
+    const neuC = laengsRichtung ? c : c + versatz;
+    const grenzeR = laengsRichtung ? neueZahl : g.reihen;
+    const grenzeC = laengsRichtung ? g.spalten : neueZahl;
+    if (neuR < 0 || neuC < 0 || neuR >= grenzeR || neuC >= grenzeC) return null;
+    return zelle(neuR, neuC);
+  };
+
+  const aus = g.aus.map(verschiebeSchluessel).filter((s): s is string => s !== null);
+  const frei: Record<string, Meter> = {};
+  for (const [s, p] of Object.entries(g.frei)) {
+    const neu = verschiebeSchluessel(s);
+    if (neu) frei[neu] = p;
+  }
+
+  return {
+    ...g,
+    anker,
+    reihen: laengsRichtung ? neueZahl : g.reihen,
+    spalten: laengsRichtung ? g.spalten : neueZahl,
+    aus,
+    frei,
+  };
+}
+
+/**
+ * Einen Teil der Gruppe abtrennen (Briefing 4.1, „Gruppe teilen").
+ *
+ * Aus dem Auswahlrechteck wird der umschliessende Zellblock genommen —
+ * ein Raster lässt sich nicht in Zickzack teilen. Die neue Gruppe erbt
+ * alle Raster-Einstellungen; in der alten werden die abgegebenen Zellen
+ * abgeschaltet, nicht gelöscht, damit der Vorgang umkehrbar bleibt.
+ */
+export function teileGruppe(
+  g: Modulgruppe,
+  f: Dachflaeche,
+  zellen: Array<{ reihe: number; spalte: number }>,
+  neueId: string,
+  neuerName: string,
+): { alt: Modulgruppe; neu: Modulgruppe } | null {
+  if (zellen.length === 0) return null;
+  const r0 = Math.min(...zellen.map((z) => z.reihe));
+  const r1 = Math.max(...zellen.map((z) => z.reihe));
+  const c0 = Math.min(...zellen.map((z) => z.spalte));
+  const c1 = Math.max(...zellen.map((z) => z.spalte));
+
+  // Die ganze Gruppe zu „teilen" ergibt keine zwei Gruppen.
+  if (r0 === 0 && c0 === 0 && r1 === g.reihen - 1 && c1 === g.spalten - 1) return null;
+
+  const a = achsen(g, f);
+  const m = planMasse(g, f);
+  const anker: Meter = {
+    x:
+      g.anker.x +
+      a.quer.x * c0 * (m.quer + g.spaltenabstand) +
+      a.laengs.x * r0 * (m.laengs + g.reihenabstand),
+    y:
+      g.anker.y +
+      a.quer.y * c0 * (m.quer + g.spaltenabstand) +
+      a.laengs.y * r0 * (m.laengs + g.reihenabstand),
+  };
+
+  const altAus = new Set(g.aus);
+  const neuAus: string[] = [];
+  const neuFrei: Record<string, Meter> = {};
+  const abgegeben: string[] = [];
+
+  for (let r = r0; r <= r1; r++) {
+    for (let c = c0; c <= c1; c++) {
+      const alt = zelle(r, c);
+      const neu = zelle(r - r0, c - c0);
+      abgegeben.push(alt);
+      if (altAus.has(alt)) neuAus.push(neu);
+      const frei = g.frei[alt];
+      if (frei) neuFrei[neu] = frei;
+    }
+  }
+
+  return {
+    alt: {
+      ...g,
+      aus: [...new Set([...g.aus, ...abgegeben])],
+      frei: Object.fromEntries(Object.entries(g.frei).filter(([s]) => !abgegeben.includes(s))),
+    },
+    neu: {
+      ...g,
+      id: neueId,
+      name: neuerName,
+      anker,
+      reihen: r1 - r0 + 1,
+      spalten: c1 - c0 + 1,
+      aus: neuAus,
+      frei: neuFrei,
+    },
+  };
+}
+
+/** Modul aus dem Raster lösen und frei setzen (Briefing 4.2). */
+export function setzeFrei(g: Modulgruppe, reihe: number, spalte: number, pos: Meter): Modulgruppe {
+  return { ...g, frei: { ...g.frei, [zelle(reihe, spalte)]: pos } };
+}
+
+/** Zurück ins Raster — auf den eigenen Platz, wenn er frei ist. */
+export function insRasterZurueck(g: Modulgruppe, reihe: number, spalte: number): Modulgruppe {
+  const frei = { ...g.frei };
+  delete frei[zelle(reihe, spalte)];
+  return { ...g, frei };
+}

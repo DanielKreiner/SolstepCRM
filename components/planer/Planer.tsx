@@ -63,6 +63,8 @@ const WERKZEUGE: Array<{ id: Werkzeug; glyph: string; label: string; titel: stri
   { id: "auswahl", glyph: "↖", label: "Wählen", titel: "Auswählen und bearbeiten" },
   { id: "flaeche", glyph: "⬠", label: "Fläche", titel: "Dachfläche zeichnen" },
   { id: "hindernis", glyph: "▣", label: "Hindernis", titel: "Hindernis aufziehen (Kamin, Fenster)" },
+  { id: "modul", glyph: "⬓", label: "Modul", titel: "Einzelnes Modul frei setzen oder zurückholen" },
+  { id: "teilen", glyph: "⧉", label: "Teilen", titel: "Teil der Gruppe als eigene Gruppe abtrennen" },
   { id: "messen", glyph: "↔", label: "Messen", titel: "Strecke messen" },
 ];
 
@@ -402,14 +404,26 @@ export function Planer({
               aria-label="Werkzeug"
             >
               {WERKZEUGE.map((w) => {
-                const gesperrt = w.id === "hindernis" && (plan.flaechen.length === 0 || !aktiv);
+                /*
+                 * Modul und Teilen setzen eine gewählte Gruppe voraus —
+                 * ohne sie wüsste das Werkzeug nicht, woran es arbeitet.
+                 */
+                const gesperrt =
+                  (w.id === "hindernis" && (plan.flaechen.length === 0 || !aktiv)) ||
+                  ((w.id === "modul" || w.id === "teilen") && !aktiveGruppe);
                 const an = werkzeug === w.id;
                 return (
                   <button
                     key={w.id}
                     type="button"
                     disabled={gesperrt}
-                    title={gesperrt ? "Zuerst eine Dachfläche auswählen." : w.titel}
+                    title={
+                      gesperrt
+                        ? w.id === "hindernis"
+                          ? "Zuerst eine Dachfläche auswählen."
+                          : "Zuerst eine Modulgruppe auswählen."
+                        : w.titel
+                    }
                     aria-label={w.titel}
                     aria-pressed={an}
                     onClick={() => setWerkzeug(w.id)}

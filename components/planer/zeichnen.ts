@@ -353,26 +353,105 @@ export function zeichneGruppe(
   if (gewaehlt) zeichneGruppenRahmen(ctx, k, g, f);
 }
 
-/** Rahmen um die belegten Zellen — der Griff zum Verschieben. */
+export interface Rahmen {
+  links: number;
+  oben: number;
+  rechts: number;
+  unten: number;
+}
+
+/**
+ * Umschliessendes Rechteck der Gruppe in Bildpunkten.
+ *
+ * Eine Stelle für Zeichnen UND Trefferprüfung — liefen die auseinander,
+ * säßen die Griffe woanders, als sie aussehen.
+ */
+export function gruppenRahmen(k: Kamera, g: Modulgruppe, f: Dachflaeche): Rahmen | null {
+  const zellen = aktiveZellen(g);
+  if (zellen.length === 0) return null;
+  const punkte = zellen.flatMap((z) => modulEcken(g, f, z.reihe, z.spalte)).map((p) => bild(k, p));
+  return {
+    links: Math.min(...punkte.map((p) => p.x)) - 4,
+    oben: Math.min(...punkte.map((p) => p.y)) - 4,
+    rechts: Math.max(...punkte.map((p) => p.x)) + 4,
+    unten: Math.max(...punkte.map((p) => p.y)) + 4,
+  };
+}
+
+export type GriffArt = "drehen" | "oben" | "unten" | "links" | "rechts";
+
+/** Wo die Griffe sitzen — ebenfalls für beides: zeichnen und treffen. */
+export function griffe(r: Rahmen): Array<{ art: GriffArt; x: number; y: number }> {
+  const mx = (r.links + r.rechts) / 2;
+  const my = (r.oben + r.unten) / 2;
+  return [
+    // Der Drehgriff sitzt über dem Rahmen, damit er nicht mit dem
+    // Kantengriff zusammenfällt.
+    { art: "drehen", x: mx, y: r.oben - 24 },
+    { art: "oben", x: mx, y: r.oben },
+    { art: "unten", x: mx, y: r.unten },
+    { art: "links", x: r.links, y: my },
+    { art: "rechts", x: r.rechts, y: my },
+  ];
+}
+
+/** Rahmen samt Griffen — erscheint, sobald die Gruppe gewählt ist. */
 function zeichneGruppenRahmen(
   ctx: CanvasRenderingContext2D,
   k: Kamera,
   g: Modulgruppe,
   f: Dachflaeche,
 ) {
-  const zellen = aktiveZellen(g);
-  if (zellen.length === 0) return;
-
-  const punkte = zellen.flatMap((z) => modulEcken(g, f, z.reihe, z.spalte)).map((p) => bild(k, p));
-  const links = Math.min(...punkte.map((p) => p.x));
-  const rechts = Math.max(...punkte.map((p) => p.x));
-  const oben = Math.min(...punkte.map((p) => p.y));
-  const unten = Math.max(...punkte.map((p) => p.y));
+  const r = gruppenRahmen(k, g, f);
+  if (!r) return;
 
   ctx.save();
   ctx.setLineDash([6, 4]);
   ctx.strokeStyle = FARBEN.gruppeRahmen;
   ctx.lineWidth = 1.6;
-  ctx.strokeRect(links - 4, oben - 4, rechts - links + 8, unten - oben + 8);
+  ctx.strokeRect(r.links, r.oben, r.rechts - r.links, r.unten - r.oben);
+  ctx.setLineDash([]);
+
+  // Verbindung zum Drehgriff.
+  const mx = (r.links + r.rechts) / 2;
+  ctx.beginPath();
+  ctx.moveTo(mx, r.oben);
+  ctx.lineTo(mx, r.oben - 24);
+  ctx.stroke();
+
+  for (const griff of griffe(r)) {
+    ctx.beginPath();
+    if (griff.art === "drehen") {
+      ctx.arc(griff.x, griff.y, 6, 0, Math.PI * 2);
+    } else {
+      ctx.rect(griff.x - 5, griff.y - 5, 10, 10);
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.strokeStyle = FARBEN.gruppeRahmen;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Auswahlrechteck beim Teilen. */
+export function zeichneAuswahl(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  von: Meter,
+  nach: Meter,
+) {
+  const a = bild(k, von);
+  const b = bild(k, nach);
+  ctx.save();
+  ctx.setLineDash([5, 4]);
+  ctx.fillStyle = "rgba(127, 209, 200, 0.16)";
+  ctx.strokeStyle = FARBEN.gruppeRahmen;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+  ctx.fill();
+  ctx.stroke();
   ctx.restore();
 }

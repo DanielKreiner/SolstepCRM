@@ -161,3 +161,151 @@ test.describe("Planer — Belegung", () => {
     await expect.poll(async () => (await kennzahlen(page)).module).toBe(vorher.module);
   });
 });
+
+test.describe("Planer — Gruppe umformen", () => {
+  /** Fläche anlegen, belegen und die Gruppe auswählen. */
+  async function belegt(page: Page, name: string) {
+    await login(page, DEMO.buero);
+    await neuesProjekt(page, name);
+    await dachSetzen(page, "pult", "14", "9");
+    await page.getByRole("button", { name: /^Fläche 1/ }).click();
+    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(20);
+    // Die Auto-Belegung wählt die neue Gruppe schon aus.
+    await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
+  }
+
+  /** Griffposition der gewählten Gruppe, in Seitenkoordinaten. */
+  async function griff(page: Page, welcher: "oben" | "unten" | "links" | "rechts" | "drehen") {
+    const leinwand = page.getByTestId("planer-leinwand");
+    const kasten = (await leinwand.boundingBox())!;
+    const roh = await leinwand.getAttribute("data-gruppenrahmen");
+    expect(roh, "Rahmen der gewählten Gruppe").not.toBeNull();
+    const [l, o, r, u] = roh!.split(",").map(Number) as [number, number, number, number];
+    const mx = kasten.x + (l + r) / 2;
+    const my = kasten.y + (o + u) / 2;
+    if (welcher === "oben") return { x: mx, y: kasten.y + o };
+    if (welcher === "unten") return { x: mx, y: kasten.y + u };
+    if (welcher === "links") return { x: kasten.x + l, y: my };
+    if (welcher === "rechts") return { x: kasten.x + r, y: my };
+    return { x: mx, y: kasten.y + o - 24 };
+  }
+
+  test("Am oberen Griff ziehen verkleinert und vergrössert die Gruppe", async ({ page }) => {
+    await belegt(page, "Griffweg 6");
+    const vorher = (await kennzahlen(page)).module;
+    const oben = await griff(page, "oben");
+
+    /*
+     * Der obere Griff nach UNTEN gezogen nimmt Reihen weg. Ein Zug über
+     * gut eine Reihenhöhe muss die Modulzahl messbar senken — und zwar
+     * um ein Vielfaches der Spaltenzahl, nicht um einzelne Module.
+     */
+    await page.mouse.move(oben.x, oben.y);
+    await page.mouse.down();
+    await page.mouse.move(oben.x, oben.y + 60, { steps: 12 });
+    await page.mouse.up();
+    await expect.poll(async () => (await kennzahlen(page)).module).toBeLessThan(vorher);
+    const weniger = (await kennzahlen(page)).module;
+
+    // Und wieder hinauf: die Reihen kommen zurück.
+    const oben2 = await griff(page, "oben");
+    await page.mouse.move(oben2.x, oben2.y);
+    await page.mouse.down();
+    await page.mouse.move(oben2.x, oben2.y - 60, { steps: 12 });
+    await page.mouse.up();
+    await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(weniger);
+  });
+
+  test("Am Drehgriff ziehen dreht das Raster", async ({ page }) => {
+    await belegt(page, "Drehweg 10");
+    await expect(page.getByLabel("Drehung (°)")).toHaveValue("0");
+
+    const dreh = await griff(page, "drehen");
+    const mitte = await griff(page, "links");
+    // Weit zur Seite ziehen — das ergibt einen deutlichen Winkel.
+    await page.mouse.move(dreh.x, dreh.y);
+    await page.mouse.down();
+    await page.mouse.move(dreh.x + 160, mitte.y, { steps: 14 });
+    await page.mouse.up();
+
+    const winkel = Number((await page.getByLabel("Drehung (°)").inputValue()).replace(",", "."));
+    expect(Math.abs(winkel)).toBeGreaterThan(10);
+  });
+
+  test("Modul-Werkzeug und Teilen brauchen eine gewählte Gruppe", async ({ page }) => {
+    await login(page, DEMO.buero);
+    await neuesProjekt(page, "Sperrweg 7");
+    await dachSetzen(page, "pult", "14", "9");
+
+    // Ohne Gruppe: beide Werkzeuge gesperrt, mit Grund im Tooltip.
+    const modul = page.getByRole("button", { name: /Einzelnes Modul/ });
+    const teilen = page.getByRole("button", { name: /Teil der Gruppe/ });
+    await expect(modul).toBeDisabled();
+    await expect(teilen).toBeDisabled();
+    await expect(modul).toHaveAttribute("title", /Modulgruppe auswählen/);
+
+    await page.getByRole("button", { name: /^Fläche 1/ }).click();
+    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await expect(modul).toBeEnabled();
+    await expect(teilen).toBeEnabled();
+
+    /*
+     * Und der Hinweis auf der Fläche muss zum Werkzeug passen. Die
+     * Texthängen an einer verschachtelten Bedingung — dort war schon
+     * einmal der Gegenproben-Text beim Modul-Werkzeug gelandet.
+     */
+    await modul.click();
+    await expect(page.getByText("Einzelnes Modul versetzen")).toBeVisible();
+    await expect(page.getByText(/aus dem Raster ziehen/)).toBeVisible();
+
+    await teilen.click();
+    await expect(page.getByText("Gruppe teilen")).toBeVisible();
+    await expect(page.getByText(/Teil der gewählten Gruppe/)).toBeVisible();
+  });
+
+  test("Gruppe teilen erzeugt eine zweite Gruppe ohne Module zu verlieren", async ({ page }) => {
+    await belegt(page, "Teilweg 8");
+    const vorher = (await kennzahlen(page)).module;
+
+    await page.getByRole("button", { name: /Teil der Gruppe/ }).click();
+    const k = (await page.getByTestId("planer-leinwand").boundingBox())!;
+    const m = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
+
+    // Linke Hälfte der Belegung aufziehen.
+    await page.mouse.move(m.x - 150, m.y - 60);
+    await page.mouse.down();
+    await page.mouse.move(m.x - 20, m.y + 60, { steps: 12 });
+    await page.mouse.up();
+
+    // Zwei Gruppen — und zusammen weiterhin dieselbe Modulzahl.
+    await expect(page.getByRole("button", { name: /^Feld 2/ })).toBeVisible();
+    expect((await kennzahlen(page)).module).toBe(vorher);
+  });
+
+  test("Einzelmodul frei ziehen und wieder ins Raster holen", async ({ page }) => {
+    await belegt(page, "Freiweg 9");
+    const vorher = (await kennzahlen(page)).module;
+
+    await page.getByRole("button", { name: /Einzelnes Modul/ }).click();
+    const k = (await page.getByTestId("planer-leinwand").boundingBox())!;
+    const m = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
+
+    // Modul aus der Mitte weit zur Seite ziehen.
+    await page.mouse.move(m.x, m.y);
+    await page.mouse.down();
+    await page.mouse.move(m.x + 90, m.y - 70, { steps: 12 });
+    await page.mouse.up();
+
+    /*
+     * Frei gesetzt heisst nicht gelöscht: die Modulzahl bleibt gleich.
+     * Nur die Position ändert sich.
+     */
+    await expect(page.getByText("gesichert")).toBeVisible({ timeout: 15_000 });
+    expect((await kennzahlen(page)).module).toBe(vorher);
+
+    // Antippen holt es zurück — die Zahl bleibt ebenfalls gleich.
+    await page.mouse.click(m.x + 90, m.y - 70);
+    expect((await kennzahlen(page)).module).toBe(vorher);
+  });
+});

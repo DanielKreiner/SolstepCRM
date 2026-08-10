@@ -29,8 +29,16 @@ import { naechsteId, naechsterFlaechenName, type Plan } from "@/lib/planer/plan"
 import { anbieter as anbieterZu, type AnbieterId, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
+  erweitere,
+  fangeAufRaster,
+  insRasterZurueck,
   modulEcken,
+  modulMitte,
   nachfuehren,
+  planMasse,
+  achsen as rasterAchsen,
+  setzeFrei,
+  teileGruppe,
   zelle as zellSchluessel,
 } from "@/lib/planer/module";
 import {
@@ -38,6 +46,9 @@ import {
   meterText,
   zeichneEntwurf,
   zeichneFlaeche,
+  griffe,
+  gruppenRahmen,
+  zeichneAuswahl,
   zeichneGruppe,
   zeichneMessung,
   zeichneUrsprung,
@@ -64,7 +75,11 @@ export type Werkzeug =
   /** Referenzstrecke ziehen und ihre wahre Länge eingeben. */
   | "kalibrieren"
   /** Zweite Strecke quer dazu — deckt ein verzerrtes Foto auf. */
-  | "gegenprobe";
+  | "gegenprobe"
+  /** Einzelne Module frei ziehen und zurücksetzen. */
+  | "modul"
+  /** Auswahlrechteck ziehen und daraus eine eigene Gruppe machen. */
+  | "teilen";
 
 export interface FotoQuelle {
   url: string;
@@ -106,6 +121,16 @@ export interface LeinwandProps {
 /** Trefferzone in Bildpunkten — grosszügig, weil am iPad ein Finger zielt. */
 const GRIFF = 12;
 
+/** Module der übrigen Gruppen derselben Fläche — die bleiben besetzt. */
+function fremdeModule(plan: Plan, eigene: { id: string; flaeche: string }): Meter[][] {
+  return plan.gruppen
+    .filter((x) => x.id !== eigene.id && x.flaeche === eigene.flaeche)
+    .flatMap((x) => {
+      const f = plan.flaechen.find((y) => y.id === x.flaeche);
+      return f ? aktiveZellen(x).map((z) => modulEcken(x, f, z.reihe, z.spalte)) : [];
+    });
+}
+
 export function Leinwand(p: LeinwandProps) {
   const huelle = useRef<HTMLDivElement>(null);
   const kachelSchicht = useRef<HTMLDivElement>(null);
@@ -127,6 +152,14 @@ export function Leinwand(p: LeinwandProps) {
   const [zeigerMeter, setZeigerMeter] = useState<Meter | null>(null);
   const [kachelFehler, setKachelFehler] = useState(false);
   const [fangHinweis, setFangHinweis] = useState<string | null>(null);
+  /*
+   * Rahmen der gewählten Gruppe als Attribut am Wurzelknoten.
+   *
+   * Die Griffe liegen im Canvas und sind von aussen unsichtbar — ohne
+   * diese Angabe liesse sich nicht prüfen, ob ein Zug am Griff wirklich
+   * am Griff ankommt. Vier Zahlen, die ohnehin schon berechnet werden.
+   */
+  const [rahmenAttribut, setRahmenAttribut] = useState<string | undefined>(undefined);
   /** Kurze Rückmeldung, wenn eine Eingabe abgelehnt wurde. */
   const [meldung, setMeldung] = useState<string | null>(null);
 
@@ -134,11 +167,16 @@ export function Leinwand(p: LeinwandProps) {
   const entwurf = useRef<Meter[]>([]);
   const [entwurfLaenge, setEntwurfLaenge] = useState(0);
   const messung = useRef<{ von: Meter; nach: Meter } | null>(null);
+  const auswahl = useRef<{ von: Meter; nach: Meter } | null>(null);
   const zieht = useRef<
     | { art: "ecke"; flaeche: string; index: number }
     | { art: "kante"; flaeche: string; index: number; letzte: Meter }
     | { art: "hindernis"; flaeche: string; von: Meter }
     | { art: "gruppe"; gruppe: string; reihe: number; spalte: number; letzte: Meter }
+    | { art: "drehen"; gruppe: string }
+    | { art: "erweitern"; gruppe: string; richtung: "oben" | "unten" | "links" | "rechts"; start: Meter; angewandt: number }
+    | { art: "modul"; gruppe: string; reihe: number; spalte: number }
+    | { art: "auswahl"; von: Meter }
     | { art: "messen" }
     | { art: "schwenk" }
     | null
@@ -277,6 +315,18 @@ export function Leinwand(p: LeinwandProps) {
       zeichneEntwurf(ctx, k, entwurf.current, vorschau, schneidetSichSelbst(kette));
     }
     if (messung.current) zeichneMessung(ctx, k, messung.current.von, messung.current.nach);
+    if (auswahl.current) zeichneAuswahl(ctx, k, auswahl.current.von, auswahl.current.nach);
+
+    const gewaehlt = stand.current.plan.gruppen.find((g) => g.id === stand.current.aktiveGruppe);
+    const gf = gewaehlt
+      ? stand.current.plan.flaechen.find((x) => x.id === gewaehlt.flaeche)
+      : null;
+    const rahmen = gewaehlt && gf ? gruppenRahmen(k, gewaehlt, gf) : null;
+    setRahmenAttribut(
+      rahmen
+        ? [rahmen.links, rahmen.oben, rahmen.rechts, rahmen.unten].map((v) => Math.round(v)).join(",")
+        : undefined,
+    );
   }, []);
 
   const zeigerRef = useRef<Meter | null>(null);
@@ -341,8 +391,25 @@ export function Leinwand(p: LeinwandProps) {
     const aktive = s.plan.flaechen.find((f) => f.id === s.aktiv);
 
     /*
-     * Module zuerst: sie liegen obenauf, und wer auf ein Modul tippt,
-     * meint das Modul — nicht die Fläche darunter.
+     * Griffe der gewählten Gruppe zuerst: sie liegen über allem und sind
+     * klein — wer sie trifft, meint sie.
+     */
+    const gewaehlt = s.plan.gruppen.find((g) => g.id === s.aktiveGruppe);
+    if (gewaehlt) {
+      const gf = s.plan.flaechen.find((x) => x.id === gewaehlt.flaeche);
+      const rahmen = gf ? gruppenRahmen(k, gewaehlt, gf) : null;
+      if (rahmen) {
+        for (const griff of griffe(rahmen)) {
+          if (Math.hypot(griff.x - bp.x, griff.y - bp.y) <= GRIFF) {
+            return { art: "griff" as const, gruppe: gewaehlt.id, welcher: griff.art };
+          }
+        }
+      }
+    }
+
+    /*
+     * Module danach: sie liegen über den Flächen, und wer auf ein Modul
+     * tippt, meint das Modul — nicht die Fläche darunter.
      */
     const zeigerM = bildZuMeter(k, bp);
     for (const g of s.plan.gruppen) {
@@ -552,8 +619,28 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
+      if (s.werkzeug === "teilen") {
+        const m = bildZuMeter(kamera.current, bp);
+        auswahl.current = { von: m, nach: m };
+        zieht.current = { art: "auswahl", von: m };
+        return;
+      }
+
       const t = treffer(bp);
-      if (t?.art === "modul") {
+      if (t?.art === "griff") {
+        zieht.current =
+          t.welcher === "drehen"
+            ? { art: "drehen", gruppe: t.gruppe }
+            : {
+                art: "erweitern",
+                gruppe: t.gruppe,
+                richtung: t.welcher,
+                start: bildZuMeter(kamera.current, bp),
+                angewandt: 0,
+              };
+      } else if (t?.art === "modul" && s.werkzeug === "modul") {
+        zieht.current = { art: "modul", gruppe: t.gruppe, reihe: t.reihe, spalte: t.spalte };
+      } else if (t?.art === "modul") {
         // Tippen schaltet das Modul, Ziehen verschiebt die Gruppe —
         // entschieden wird erst beim Loslassen, an der Wegstrecke.
         zieht.current = {
@@ -659,6 +746,79 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
+      if (z.art === "auswahl" && auswahl.current) {
+        auswahl.current = { ...auswahl.current, nach: bildZuMeter(k, jetzt) };
+        anstossen();
+        return;
+      }
+
+      if (z.art === "drehen") {
+        const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
+        const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
+        if (!g || !f) return;
+        const rahmen = gruppenRahmen(k, g, f);
+        if (!rahmen) return;
+        const mitteBild = { x: (rahmen.links + rahmen.rechts) / 2, y: (rahmen.oben + rahmen.unten) / 2 };
+        // Winkel des Zeigers gegen „oben" — der Drehgriff sitzt dort.
+        const roh = (Math.atan2(jetzt.x - mitteBild.x, mitteBild.y - jetzt.y) * 180) / Math.PI;
+        // Traufparallel einrasten: der mit Abstand häufigste Fall.
+        const winkel = Math.abs(roh) < 4 ? 0 : Math.round(roh * 2) / 2;
+        s.onPlan(
+          { ...s.plan, gruppen: s.plan.gruppen.map((x) => (x.id === g.id ? { ...x, winkel } : x)) },
+          false,
+        );
+        return;
+      }
+
+      if (z.art === "erweitern") {
+        const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
+        const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
+        if (!g || !f) return;
+        const jetztM = bildZuMeter(k, jetzt);
+        const a = rasterAchsen(g, f);
+        const m = planMasse(g, f);
+        const laengsRichtung = z.richtung === "oben" || z.richtung === "unten";
+        const achse = laengsRichtung ? a.laengs : a.quer;
+        const schritt = (laengsRichtung ? m.laengs + g.reihenabstand : m.quer + g.spaltenabstand);
+        // Nach unten und links zeigt der Zuwachs entgegen der Achse.
+        const vorzeichen = z.richtung === "oben" || z.richtung === "rechts" ? 1 : -1;
+        const weg =
+          ((jetztM.x - z.start.x) * achse.x + (jetztM.y - z.start.y) * achse.y) * vorzeichen;
+        const gewollt = Math.round(weg / schritt);
+        const schritte = gewollt - z.angewandt;
+        if (schritte === 0) return;
+        z.angewandt = gewollt;
+        s.onPlan(
+          {
+            ...s.plan,
+            gruppen: s.plan.gruppen.map((x) =>
+              x.id === g.id ? erweitere(x, f, z.richtung, schritte) : x,
+            ),
+          },
+          false,
+        );
+        return;
+      }
+
+      if (z.art === "modul") {
+        const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
+        const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
+        if (!g || !f) return;
+        // Fangen aufs eigene Raster — mit halber Modulbreite Toleranz.
+        const roh = bildZuMeter(k, jetzt);
+        const ziel = fangeAufRaster(g, f, roh, planMasse(g, f).quer / 2);
+        s.onPlan(
+          {
+            ...s.plan,
+            gruppen: s.plan.gruppen.map((x) =>
+              x.id === g.id ? setzeFrei(x, z.reihe, z.spalte, ziel) : x,
+            ),
+          },
+          false,
+        );
+        return;
+      }
+
       if (z.art === "gruppe") {
         const jetztM = bildZuMeter(k, jetzt);
         const um = { x: jetztM.x - z.letzte.x, y: jetztM.y - z.letzte.y };
@@ -710,6 +870,95 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = null;
         return;
       }
+      if (z?.art === "drehen" || z?.art === "erweitern") {
+        zieht.current = null;
+        const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
+        const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
+        if (!g || !f) return;
+        // Erst jetzt nachführen und einen Rückschritt anlegen — während
+        // des Ziehens wären es dreissig.
+        s.onPlan(
+          {
+            ...s.plan,
+            gruppen: s.plan.gruppen.map((x) =>
+              x.id === g.id ? nachfuehren(x, f, fremdeModule(s.plan, g)) : x,
+            ),
+          },
+          true,
+        );
+        return;
+      }
+
+      if (z?.art === "modul") {
+        zieht.current = null;
+        const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
+        if (!g) return;
+        if (bewegt <= 6) {
+          // Tippen im Modul-Werkzeug holt es ins Raster zurück.
+          s.onPlan(
+            {
+              ...s.plan,
+              gruppen: s.plan.gruppen.map((x) =>
+                x.id === g.id ? insRasterZurueck(x, z.reihe, z.spalte) : x,
+              ),
+            },
+            true,
+          );
+          return;
+        }
+        s.onPlan(s.plan, true);
+        return;
+      }
+
+      if (z?.art === "auswahl") {
+        zieht.current = null;
+        const rechteck = auswahl.current;
+        auswahl.current = null;
+        const g = s.plan.gruppen.find((x) => x.id === s.aktiveGruppe);
+        const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
+        if (!rechteck || !g || !f) {
+          setMeldung("Zuerst eine Modulgruppe wählen, dann den Teil aufziehen.");
+          anstossen();
+          return;
+        }
+
+        const links = Math.min(rechteck.von.x, rechteck.nach.x);
+        const rechts = Math.max(rechteck.von.x, rechteck.nach.x);
+        const unten = Math.min(rechteck.von.y, rechteck.nach.y);
+        const oben = Math.max(rechteck.von.y, rechteck.nach.y);
+        const gewaehlt: Array<{ reihe: number; spalte: number }> = [];
+        for (let r = 0; r < g.reihen; r++) {
+          for (let c = 0; c < g.spalten; c++) {
+            const m = modulMitte(g, f, r, c);
+            if (m.x >= links && m.x <= rechts && m.y >= unten && m.y <= oben) {
+              gewaehlt.push({ reihe: r, spalte: c });
+            }
+          }
+        }
+
+        const neueId = `g${s.plan.gruppen.length + 1}${gewaehlt.length}`;
+        const geteilt = teileGruppe(g, f, gewaehlt, neueId, `Feld ${s.plan.gruppen.length + 1}`);
+        if (!geteilt) {
+          setMeldung(
+            gewaehlt.length === 0
+              ? "Im Rechteck lag kein Modul."
+              : "Das ist die ganze Gruppe — zum Teilen einen Teil aufziehen.",
+          );
+          anstossen();
+          return;
+        }
+        s.onPlan(
+          {
+            ...s.plan,
+            gruppen: [...s.plan.gruppen.map((x) => (x.id === g.id ? geteilt.alt : x)), geteilt.neu],
+          },
+          true,
+        );
+        s.onAktiveGruppe(geteilt.neu.id);
+        s.onWerkzeug("auswahl");
+        return;
+      }
+
       if (z?.art === "gruppe") {
         zieht.current = null;
         const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
@@ -834,8 +1083,28 @@ export function Leinwand(p: LeinwandProps) {
         entwurfAbschliessen();
         return;
       }
+      if (s.werkzeug === "teilen") {
+        const m = bildZuMeter(kamera.current, bp);
+        auswahl.current = { von: m, nach: m };
+        zieht.current = { art: "auswahl", von: m };
+        return;
+      }
+
       const t = treffer(bp);
-      if (t?.art === "modul") {
+      if (t?.art === "griff") {
+        zieht.current =
+          t.welcher === "drehen"
+            ? { art: "drehen", gruppe: t.gruppe }
+            : {
+                art: "erweitern",
+                gruppe: t.gruppe,
+                richtung: t.welcher,
+                start: bildZuMeter(kamera.current, bp),
+                angewandt: 0,
+              };
+      } else if (t?.art === "modul" && s.werkzeug === "modul") {
+        zieht.current = { art: "modul", gruppe: t.gruppe, reihe: t.reihe, spalte: t.spalte };
+      } else if (t?.art === "modul") {
         // Tippen schaltet das Modul, Ziehen verschiebt die Gruppe —
         // entschieden wird erst beim Loslassen, an der Wegstrecke.
         zieht.current = {
@@ -917,6 +1186,7 @@ export function Leinwand(p: LeinwandProps) {
     entwurf.current = [];
     setEntwurfLaenge(0);
     messung.current = null;
+    auswahl.current = null;
     anstossen();
   }, [p.werkzeug, anstossen]);
 
@@ -926,6 +1196,7 @@ export function Leinwand(p: LeinwandProps) {
     <div
       ref={huelle}
       data-testid="planer-leinwand"
+      data-gruppenrahmen={rahmenAttribut}
       className="relative h-full w-full overflow-hidden bg-pl-flaeche"
       style={{
         touchAction: "none",
@@ -1062,8 +1333,12 @@ export function Leinwand(p: LeinwandProps) {
               ? "Zeichne die Dachfläche"
               : p.werkzeug === "hindernis"
                 ? "Hindernis aufziehen"
-                : p.werkzeug === "messen"
-                  ? "Strecke messen"
+                : p.werkzeug === "modul"
+                  ? "Einzelnes Modul versetzen"
+                  : p.werkzeug === "teilen"
+                    ? "Gruppe teilen"
+                    : p.werkzeug === "messen"
+                      ? "Strecke messen"
                   : p.werkzeug === "kalibrieren"
                     ? "Foto kalibrieren"
                     : "Gegenprobe"}
@@ -1078,11 +1353,15 @@ export function Leinwand(p: LeinwandProps) {
                 : "Ecken antippen. Ab drei Punkten lässt sich die Fläche schliessen."
               : p.werkzeug === "hindernis"
                 ? "Rechteck über Kamin, Fenster oder Gaube ziehen."
-                : p.werkzeug === "messen"
-                  ? "Strecke ziehen. Esc beendet das Messen."
-                  : p.werkzeug === "kalibrieren"
-                    ? "Eine Strecke ziehen, deren wahre Länge du kennst — Firstlänge, Garagentor, Auto."
-                    : "Zweite Strecke QUER zur ersten ziehen. Weicht sie ab, ist das Foto schräg aufgenommen."}
+                : p.werkzeug === "modul"
+                  ? "Ein Modul aus dem Raster ziehen — Antippen setzt es zurück."
+                  : p.werkzeug === "teilen"
+                    ? "Rechteck über einen Teil der gewählten Gruppe ziehen."
+                    : p.werkzeug === "messen"
+                      ? "Strecke ziehen. Esc beendet das Messen."
+                      : p.werkzeug === "kalibrieren"
+                        ? "Eine Strecke ziehen, deren wahre Länge du kennst — Firstlänge, Garagentor, Auto."
+                        : "Zweite Strecke QUER zur ersten ziehen. Weicht sie ab, ist das Foto schräg aufgenommen."}
           </p>
         </div>
       ) : null}
