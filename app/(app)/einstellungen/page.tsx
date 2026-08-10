@@ -20,6 +20,7 @@ export const metadata: Metadata = { title: "Einstellungen" };
 
 const AREAS = [
   ["pipelines", "Pipelines"],
+  ["planer", "Planer"],
   ["angebote", "Angebote"],
   ["crm", "CRM"],
   ["lager", "Lager"],

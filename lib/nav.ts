@@ -53,6 +53,15 @@ export const NAV: NavGroup[] = [
        */
       { label: "Vorgänge", href: "/vorgaenge", icon: "pipelines", area: "pipelines" },
       { label: "Planung", href: "/planung", icon: "dispo", area: "pipelines" },
+      /*
+       * Der Planer steht neben der Planung, nicht darin: hier entsteht die
+       * Anlage, dort werden Leute und Tage verteilt.
+       *
+       * Eigener Bereich 'planer', nicht 'pipelines': dort hat der Monteur
+       * Leserecht für seine Aufträge, und damit stünde ihm der Planer
+       * offen — ausgeschlossen laut Briefing 10.
+       */
+      { label: "Planer", href: "/planer", icon: "dispo", area: "planer" },
       { label: "Material", href: "/material", icon: "lager", area: "pipelines" },
       /*
        * Service steht wieder in der Navigation.

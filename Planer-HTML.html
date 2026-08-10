@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#D8D3CA;font-family:'Inter Tight',sans-serif}
+a{color:#B8730A;text-decoration:none;cursor:pointer}a:hover{color:#8F5A08;text-decoration:underline}
+input[type=range]{accent-color:#E8960C}
+@keyframes pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+*{box-sizing:border-box}
+</style>
+</helmet>
+<div style="width:1194px;height:834px;margin:0 auto;background:#EAE6E0;color:#26221B;font-family:'Inter Tight',sans-serif;position:relative;overflow:hidden;font-size:14px">
+
+<!-- ============ PROJEKTLISTE ============ -->
+<sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column" data-screen-label="Projektliste">
+  <div style="height:56px;display:flex;align-items:center;gap:16px;padding:0 24px;border-bottom:1px solid #D9D2C6;background:#F6F3EE">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:26px;height:26px;border-radius:7px;background:#E8960C;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px">S</div>
+      <div style="font-weight:700;font-size:15px">Solstep Betrieb</div>
+    </div>
+    <div style="display:flex;gap:2px;margin-left:16px;color:#8A8071;font-weight:500">
+      <div style="padding:8px 12px;border-radius:8px">Vorgänge</div>
+      <div style="padding:8px 12px;border-radius:8px">Kunden</div>
+      <div style="padding:8px 12px;border-radius:8px;background:#EAE4D8;color:#26221B;font-weight:600">Planer</div>
+      <div style="padding:8px 12px;border-radius:8px">Lager</div>
+    </div>
+    <div style="margin-left:auto;width:32px;height:32px;border-radius:999px;background:#DCD4C6;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#6B6355">MH</div>
+  </div>
+  <div style="flex:1;overflow:auto;padding:28px 32px">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px">
+      <div>
+        <div style="font-size:24px;font-weight:800;letter-spacing:-.02em">Planer</div>
+        <div style="color:#8A8071;margin-top:2px">PV-Anlagen planen, kalkulieren, als Vorgang übernehmen</div>
+      </div>
+      <input value="{{ qVal }}" onChange="{{ onQ }}" placeholder="Adresse oder Kunde suchen…" style="margin-left:auto;width:270px;height:44px;border-radius:10px;border:1px solid #D9D2C6;background:#FCFBF9;padding:0 14px;font-family:'Inter Tight',sans-serif;font-size:14px;outline:none">
+      <div onClick="{{ onNew }}" style="height:44px;padding:0 18px;border-radius:10px;background:#E8960C;color:#fff;font-weight:700;display:flex;align-items:center;gap:8px;cursor:pointer" style-hover="background:#D4880A">+ Neues Projekt</div>
+    </div>
+    <sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="border:1px dashed #CBC3B4;border-radius:14px;padding:56px;display:flex;flex-direction:column;align-items:center;gap:14px;background:#F1EDE6">
+        <div style="color:#6B6355;font-size:15px">Noch keine Projekte — starte mit einer Adresse.</div>
+        <div onClick="{{ onNew }}" style="height:44px;padding:0 18px;border-radius:10px;background:#E8960C;color:#fff;font-weight:700;display:flex;align-items:center;cursor:pointer">+ Neues Projekt</div>
+      </div>
+    </sc-if>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
+      <sc-for list="{{ projects }}" as="p" hint-placeholder-count="3">
+        <div onClick="{{ p.onOpen }}" style="border:1px solid #D9D2C6;border-radius:14px;background:#FCFBF9;overflow:hidden;cursor:pointer;transition:box-shadow .15s" style-hover="box-shadow:0 6px 20px rgba(38,34,27,.12)">
+          <svg viewBox="0 0 360 170" style="display:block;width:100%;background:#1E211A">
+            <rect x="0" y="0" width="360" height="170" fill="#1E211A"></rect>
+            <rect x="0" y="128" width="360" height="16" fill="#2A2A28"></rect>
+            <rect x="{{ p.tx }}" y="{{ p.ty }}" width="{{ p.tw }}" height="{{ p.th }}" fill="#4A4640"></rect>
+            <rect x="{{ p.mx }}" y="{{ p.my }}" width="{{ p.mw }}" height="{{ p.mh }}" fill="#22304F" stroke="#E8960C" stroke-width="1.5"></rect>
+            <circle cx="46" cy="50" r="22" fill="#161A12"></circle><circle cx="316" cy="86" r="17" fill="#161A12"></circle>
+            <text x="12" y="160" fill="#fff" opacity="0.22" font-family="JetBrains Mono" font-size="8">LUFTBILD-PLATZHALTER</text>
+          </svg>
+          <div style="padding:14px 16px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-weight:700;font-size:15px">{{ p.name }}</div>
+              <div style="margin-left:auto;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;background:{{ p.stBg }};color:{{ p.stFg }};white-space:nowrap">{{ p.status }}</div>
+            </div>
+            <div style="color:#8A8071;font-size:13px;margin-top:2px">{{ p.addr }}</div>
+            <div style="display:flex;align-items:center;margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#57503F">
+              <div>{{ p.kwp }} kWp</div>
+              <div style="margin-left:auto;color:#A79D8C">{{ p.time }}</div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ============ NEUES PROJEKT ============ -->
+<sc-if value="{{ isNew }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;background:#17150F;display:flex;align-items:center;justify-content:center" data-screen-label="Adresssuche">
+  <svg viewBox="0 0 1200 800" style="position:absolute;inset:0;width:100%;height:100%;opacity:.35">
+    <rect width="1200" height="800" fill="#1E211A"></rect>
+    <rect x="0" y="690" width="1200" height="70" fill="#2A2A28"></rect>
+    <rect x="320" y="240" width="520" height="400" fill="#33312C"></rect>
+    <circle cx="180" cy="180" r="70" fill="#161A12"></circle><circle cx="1010" cy="240" r="55" fill="#161A12"></circle>
+  </svg>
+  <div onClick="{{ onBack }}" style="position:absolute;top:20px;left:24px;color:#B9B2A4;font-weight:600;cursor:pointer;padding:10px 14px;border-radius:10px" style-hover="color:#fff">← Projekte</div>
+  <div style="position:relative;width:560px;animation:fadeUp .4s both">
+    <div style="color:#EAE6E0;font-size:26px;font-weight:800;letter-spacing:-.02em;text-align:center">Wo steht das Haus?</div>
+    <div style="margin-top:20px;background:#FCFBF9;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:12px;padding:6px 18px">
+        <div style="width:10px;height:10px;border-radius:999px;background:#E8960C"></div>
+        <input value="{{ addrVal }}" onChange="{{ onAddr }}" autoFocus="{{ true }}" placeholder="Adresse eingeben…" style="flex:1;height:52px;border:none;outline:none;font-size:17px;font-family:'Inter Tight',sans-serif;background:transparent">
+      </div>
+      <sc-if value="{{ hasSugs }}" hint-placeholder-val="{{ false }}">
+        <div style="border-top:1px solid #EDE8DF">
+          <sc-for list="{{ sugs }}" as="s" hint-placeholder-count="2">
+            <div onClick="{{ s.onPick }}" style="padding:13px 18px;display:flex;align-items:baseline;gap:10px;cursor:pointer" style-hover="background:#F4EFE6">
+              <div style="font-weight:600">{{ s.main }}</div>
+              <div style="color:#8A8071;font-size:13px">{{ s.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+    <div style="text-align:center;margin-top:18px;color:#8A8071">oder <a onClick="{{ onDrone }}">Foto hochladen</a> (Drohnenfoto)</div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ============ PLANER ============ -->
+<sc-if value="{{ isPlanner }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column">
+  <div style="height:48px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#F6F3EE;border-bottom:1px solid #D9D2C6;z-index:30">
+    <div onClick="{{ onBack }}" style="width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#57503F;font-size:16px" style-hover="background:#EAE4D8">←</div>
+    <div>
+      <div style="font-weight:700;font-size:13px;line-height:1.1">{{ projLabel }}</div>
+      <div style="color:#8A8071;font-size:11px">{{ addrLabel }}</div>
+    </div>
+    <div style="display:flex;gap:6px;margin-left:14px">
+      <div onClick="{{ undoDo }}" style="width:36px;height:36px;border-radius:9px;border:1px solid #D9D2C6;background:#FCFBF9;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:{{ undoOp }}">↶</div>
+      <div onClick="{{ redoDo }}" style="width:36px;height:36px;border-radius:9px;border:1px solid #D9D2C6;background:#FCFBF9;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:{{ redoOp }}">↷</div>
+    </div>
+    <sc-if value="{{ showCanvas }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;gap:2px;background:#E3DDD1;border-radius:9px;padding:2px;margin-left:auto">
+        <sc-for list="{{ providers }}" as="pr" hint-placeholder-count="4">
+          <div onClick="{{ pr.onPick }}" style="padding:6px 11px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;background:{{ pr.bg }};color:{{ pr.fg }}">{{ pr.label }}</div>
+        </sc-for>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#A79D8C">{{ provDate }}</div>
+      <div style="display:flex;gap:4px;margin-left:4px">
+        <div onClick="{{ zoomOutFn }}" style="width:36px;height:36px;border-radius:9px;border:1px solid #D9D2C6;background:#FCFBF9;display:flex;align-items:center;justify-content:center;cursor:pointer">−</div>
+        <div style="min-width:44px;height:36px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:#57503F">{{ zoomLabel }}</div>
+        <div onClick="{{ zoomInFn }}" style="width:36px;height:36px;border-radius:9px;border:1px solid #D9D2C6;background:#FCFBF9;display:flex;align-items:center;justify-content:center;cursor:pointer">+</div>
+      </div>
+    </sc-if>
+    <div style="margin-left:{{ saveMl }};display:flex;align-items:center;gap:6px;padding:0 8px">
+      <div style="width:7px;height:7px;border-radius:999px;background:{{ saveDot }}"></div>
+      <div style="font-size:12px;color:#8A8071">{{ saveLabel }}</div>
+    </div>
+  </div>
+  <div style="flex:1;display:flex;min-height:0">
+    <!-- Stepper -->
+    <div style="width:76px;background:#F6F3EE;border-right:1px solid #D9D2C6;display:flex;flex-direction:column;align-items:center;padding-top:14px;gap:4px;z-index:25">
+      <sc-for list="{{ phases }}" as="ph" hint-placeholder-count="5">
+        <div onClick="{{ ph.onGo }}" style="width:64px;padding:9px 0 7px;border-radius:11px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;background:{{ ph.bg }}" style-hover="background:#EAE4D8">
+          <div style="width:26px;height:26px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;background:{{ ph.nBg }};color:{{ ph.nFg }};border:1.5px solid {{ ph.nBr }}">{{ ph.mark }}</div>
+          <div style="font-size:10px;font-weight:600;color:{{ ph.fg }}">{{ ph.label }}</div>
+        </div>
+      </sc-for>
+      <sc-if value="{{ recalcShow }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:10px;padding:5px 8px;border-radius:10px;background:#F3E3C3;color:#8F5A08;font-size:10px;font-weight:600;text-align:center;animation:fadeUp .3s both">neu<br>berechnet</div>
+      </sc-if>
+    </div>
+
+    <!-- CANVAS -->
+    <sc-if value="{{ showCanvas }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;position:relative;background:#17150F;min-width:0;overflow:hidden" data-screen-label="Canvas">
+      <div style="position:absolute;inset:0;transform:{{ introT }};transition:{{ introTr }};transform-origin:52% 58%">
+      <svg viewBox="{{ viewBox }}" preserveAspectRatio="xMidYMid slice" onClick="{{ onCClick }}" onDoubleClick="{{ onCDbl }}" onMouseMove="{{ onCMove }}" onMouseDown="{{ onCDown }}" onMouseUp="{{ onCUp }}" style="position:absolute;inset:0;width:100%;height:100%;cursor:{{ canvasCursor }}">
+        <g style="filter:{{ mapFilter }}">
+          <rect x="-600" y="-600" width="2400" height="2000" fill="#1E211A"></rect>
+          <sc-if value="{{ isDrone }}" hint-placeholder-val="{{ false }}">
+            <rect x="-600" y="-600" width="2400" height="2000" fill="#20231C"></rect>
+          </sc-if>
+          <rect x="60" y="80" width="380" height="560" fill="#22261E"></rect>
+          <rect x="900" y="60" width="340" height="300" fill="#1A1D16"></rect>
+          <rect x="-600" y="700" width="2400" height="110" fill="#2A2A28"></rect>
+          <rect x="-600" y="752" width="2400" height="3" fill="#3D3C38" opacity="0.6"></rect>
+          <rect x="880" y="640" width="70" height="70" fill="#33322E"></rect>
+          <rect x="150" y="180" width="200" height="150" fill="#3E3A34"></rect>
+          <rect x="980" y="120" width="170" height="130" fill="#403C36"></rect>
+          <circle cx="120" cy="560" r="52" fill="#161A12"></circle><circle cx="230" cy="620" r="38" fill="#141810"></circle>
+          <circle cx="1080" cy="480" r="60" fill="#161A12"></circle><circle cx="1150" cy="560" r="34" fill="#141810"></circle>
+          <rect x="320" y="240" width="520" height="400" fill="#4A4640"></rect>
+          <rect x="320" y="440" width="520" height="200" fill="#524D46"></rect>
+          <line x1="320" y1="440" x2="840" y2="440" stroke="#5E5850" stroke-width="3"></line>
+          <rect x="860" y="440" width="230" height="200" fill="#3B3B38"></rect>
+          <text x="24" y="782" fill="#fff" opacity="0.3" font-family="JetBrains Mono" font-size="13">{{ watermark }}</text>
+        </g>
+        <sc-for list="{{ faces }}" as="f" hint-placeholder-count="0">
+          <polygon points="{{ f.ptsStr }}" fill="{{ f.fill }}" stroke="{{ f.stroke }}" stroke-width="2.5" onClick="{{ f.onClick }}" style="cursor:pointer"></polygon>
+        </sc-for>
+        <sc-for list="{{ obstacles }}" as="o" hint-placeholder-count="0">
+          <g onClick="{{ o.onClick }}" style="cursor:pointer">
+            <rect x="{{ o.mx }}" y="{{ o.my }}" width="{{ o.mw }}" height="{{ o.mh }}" fill="none" stroke="#E8B75B" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.85"></rect>
+            <rect x="{{ o.x }}" y="{{ o.y }}" width="{{ o.w }}" height="{{ o.h }}" fill="#7A554B" stroke="#E8B75B" stroke-width="1.5"></rect>
+          </g>
+        </sc-for>
+        <sc-for list="{{ modules }}" as="m" hint-placeholder-count="0">
+          <rect x="{{ m.x }}" y="{{ m.y }}" width="{{ m.w }}" height="{{ m.h }}" rx="2" fill="{{ m.fill }}" stroke="{{ m.stroke }}" stroke-width="{{ m.sw }}" opacity="{{ m.op }}" onClick="{{ m.onTap }}" style="cursor:pointer;animation:{{ m.anim }}"></rect>
+        </sc-for>
+        <sc-for list="{{ measures }}" as="ms" hint-placeholder-count="0">
+          <g><line x1="{{ ms.x1 }}" y1="{{ ms.y1 }}" x2="{{ ms.x2 }}" y2="{{ ms.y2 }}" stroke="#7FD1C8" stroke-width="2" stroke-dasharray="7 5"></line>
+          <rect x="{{ ms.bx }}" y="{{ ms.by }}" width="{{ ms.bw }}" height="20" rx="10" fill="#FCFBF9"></rect>
+          <text x="{{ ms.tx }}" y="{{ ms.ty }}" fill="#26221B" font-family="JetBrains Mono" font-size="12" font-weight="600" text-anchor="middle">{{ ms.label }}</text></g>
+        </sc-for>
+        <sc-if value="{{ isDrawing }}" hint-placeholder-val="{{ false }}">
+          <polyline points="{{ drawPtsStr }}" fill="rgba(232,150,12,0.12)" stroke="#E8960C" stroke-width="2.5"></polyline>
+          <line x1="{{ curX1 }}" y1="{{ curY1 }}" x2="{{ curX2 }}" y2="{{ curY2 }}" stroke="#E8960C" stroke-width="2" stroke-dasharray="6 5"></line>
+        </sc-if>
+        <sc-for list="{{ drawPts }}" as="dp" hint-placeholder-count="0">
+          <circle cx="{{ dp.x }}" cy="{{ dp.y }}" r="{{ dp.r }}" fill="#FCFBF9" stroke="#E8960C" stroke-width="2.5"></circle>
+        </sc-for>
+        <sc-for list="{{ drawSegs }}" as="dsg" hint-placeholder-count="0">
+          <g><rect x="{{ dsg.bx }}" y="{{ dsg.by }}" width="{{ dsg.bw }}" height="20" rx="10" fill="#FCFBF9" opacity="0.95"></rect>
+          <text x="{{ dsg.x }}" y="{{ dsg.y }}" fill="#26221B" font-family="JetBrains Mono" font-size="12" font-weight="600" text-anchor="middle">{{ dsg.text }}</text></g>
+        </sc-for>
+        <sc-for list="{{ calibPts }}" as="cp" hint-placeholder-count="0">
+          <circle cx="{{ cp.x }}" cy="{{ cp.y }}" r="6" fill="#7FD1C8" stroke="#fff" stroke-width="2"></circle>
+        </sc-for>
+        <sc-if value="{{ calibLineShow }}" hint-placeholder-val="{{ false }}">
+          <line x1="{{ clX1 }}" y1="{{ clY1 }}" x2="{{ clX2 }}" y2="{{ clY2 }}" stroke="#7FD1C8" stroke-width="3"></line>
+        </sc-if>
+        <sc-if value="{{ marqueeShow }}" hint-placeholder-val="{{ false }}">
+          <rect x="{{ mqX }}" y="{{ mqY }}" width="{{ mqW }}" height="{{ mqH }}" fill="rgba(232,150,12,0.1)" stroke="#E8960C" stroke-width="1.5" stroke-dasharray="5 4"></rect>
+        </sc-if>
+      </svg>
+      </div>
+      <sc-if value="{{ isP1 }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;left:12px;top:14px;display:flex;flex-direction:column;gap:6px;background:rgba(23,21,15,0.85);border:1px solid #3A362C;border-radius:14px;padding:8px;backdrop-filter:blur(6px)">
+          <sc-for list="{{ tools }}" as="t" hint-placeholder-count="5">
+            <div onClick="{{ t.onPick }}" title="{{ t.label }}" style="width:48px;height:48px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:{{ t.bg }};color:{{ t.fg }}" style-hover="background:#3A362C">
+              <div style="font-size:16px;line-height:1">{{ t.glyph }}</div>
+              <div style="font-size:8px;font-weight:600;letter-spacing:.02em">{{ t.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ showGuide }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;animation:fadeUp .5s both">
+          <div style="color:#EAE6E0;font-size:19px;font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,.6)">Zeichne die Dachfläche</div>
+          <div style="color:#B9B2A4;margin-top:6px;text-shadow:0 2px 12px rgba(0,0,0,.6)">Tippe die Ecken an — Doppeltipp schließt die Fläche</div>
+          <div style="pointer-events:auto;margin-top:14px"><a onClick="{{ autoDrawFn }}" style="font-weight:600;font-size:13px">Vorschlag übernehmen</a></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ calibBadge }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;right:14px;top:14px;padding:6px 12px;border-radius:999px;background:rgba(127,209,200,0.15);border:1px solid #7FD1C8;color:#7FD1C8;font-family:'JetBrains Mono',monospace;font-size:11px">{{ calibBadgeText }}</div>
+      </sc-if>
+      <div style="position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:stretch;background:rgba(23,21,15,0.9);border:1px solid #3A362C;border-radius:14px;padding:10px 6px;backdrop-filter:blur(8px);box-shadow:0 8px 30px rgba(0,0,0,.4)">
+        <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
+          <div style="padding:0 17px;border-right:1px solid #3A362C;text-align:center;min-width:92px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:{{ k.color }};transition:color .4s">{{ k.val }}</div>
+            <div style="font-size:10px;color:#8A8071;font-weight:600;letter-spacing:.04em;margin-top:2px">{{ k.label }}</div>
+          </div>
+        </sc-for>
+        <div style="padding:0 4px 0 12px;display:flex;align-items:center"><div style="font-size:10px;color:#57503F;max-width:62px;line-height:1.3">Richtwerte, unverbindlich</div></div>
+      </div>
+      <sc-if value="{{ panelClosed }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ togglePanel }}" style="position:absolute;right:0;top:50%;transform:translateY(-50%);width:30px;height:88px;background:#F6F3EE;border-radius:12px 0 0 12px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:-4px 0 14px rgba(0,0,0,.3);font-weight:700;color:#8A8071">‹</div>
+      </sc-if>
+    </div>
+    <!-- PANEL P1–P3 -->
+    <sc-if value="{{ panelShow }}" hint-placeholder-val="{{ true }}">
+    <div style="width:344px;background:#F6F3EE;border-left:1px solid #D9D2C6;display:flex;flex-direction:column;z-index:20" data-screen-label="Panel">
+      <div style="display:flex;align-items:center;padding:14px 16px 10px">
+        <div style="font-weight:800;font-size:15px">{{ panelTitle }}</div>
+        <div onClick="{{ togglePanel }}" style="margin-left:auto;width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#8A8071" style-hover="background:#EAE4D8">›</div>
+      </div>
+      <div style="flex:1;overflow:auto;padding:0 16px 16px;display:flex;flex-direction:column;gap:12px">
+
+        <sc-if value="{{ calibStep1 }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid #7FD1C8;border-radius:12px;padding:14px;background:#FCFBF9">
+            <div style="font-weight:700">Foto kalibrieren <span style="color:#8A8071;font-weight:500">· Schritt 1/2</span></div>
+            <div style="color:#57503F;margin-top:6px;line-height:1.45">Tippe zwei Punkte einer bekannten Strecke am Bild an — z.&#8239;B. eine Hauskante.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ calibStep2 }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid #7FD1C8;border-radius:12px;padding:14px;background:#FCFBF9">
+            <div style="font-weight:700">Foto kalibrieren <span style="color:#8A8071;font-weight:500">· Schritt 2/2</span></div>
+            <div style="color:#57503F;margin:6px 0 10px">Wie lang ist die markierte Strecke wirklich?</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input value="{{ calibLenVal }}" onChange="{{ onCalibLen }}" style="width:90px;height:44px;border-radius:10px;border:1px solid #D9D2C6;padding:0 12px;font-family:'JetBrains Mono',monospace;font-size:15px;outline:none">
+              <div style="color:#8A8071">m</div>
+              <div onClick="{{ calibDone }}" style="margin-left:auto;height:44px;padding:0 16px;border-radius:10px;background:#E8960C;color:#fff;font-weight:700;display:flex;align-items:center;cursor:pointer">Fertig</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isP1 }}" hint-placeholder-val="{{ true }}">
+          <sc-if value="{{ p1Empty }}" hint-placeholder-val="{{ false }}">
+            <div style="color:#8A8071;line-height:1.5;padding:6px 2px">Wähle links das Werkzeug <b style="color:#26221B">Dachfläche</b> und tippe die Ecken des Dachs an. Kanten rasten auf rechte Winkel ein.</div>
+          </sc-if>
+          <sc-for list="{{ faceList }}" as="fl" hint-placeholder-count="0">
+            <div onClick="{{ fl.onSel }}" style="border:1.5px solid {{ fl.border }};border-radius:12px;padding:12px 14px;background:#FCFBF9;cursor:pointer">
+              <div style="display:flex;align-items:center;gap:9px">
+                <svg width="26" height="20" viewBox="0 0 26 20"><polygon points="{{ fl.mini }}" fill="{{ fl.color }}" opacity="0.8"></polygon></svg>
+                <div style="font-weight:700">{{ fl.name }}</div>
+                <div onClick="{{ fl.onDel }}" style="margin-left:auto;color:#A79D8C;font-size:13px;padding:4px 7px;border-radius:6px" style-hover="background:#F0E4E0;color:#B0523E">✕</div>
+              </div>
+              <div style="color:#8A8071;font-size:12px;margin-top:3px;font-family:'JetBrains Mono',monospace">{{ fl.meta }}</div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ dlgOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #D9D2C6;border-radius:12px;padding:14px;background:#FCFBF9;animation:fadeUp .25s both">
+              <div style="font-weight:700;margin-bottom:10px">Dachdaten — {{ dlgName }}</div>
+              <div style="display:flex;gap:6px;background:#EDE8DF;border-radius:10px;padding:3px">
+                <div onClick="{{ setSchraeg }}" style="flex:1;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;cursor:pointer;background:{{ schraegBg }};color:{{ schraegFg }}">Schrägdach</div>
+                <div onClick="{{ setFlach }}" style="flex:1;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;cursor:pointer;background:{{ flachBg }};color:{{ flachFg }}">Flachdach</div>
+              </div>
+              <sc-if value="{{ dlgIsSchraeg }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:14px">
+                  <div style="display:flex;align-items:baseline"><div style="font-size:12px;font-weight:600;color:#57503F">Neigung</div><div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-weight:700">{{ tiltLabel }}</div></div>
+                  <input type="range" min="10" max="60" value="{{ tiltVal }}" onChange="{{ onTilt }}" style="width:100%;margin-top:6px">
+                  <div style="display:flex;gap:6px;margin-top:4px">
+                    <sc-for list="{{ tiltPresets }}" as="tp" hint-placeholder-count="4">
+                      <div onClick="{{ tp.onPick }}" style="flex:1;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-family:'JetBrains Mono',monospace;cursor:pointer;border:1px solid {{ tp.br }};background:{{ tp.bg }};color:{{ tp.fg }}">{{ tp.label }}</div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="margin-top:14px;display:flex;align-items:center;gap:14px">
+                  <div style="position:relative;width:64px;height:64px;border-radius:999px;border:1.5px solid #D9D2C6;flex-shrink:0">
+                    <div style="position:absolute;top:3px;left:50%;transform:translateX(-50%);font-size:9px;color:#A79D8C;font-weight:700">N</div>
+                    <div style="position:absolute;left:50%;top:50%;width:3px;height:24px;background:#E8960C;border-radius:2px;transform-origin:50% 0;transform:rotate({{ needleRot }}deg);transition:transform .3s"></div>
+                    <div style="position:absolute;left:50%;top:50%;width:7px;height:7px;border-radius:99px;background:#26221B;transform:translate(-50%,-50%)"></div>
+                  </div>
+                  <div style="flex:1">
+                    <div style="font-size:12px;font-weight:600;color:#57503F;margin-bottom:6px">Ausrichtung <span style="color:#A79D8C;font-weight:500">(aus Firstlinie)</span></div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap">
+                      <sc-for list="{{ azChips }}" as="az" hint-placeholder-count="5">
+                        <div onClick="{{ az.onPick }}" style="padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid {{ az.br }};background:{{ az.bg }};color:{{ az.fg }}">{{ az.label }}</div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ dlgIsFlach }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:14px">
+                  <div style="display:flex;align-items:baseline"><div style="font-size:12px;font-weight:600;color:#57503F">Attikahöhe</div><div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-weight:700">{{ attikaLabel }}</div></div>
+                  <input type="range" min="0" max="2" step="0.1" value="{{ attikaVal }}" onChange="{{ onAttika }}" style="width:100%;margin-top:6px">
+                </div>
+              </sc-if>
+              <div onClick="{{ dlgClose }}" style="margin-top:14px;height:40px;border-radius:10px;background:#26221B;color:#F6F3EE;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer">Übernehmen</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ hasObstacles }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #D9D2C6;border-radius:12px;padding:14px;background:#FCFBF9">
+              <div style="font-weight:700">Hindernisse <span style="color:#8A8071;font-weight:500">({{ obsCount }})</span></div>
+              <div style="display:flex;align-items:baseline;margin-top:10px"><div style="font-size:12px;font-weight:600;color:#57503F">Abstandsrand</div><div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-weight:700">{{ obsMarginLabel }}</div></div>
+              <input type="range" min="0" max="1" step="0.05" value="{{ obsMarginVal }}" onChange="{{ onObsMargin }}" style="width:100%;margin-top:6px">
+            </div>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ isP2 }}" hint-placeholder-val="{{ false }}">
+          <sc-if value="{{ noFaces }}" hint-placeholder-val="{{ false }}">
+            <div style="color:#8A8071;padding:6px 2px;line-height:1.5">Noch keine Dachfläche. <a onClick="{{ goP1 }}">Zurück zu Phase 1</a> und zeichnen.</div>
+          </sc-if>
+          <sc-if value="{{ hasFaces }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12px;font-weight:700;color:#8A8071;letter-spacing:.05em;text-transform:uppercase">Modul</div>
+          <sc-for list="{{ prodList }}" as="pd" hint-placeholder-count="3">
+            <div onClick="{{ pd.onSel }}" style="border:1.5px solid {{ pd.border }};border-radius:12px;padding:11px 13px;background:#FCFBF9;cursor:pointer;display:flex;gap:11px;align-items:center">
+              <div style="width:34px;height:46px;border-radius:5px;background:linear-gradient(160deg,#26314B,#141B2E);border:1px solid #47588A;flex-shrink:0"></div>
+              <div style="min-width:0">
+                <div style="font-weight:700;font-size:13px">{{ pd.name }}</div>
+                <div style="color:#8A8071;font-size:11px;font-family:'JetBrains Mono',monospace;margin-top:2px">{{ pd.meta }}</div>
+              </div>
+              <div style="margin-left:auto;color:#E8960C;font-weight:800;opacity:{{ pd.checkOp }}">✓</div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ selIsSchraeg }}" hint-placeholder-val="{{ true }}">
+            <div style="font-size:12px;font-weight:700;color:#8A8071;letter-spacing:.05em;text-transform:uppercase;margin-top:4px">Raster — {{ selFaceName }}</div>
+            <div style="display:flex;gap:6px;background:#EDE8DF;border-radius:10px;padding:3px">
+              <div onClick="{{ setPortrait }}" style="flex:1;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:7px;font-weight:600;font-size:13px;cursor:pointer;background:{{ portBg }};color:{{ portFg }}"><div style="width:10px;height:15px;border:1.5px solid currentColor;border-radius:2px"></div>Hochformat</div>
+              <div onClick="{{ setLandscape }}" style="flex:1;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:7px;font-weight:600;font-size:13px;cursor:pointer;background:{{ landBg }};color:{{ landFg }}"><div style="width:15px;height:10px;border:1.5px solid currentColor;border-radius:2px"></div>Querformat</div>
+            </div>
+            <div style="border:1px solid #D9D2C6;border-radius:12px;padding:12px 14px;background:#FCFBF9;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:80px;font-size:12px;font-weight:600;color:#57503F">First</div><input type="range" min="0" max="1" step="0.05" value="{{ mTopVal }}" onChange="{{ onMTop }}" style="flex:1"><div style="width:56px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px">{{ mTopLabel }}</div></div>
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:80px;font-size:12px;font-weight:600;color:#57503F">Seitlich</div><input type="range" min="0" max="1" step="0.05" value="{{ mSideVal }}" onChange="{{ onMSide }}" style="flex:1"><div style="width:56px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px">{{ mSideLabel }}</div></div>
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:80px;font-size:12px;font-weight:600;color:#57503F">Traufe</div><input type="range" min="0" max="1" step="0.05" value="{{ mBotVal }}" onChange="{{ onMBot }}" style="flex:1"><div style="width:56px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px">{{ mBotLabel }}</div></div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ selIsFlach }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px;font-weight:700;color:#8A8071;letter-spacing:.05em;text-transform:uppercase;margin-top:4px">Aufständerung — {{ selFaceName }}</div>
+            <div style="display:flex;gap:6px;background:#EDE8DF;border-radius:10px;padding:3px">
+              <div onClick="{{ setSued }}" style="flex:1;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:13px;cursor:pointer;background:{{ suedBg }};color:{{ suedFg }}"><div style="width:0;height:0;border-left:10px solid transparent;border-bottom:9px solid currentColor"></div>Süd</div>
+              <div onClick="{{ setOW }}" style="flex:1;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:13px;cursor:pointer;background:{{ owBg }};color:{{ owFg }}"><div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:9px solid currentColor"></div>Ost-West</div>
+            </div>
+            <div style="border:1px solid #D9D2C6;border-radius:12px;padding:12px 14px;background:#FCFBF9;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:104px;font-size:12px;font-weight:600;color:#57503F">Winkel</div><input type="range" min="5" max="25" value="{{ winkelVal }}" onChange="{{ onWinkel }}" style="flex:1"><div style="width:44px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px">{{ winkelLabel }}</div></div>
+              <div style="display:flex;align-items:center;gap:10px"><div title="Aus dem Aufständerungswinkel vorgeschlagen — verhindert gegenseitige Verschattung im Winter." style="width:104px;font-size:12px;font-weight:600;color:#57503F;cursor:help">Reihenabstand ⓘ</div><input type="range" min="0" max="1.5" step="0.05" value="{{ abstVal }}" onChange="{{ onAbst }}" style="flex:1"><div style="width:44px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px">{{ abstLabel }}</div></div>
+              <div style="font-size:11px;color:#A79D8C">{{ abstHint }}</div>
+            </div>
+          </sc-if>
+          <div style="border:1px solid #D9D2C6;border-radius:12px;background:#FCFBF9;overflow:hidden">
+            <div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid #EDE8DF">Belegung</div>
+            <sc-for list="{{ statRows }}" as="st" hint-placeholder-count="1">
+              <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid #F1EDE6">
+                <div style="width:10px;height:10px;border-radius:3px;background:{{ st.color }}"></div>
+                <div style="font-size:13px">{{ st.name }}</div>
+                <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:12px;color:#57503F">{{ st.meta }}</div>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;padding:10px 14px;background:#F6F3EE">
+              <div style="font-weight:700;font-size:13px">Gesamt</div>
+              <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px">{{ statTotal }}</div>
+            </div>
+          </div>
+          <sc-if value="{{ hasRemoved }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;color:#8A8071;font-size:12px"><div>{{ removedLabel }}</div><a onClick="{{ restoreAll }}" style="margin-left:auto;font-weight:600">Alle aktivieren</a></div>
+          </sc-if>
+          <div style="color:#A79D8C;font-size:12px;line-height:1.45">Tipp: Einzelne Module antippen, um sie zu deaktivieren. Ziehen wählt mehrere aus.</div>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ isP3 }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;justify-content:center;padding:2px 0 4px">
+            <div style="padding:8px 16px;border-radius:999px;font-weight:700;font-size:13px;background:{{ checkBg }};color:{{ checkFg }};border:1px solid {{ checkBr }}">{{ checkLabel }}</div>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:#8A8071;letter-spacing:.05em;text-transform:uppercase">Wechselrichter</div>
+          <sc-for list="{{ wrList }}" as="w" hint-placeholder-count="3">
+            <div onClick="{{ w.onSel }}" style="border:1.5px solid {{ w.border }};border-radius:12px;padding:11px 13px;background:#FCFBF9;cursor:pointer;display:flex;gap:11px;align-items:center">
+              <div style="width:34px;height:40px;border-radius:6px;background:linear-gradient(160deg,#5B564E,#38342E);flex-shrink:0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px"><div style="width:16px;height:3px;border-radius:2px;background:#E8960C"></div></div>
+              <div><div style="font-weight:700;font-size:13px">{{ w.name }}</div><div style="color:#8A8071;font-size:11px;font-family:'JetBrains Mono',monospace;margin-top:2px">{{ w.meta }}</div></div>
+              <div style="margin-left:auto;color:#E8960C;font-weight:800;opacity:{{ w.checkOp }}">✓</div>
+            </div>
+          </sc-for>
+          <div style="font-size:12px;font-weight:700;color:#8A8071;letter-spacing:.05em;text-transform:uppercase;margin-top:4px">Speicher</div>
+          <div style="display:flex;gap:6px">
+            <sc-for list="{{ spChips }}" as="sp" hint-placeholder-count="4">
+              <div onClick="{{ sp.onPick }}" style="flex:1;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;cursor:pointer;border:1.5px solid {{ sp.br }};background:{{ sp.bg }};color:{{ sp.fg }}">{{ sp.label }}</div>
+            </sc-for>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:#8A8071;letter-spacing:.05em;text-transform:uppercase;margin-top:4px">Strings <span style="text-transform:none;font-weight:500;letter-spacing:0;color:#A79D8C">— wählen, dann Module antippen</span></div>
+          <sc-for list="{{ strings }}" as="sg" hint-placeholder-count="2">
+            <div style="border:1.5px solid {{ sg.border }};border-radius:12px;background:#FCFBF9;overflow:hidden">
+              <div onClick="{{ sg.onSel }}" style="display:flex;align-items:center;gap:9px;padding:11px 13px;cursor:pointer">
+                <div style="width:13px;height:13px;border-radius:4px;background:{{ sg.color }}"></div>
+                <div style="font-weight:700;font-size:13px">{{ sg.name }}</div>
+                <div style="color:#8A8071;font-size:11px">{{ sg.mppt }}</div>
+                <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:#57503F;white-space:nowrap">{{ sg.meta }}</div>
+                <div style="width:11px;height:11px;border-radius:999px;background:{{ sg.dot }};flex-shrink:0"></div>
+              </div>
+              <sc-if value="{{ sg.bad }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:10px 13px;background:#F7E6E1;border-top:1px solid #E7C4BA;color:#8C3B28;font-size:12.5px;line-height:1.5">{{ sg.msg }}</div>
+              </sc-if>
+            </div>
+          </sc-for>
+          <div style="border:1px solid #D9D2C6;border-radius:12px;padding:12px 14px;background:#FCFBF9">
+            <div style="display:flex;align-items:baseline"><div style="font-size:12px;font-weight:600;color:#57503F">DC/AC-Verhältnis</div><div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-weight:700">{{ dcacLabel }}</div></div>
+            <div style="position:relative;height:8px;border-radius:99px;background:#EDE8DF;margin-top:10px">
+              <div style="position:absolute;left:21%;width:43%;height:100%;border-radius:99px;background:#DCEBD9"></div>
+              <div style="position:absolute;left:{{ dcacPos }};top:-3px;width:3px;height:14px;border-radius:2px;background:#26221B"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#A79D8C;margin-top:4px;font-family:'JetBrains Mono',monospace"><div>0,6</div><div>Normalbereich 0,9–1,5</div><div>2,0</div></div>
+          </div>
+          <sc-if value="{{ checkWarn }}" hint-placeholder-val="{{ false }}">
+            <div style="color:#8F5A08;font-size:12px;line-height:1.45;background:#F3E3C3;border-radius:10px;padding:10px 12px">Weiter ist möglich — das Angebots-PDF trägt dann den Hinweis „elektrisch ungeprüft".</div>
+          </sc-if>
+        </sc-if>
+      </div>
+      <div style="padding:12px 16px;border-top:1px solid #D9D2C6">
+        <div onClick="{{ nextPhase }}" style="height:46px;border-radius:11px;background:#26221B;color:#F6F3EE;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer" style-hover="background:#3A342A">{{ nextLabel }} →</div>
+      </div>
+    </div>
+    </sc-if>
+    </sc-if>
+
+    <!-- PHASE 4 -->
+    <sc-if value="{{ isP4 }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;display:flex;min-width:0;background:#EAE6E0" data-screen-label="Wirtschaftlichkeit">
+      <div style="width:324px;border-right:1px solid #D9D2C6;background:#F6F3EE;overflow:auto;padding:18px 18px 20px;display:flex;flex-direction:column;gap:15px">
+        <div style="font-weight:800;font-size:16px">Deine Angaben</div>
+        <div>
+          <div style="display:flex;align-items:baseline"><div style="font-size:12px;font-weight:600;color:#57503F">Jahresverbrauch</div><div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-weight:700">{{ verbLabel }}</div></div>
+          <input type="range" min="1500" max="14000" step="100" value="{{ verbVal }}" onChange="{{ onVerb }}" style="width:100%;margin-top:8px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+            <sc-for list="{{ chips }}" as="c" hint-placeholder-count="4">
+              <div onClick="{{ c.onPick }}" style="padding:9px 12px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid {{ c.br }};background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><div style="font-size:12px;font-weight:600;color:#57503F;margin-bottom:5px">Strompreis <span title="Was du heute pro Kilowattstunde aus dem Netz zahlst." style="color:#A79D8C;cursor:help">ⓘ</span></div>
+            <div style="display:flex;align-items:center;border:1px solid #D9D2C6;border-radius:10px;background:#FCFBF9;padding:0 10px;height:44px"><input value="{{ preisStromVal }}" onChange="{{ onPreisStrom }}" style="width:100%;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:14px;background:transparent"><div style="color:#A79D8C;font-size:11px;white-space:nowrap">€/kWh</div></div></div>
+          <div><div style="font-size:12px;font-weight:600;color:#57503F;margin-bottom:5px">Einspeisung <span title="Was du pro Kilowattstunde bekommst, die du ins Netz verkaufst." style="color:#A79D8C;cursor:help">ⓘ</span></div>
+            <div style="display:flex;align-items:center;border:1px solid #D9D2C6;border-radius:10px;background:#FCFBF9;padding:0 10px;height:44px"><input value="{{ vergVal }}" onChange="{{ onVerg }}" style="width:100%;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:14px;background:transparent"><div style="color:#A79D8C;font-size:11px;white-space:nowrap">€/kWh</div></div></div>
+          <div><div style="font-size:12px;font-weight:600;color:#57503F;margin-bottom:5px">Anlagenpreis <span title="Vorbelegt aus dem Richtpreis — überschreibbar." style="color:#A79D8C;cursor:help">ⓘ</span></div>
+            <div style="display:flex;align-items:center;border:1px solid #D9D2C6;border-radius:10px;background:#FCFBF9;padding:0 10px;height:44px"><input value="{{ anlPreisVal }}" onChange="{{ onAnlPreis }}" style="width:100%;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:14px;background:transparent"><div style="color:#A79D8C;font-size:11px">€</div></div></div>
+          <div><div style="font-size:12px;font-weight:600;color:#57503F;margin-bottom:5px">Förderung <span title="Vorbelegt je Region — aktuellen Fördersatz prüfen." style="color:#A79D8C;cursor:help">ⓘ</span></div>
+            <div style="display:flex;align-items:center;border:1px solid #D9D2C6;border-radius:10px;background:#FCFBF9;padding:0 10px;height:44px"><input value="{{ foerdVal }}" onChange="{{ onFoerd }}" style="width:100%;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:14px;background:transparent"><div style="color:#A79D8C;font-size:11px">€</div></div></div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#57503F;margin-bottom:6px">Region</div>
+          <div style="display:flex;gap:6px">
+            <sc-for list="{{ laender }}" as="ld" hint-placeholder-count="3">
+              <div onClick="{{ ld.onPick }}" style="flex:1;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid {{ ld.br }};background:{{ ld.bg }};color:{{ ld.fg }}">{{ ld.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="margin-top:auto">
+          <div onClick="{{ nextPhase }}" style="height:46px;border-radius:11px;background:#26221B;color:#F6F3EE;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:#3A342A">Zum Ergebnis →</div>
+        </div>
+      </div>
+      <div style="flex:1;overflow:auto;padding:18px 24px 24px">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div style="font-weight:800;font-size:18px;letter-spacing:-.01em">Was die Anlage für dich rechnet</div>
+          <div style="margin-left:auto;display:flex;gap:2px;background:#E3DDD1;border-radius:10px;padding:3px">
+            <div onClick="{{ setOhneSp }}" style="padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:{{ ohneBg }};color:{{ ohneFg }}">ohne Speicher</div>
+            <div onClick="{{ setMitSp }}" style="padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:{{ mitBg }};color:{{ mitFg }}">mit Speicher {{ spKurz }}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:236px 1fr;gap:16px;margin-top:16px;align-items:stretch">
+          <div style="background:#FCFBF9;border:1px solid #D9D2C6;border-radius:16px;padding:16px;display:flex;flex-direction:column;align-items:center">
+            <svg width="150" height="150" viewBox="0 0 160 160">
+              <circle cx="80" cy="80" r="64" fill="none" stroke="#EDE8DF" stroke-width="17"></circle>
+              <circle cx="80" cy="80" r="64" fill="none" stroke="#E8960C" stroke-width="17" stroke-linecap="round" stroke-dasharray="{{ donutDash }}" transform="rotate(-90 80 80)" style="transition:stroke-dasharray .5s"></circle>
+              <text x="80" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="27" font-weight="700" fill="#26221B">{{ autarkiePct }}</text>
+              <text x="80" y="98" text-anchor="middle" font-family="Inter Tight" font-size="11" fill="#8A8071">Autarkie</text>
+            </svg>
+            <div style="display:flex;gap:12px;margin-top:8px;font-size:11.5px;color:#57503F">
+              <div style="display:flex;align-items:center;gap:5px"><div style="width:9px;height:9px;border-radius:3px;background:#E8960C"></div>Eigener Strom</div>
+              <div style="display:flex;align-items:center;gap:5px"><div style="width:9px;height:9px;border-radius:3px;background:#DDD6C9"></div>Netzbezug</div>
+            </div>
+            <div title="Wie viel deines Stroms künftig vom eigenen Dach kommt." style="font-size:11px;color:#A79D8C;margin-top:8px;text-align:center;cursor:help">ⓘ Anteil deines Verbrauchs vom eigenen Dach</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="background:#FCFBF9;border:1px solid #D9D2C6;border-radius:16px;padding:15px 18px">
+              <div style="font-weight:700;font-size:13px;margin-bottom:11px">Jahresbilanz</div>
+              <sc-for list="{{ bars }}" as="b" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                  <div style="width:104px;font-size:12px;color:#57503F">{{ b.label }}</div>
+                  <div style="flex:1;height:15px;border-radius:6px;background:#F1EDE6;overflow:hidden"><div style="height:100%;border-radius:6px;background:{{ b.color }};width:{{ b.pct }};transition:width .5s"></div></div>
+                  <div style="width:86px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600">{{ b.val }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:14px;flex:1">
+              <div style="flex:1;background:#26221B;border-radius:16px;padding:16px 20px;color:#F6F3EE">
+                <div style="font-size:12px;color:#B9B2A4;font-weight:600">Amortisation <span title="Ab dann hat die Anlage ihren Preis wieder eingespielt." style="cursor:help">ⓘ</span></div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:38px;font-weight:700;color:#E8960C;letter-spacing:-.02em;margin-top:2px">{{ amortLabel }}</div>
+              </div>
+              <div style="flex:1;background:#FCFBF9;border:1px solid #D9D2C6;border-radius:16px;padding:16px 20px">
+                <div style="font-size:12px;color:#8A8071;font-weight:600">Ersparnis im 1. Jahr <span title="Gesparter Netzstrom plus Einspeisevergütung." style="color:#A79D8C;cursor:help">ⓘ</span></div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:38px;font-weight:700;letter-spacing:-.02em;margin-top:2px">{{ ersparnisLabel }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#FCFBF9;border:1px solid #D9D2C6;border-radius:16px;padding:15px 18px;margin-top:14px">
+          <div style="display:flex;align-items:baseline"><div style="font-weight:700;font-size:13px">Ersparnis über 20 Jahre</div><div style="margin-left:auto;font-size:11px;color:#A79D8C">kumuliert, mit Strompreis +2&#8239;%/Jahr</div></div>
+          <svg viewBox="0 0 640 170" style="width:100%;margin-top:8px">
+            <line x1="0" y1="{{ investY }}" x2="640" y2="{{ investY }}" stroke="#C9C1B2" stroke-width="1.5" stroke-dasharray="6 5"></line>
+            <text x="636" y="{{ investLblY }}" text-anchor="end" font-family="JetBrains Mono" font-size="10" fill="#A79D8C">Anlagenpreis {{ investLabel }}</text>
+            <path d="{{ chartArea }}" fill="rgba(232,150,12,0.16)"></path>
+            <path d="{{ chartLine }}" fill="none" stroke="#E8960C" stroke-width="2.5" style="transition:d .5s"></path>
+            <line x1="{{ beX }}" y1="18" x2="{{ beX }}" y2="152" stroke="#26221B" stroke-width="1.5"></line>
+            <circle cx="{{ beX }}" cy="{{ investY }}" r="4.5" fill="#26221B"></circle>
+            <text x="{{ beTx }}" y="14" text-anchor="{{ beAnchor }}" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#26221B">Break-even: {{ beLabel }}</text>
+            <text x="4" y="164" font-family="JetBrains Mono" font-size="10" fill="#A79D8C">heute</text>
+            <text x="636" y="164" text-anchor="end" font-family="JetBrains Mono" font-size="10" fill="#A79D8C">20 Jahre</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- PHASE 5 -->
+    <sc-if value="{{ isP5 }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;display:flex;min-width:0;background:#DDD8CF" data-screen-label="Ergebnis">
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;overflow:auto;padding:20px 0 16px">
+        <div style="width:452px;background:#fff;border-radius:6px;box-shadow:0 14px 44px rgba(38,34,27,.22);flex-shrink:0">
+          <!-- PDF Seite -->
+          <div style="width:452px;height:626px;padding:30px 34px;display:flex;flex-direction:column;font-size:11px;position:relative;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px;padding-bottom:12px;border-bottom:2px solid #26221B">
+              <div style="width:20px;height:20px;border-radius:6px;background:#E8960C;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px">S</div>
+              <div style="font-weight:800;font-size:12px">Sonnwerk Energietechnik GmbH</div>
+              <div style="margin-left:auto;color:#8A8071;font-size:9px;font-family:'JetBrains Mono',monospace">{{ pdfDate }}</div>
+            </div>
+            <sc-if value="{{ pdfP0 }}" hint-placeholder-val="{{ true }}">
+              <div style="margin-top:26px;font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.15">Dein Solarkraftwerk<br>auf dem eigenen Dach</div>
+              <div style="color:#57503F;margin-top:6px;font-size:12px">{{ addrLabel }}</div>
+              <svg viewBox="0 0 384 240" style="width:100%;margin-top:18px;border-radius:8px;background:#1E211A">
+                <rect x="0" y="200" width="384" height="24" fill="#2A2A28"></rect>
+                <rect x="92" y="42" width="200" height="150" fill="#4A4640"></rect>
+                <polygon points="92,117 292,117 292,192 92,192" fill="rgba(232,150,12,0.14)" stroke="#E8960C" stroke-width="1.5"></polygon>
+                <rect x="104" y="126" width="176" height="56" fill="#22304F" stroke="#47588A" stroke-width="0.7"></rect>
+                <text x="8" y="232" fill="#fff" opacity="0.25" font-family="JetBrains Mono" font-size="7">LUFTBILD-PLATZHALTER</text>
+              </svg>
+              <div style="display:flex;gap:10px;margin-top:18px">
+                <div style="flex:1;border:1px solid #E3DDD1;border-radius:8px;padding:10px 12px"><div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px">{{ pdfKwp }}</div><div style="color:#8A8071;font-size:9px;margin-top:1px">Anlagenleistung</div></div>
+                <div style="flex:1;border:1px solid #E3DDD1;border-radius:8px;padding:10px 12px"><div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px">{{ pdfErtrag }}</div><div style="color:#8A8071;font-size:9px;margin-top:1px">Strom pro Jahr</div></div>
+                <div style="flex:1;border:1px solid #E3DDD1;border-radius:8px;padding:10px 12px"><div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:#B8730A">{{ pdfAmort }}</div><div style="color:#8A8071;font-size:9px;margin-top:1px">Amortisation</div></div>
+              </div>
+              <div style="margin-top:auto;display:flex;align-items:center"><div style="padding:4px 10px;border-radius:999px;font-size:9px;font-weight:700;background:{{ pdfCheckBg }};color:{{ pdfCheckFg }}">{{ pdfCheckLabel }}</div><div style="margin-left:auto;color:#A79D8C;font-size:9px">Angebot · unverbindlich · Seite 1/4</div></div>
+            </sc-if>
+            <sc-if value="{{ pdfP1 }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:20px;font-size:17px;font-weight:800">Deine Anlage im Überblick</div>
+              <div style="margin-top:14px;display:flex;flex-direction:column">
+                <sc-for list="{{ pdfRows }}" as="r" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:baseline;padding:9px 2px;border-bottom:1px solid #F1EDE6">
+                    <div style="color:#57503F;font-size:11px">{{ r.k }}</div>
+                    <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-weight:600;font-size:11px">{{ r.v }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="margin-top:16px;background:#F6F3EE;border-radius:8px;padding:12px 14px;color:#57503F;line-height:1.5;font-size:10.5px">Die Anlage wurde auf deinem Luftbild geplant und elektrisch auf den Wechselrichter abgestimmt. Alle Werte sind sorgfältig geschätzt — die Feinabstimmung passiert beim Vor-Ort-Termin.</div>
+              <div style="margin-top:auto;display:flex"><div style="margin-left:auto;color:#A79D8C;font-size:9px">Seite 2/4</div></div>
+            </sc-if>
+            <sc-if value="{{ pdfP2 }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:20px;font-size:17px;font-weight:800">Was sich das rechnet</div>
+              <div style="display:flex;gap:12px;margin-top:16px;align-items:center">
+                <svg width="110" height="110" viewBox="0 0 160 160">
+                  <circle cx="80" cy="80" r="64" fill="none" stroke="#EDE8DF" stroke-width="17"></circle>
+                  <circle cx="80" cy="80" r="64" fill="none" stroke="#E8960C" stroke-width="17" stroke-linecap="round" stroke-dasharray="{{ donutDash }}" transform="rotate(-90 80 80)"></circle>
+                  <text x="80" y="80" text-anchor="middle" font-family="JetBrains Mono" font-size="26" font-weight="700" fill="#26221B">{{ autarkiePct }}</text>
+                  <text x="80" y="99" text-anchor="middle" font-family="Inter Tight" font-size="11" fill="#8A8071">Autarkie</text>
+                </svg>
+                <div style="flex:1;background:#26221B;border-radius:10px;padding:14px 16px;color:#F6F3EE">
+                  <div style="font-size:10px;color:#B9B2A4;font-weight:600">Amortisation</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;color:#E8960C">{{ amortLabel }}</div>
+                  <div style="font-size:10px;color:#B9B2A4;margin-top:6px">Ersparnis im 1. Jahr: <span style="color:#F6F3EE;font-family:'JetBrains Mono',monospace">{{ ersparnisLabel }}</span></div>
+                </div>
+              </div>
+              <svg viewBox="0 0 640 170" style="width:100%;margin-top:16px">
+                <line x1="0" y1="{{ investY }}" x2="640" y2="{{ investY }}" stroke="#C9C1B2" stroke-width="1.5" stroke-dasharray="6 5"></line>
+                <path d="{{ chartArea }}" fill="rgba(232,150,12,0.16)"></path>
+                <path d="{{ chartLine }}" fill="none" stroke="#E8960C" stroke-width="2.5"></path>
+                <line x1="{{ beX }}" y1="18" x2="{{ beX }}" y2="152" stroke="#26221B" stroke-width="1.5"></line>
+                <text x="{{ beTx }}" y="14" text-anchor="{{ beAnchor }}" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="#26221B">Break-even: {{ beLabel }}</text>
+              </svg>
+              <div style="color:#8A8071;font-size:9.5px;margin-top:4px">Ersparnis über 20 Jahre, kumuliert. Gestrichelte Linie: Anlagenpreis.</div>
+              <div style="margin-top:auto;display:flex"><div style="margin-left:auto;color:#A79D8C;font-size:9px">Seite 3/4</div></div>
+            </sc-if>
+            <sc-if value="{{ pdfP3 }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:20px;font-size:17px;font-weight:800">Komponenten</div>
+              <div style="margin-top:14px;display:flex;flex-direction:column">
+                <sc-for list="{{ pdfComps }}" as="pc" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:baseline;gap:10px;padding:9px 2px;border-bottom:1px solid #F1EDE6">
+                    <div style="font-family:'JetBrains Mono',monospace;font-weight:600;font-size:11px;width:34px">{{ pc.n }}×</div>
+                    <div><div style="font-weight:600;font-size:11px">{{ pc.name }}</div><div style="color:#8A8071;font-size:9.5px">{{ pc.sub }}</div></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="margin-top:16px;display:flex;align-items:baseline;background:#F6F3EE;border-radius:8px;padding:12px 14px">
+                <div style="font-weight:700;font-size:12px">Gesamtpreis inkl. Montage</div>
+                <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px">{{ pdfPreis }}</div>
+              </div>
+              <div style="margin-top:10px;color:#8A8071;font-size:9.5px;line-height:1.5">Sonnwerk Energietechnik GmbH · Feldstraße 9 · 4600 Wels · office@sonnwerk.at · +43 7242 12345 · Angebot gültig 30 Tage.</div>
+              <div style="margin-top:auto;display:flex"><div style="margin-left:auto;color:#A79D8C;font-size:9px">Seite 4/4</div></div>
+            </sc-if>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:14px;flex-shrink:0">
+          <sc-for list="{{ pdfTabs }}" as="pt" hint-placeholder-count="4">
+            <div onClick="{{ pt.onPick }}" style="padding:8px 13px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;background:{{ pt.bg }};color:{{ pt.fg }};border:1px solid {{ pt.br }}">{{ pt.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="width:324px;background:#F6F3EE;border-left:1px solid #D9D2C6;padding:20px 18px;display:flex;flex-direction:column;gap:10px">
+        <div style="font-weight:800;font-size:16px">Fertig — und jetzt?</div>
+        <div style="color:#8A8071;font-size:13px;line-height:1.5;margin-bottom:6px">Das Angebot ist 4 Seiten, ohne Interna — gemacht für den Küchentisch.</div>
+        <sc-if value="{{ checkWarn }}" hint-placeholder-val="{{ false }}">
+          <div style="color:#8F5A08;font-size:12px;line-height:1.45;background:#F3E3C3;border-radius:10px;padding:10px 12px">Ein String ist noch nicht geprüft — das PDF trägt den Hinweis „elektrisch ungeprüft". <a onClick="{{ goP3 }}">Zur Technik</a></div>
+        </sc-if>
+        <div onClick="{{ sendPdf }}" style="height:48px;border-radius:11px;background:#E8960C;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:#D4880A">PDF senden</div>
+        <div onClick="{{ openConfirm }}" style="height:48px;border-radius:11px;background:#26221B;color:#F6F3EE;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:#3A342A">Als Vorgang übernehmen</div>
+        <div onClick="{{ duplicate }}" style="height:48px;border-radius:11px;border:1.5px solid #C9C1B2;color:#57503F;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;background:#FCFBF9" style-hover="background:#F1EDE6">Projekt duplizieren</div>
+        <sc-if value="{{ toastShow }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:4px;padding:11px 13px;border-radius:10px;background:#DCEBD9;color:#3E6B44;font-weight:600;font-size:13px;animation:fadeUp .3s both">{{ toastText }}</div>
+        </sc-if>
+        <div style="margin-top:auto;border:1px solid #D9D2C6;border-radius:12px;padding:12px 14px;background:#FCFBF9">
+          <sc-for list="{{ sumRows }}" as="sr" hint-placeholder-count="4">
+            <div style="display:flex;align-items:baseline;padding:4px 0"><div style="color:#8A8071;font-size:12px">{{ sr.k }}</div><div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600">{{ sr.v }}</div></div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+
+  <!-- Bestätigungs-Dialog -->
+  <sc-if value="{{ confirmShow }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;background:rgba(23,21,15,.5);display:flex;align-items:center;justify-content:center;z-index:50">
+    <div style="width:430px;background:#FCFBF9;border-radius:16px;padding:22px 24px;box-shadow:0 24px 70px rgba(0,0,0,.4);animation:fadeUp .25s both">
+      <div style="font-weight:800;font-size:17px">Als Vorgang übernehmen?</div>
+      <div style="color:#8A8071;margin-top:4px;font-size:13px">Das entsteht in Solstep Betrieb:</div>
+      <div style="margin-top:14px;border:1px solid #E3DDD1;border-radius:12px;overflow:hidden">
+        <div style="padding:11px 14px;background:#F6F3EE;display:flex;align-items:center;gap:8px"><div style="font-weight:700;font-size:13px">Vorgang V-2026-0847</div><div style="margin-left:auto;padding:3px 9px;border-radius:999px;font-size:10px;font-weight:600;background:#EAE4D8;color:#57503F">Neu</div></div>
+        <sc-for list="{{ bedarfsliste }}" as="bl" hint-placeholder-count="4">
+          <div style="display:flex;align-items:baseline;gap:10px;padding:9px 14px;border-top:1px solid #F1EDE6">
+            <div style="font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px;width:34px">{{ bl.n }}×</div>
+            <div style="font-size:13px">{{ bl.name }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <div onClick="{{ closeConfirm }}" style="flex:1;height:46px;border-radius:11px;border:1.5px solid #C9C1B2;color:#57503F;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer">Abbrechen</div>
+        <div onClick="{{ doHandover }}" style="flex:1;height:46px;border-radius:11px;background:#E8960C;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:#D4880A">Übernehmen</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- Erfolgszustand -->
+  <sc-if value="{{ doneShow }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;background:rgba(246,243,238,.97);display:flex;align-items:center;justify-content:center;z-index:60">
+    <div style="text-align:center;animation:fadeUp .4s both">
+      <div style="width:64px;height:64px;border-radius:999px;background:#DCEBD9;color:#3E6B44;font-size:28px;display:flex;align-items:center;justify-content:center;margin:0 auto;animation:pop .4s both">✓</div>
+      <div style="font-size:22px;font-weight:800;margin-top:16px;letter-spacing:-.01em">Als Vorgang übernommen</div>
+      <div style="color:#8A8071;margin-top:6px">Bedarfsliste und Kundendaten sind vorbefüllt.</div>
+      <div style="margin-top:20px;display:inline-flex;align-items:center;gap:10px;border:1px solid #D9D2C6;border-radius:12px;padding:13px 18px;background:#FCFBF9">
+        <div style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;background:#DCEBD9;color:#3E6B44">übernommen</div>
+        <a style="font-weight:700">Vorgang V-2026-0847 öffnen →</a>
+      </div>
+      <div style="margin-top:22px"><div onClick="{{ backToList }}" style="display:inline-flex;height:46px;padding:0 20px;border-radius:11px;background:#26221B;color:#F6F3EE;font-weight:700;align-items:center;cursor:pointer">Zurück zur Projektliste</div></div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1194,&quot;height&quot;:834},&quot;listEmpty&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Zustände&quot;},&quot;fehlerDemo&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Zustände&quot;}}">
+class Component extends DCLogic {
+  constructor(p){
+    super(p);
+    this.PX=34; // px pro Meter
+    this.PRODS=[
+      {name:'Aiko Neostar 2S 445', wp:445, w:1.134, h:1.722, meta:'445 Wp · 1,72 × 1,13 m'},
+      {name:'Trina Vertex S+ 435', wp:435, w:1.134, h:1.762, meta:'435 Wp · 1,76 × 1,13 m'},
+      {name:'Meyer Burger Black 400', wp:400, w:1.041, h:1.767, meta:'400 Wp · 1,77 × 1,04 m'}
+    ];
+    this.WRS=[
+      {name:'Fronius Symo GEN24 8.0', kw:8, mppt:2, maxdc:1000, meta:'8 kW · 2 MPPT · max 1.000 V'},
+      {name:'SMA Tripower 10.0', kw:10, mppt:2, maxdc:1000, meta:'10 kW · 2 MPPT · max 1.000 V'},
+      {name:'Huawei SUN2000-8K', kw:8, mppt:2, maxdc:1080, meta:'8 kW · 2 MPPT · max 1.080 V'}
+    ];
+    this.SCOLORS=['#5B8DEF','#4FBF8B','#C77DBA'];
+    this.FCOLORS=['#E8960C','#7FB2D1','#B0A0D6'];
+    const seed=this.seedFace();
+    this.state={
+      screen:'list', q:'', addr:'', sugs:[], phase:1, tool:'roof',
+      faces:[seed], selFace:1, dlgFace:null, faceSeq:2,
+      obstacles:[{id:1,x:602,y:468,w:26,h:26}], obsSeq:2, obsMargin:0.3,
+      drawPts:[], cursor:null, measures:[], measStart:null, tempObs:null,
+      removed:{}, prodIdx:0, wrIdx:0, storage:10, assign:{}, activeString:0,
+      provider:0, zoom:1, introOn:false, panelOpen:true,
+      drone:false, calib:0, calibPts:[], calibLen:'12,5', calibText:'',
+      verbrauch:4500, chipsSel:{p2:false,p4:true,wp:false,ev:false},
+      strompreis:'0,32', verg:'0,08', preisOv:null, foerd:'2.400', land:0, mitSp:true,
+      undoStack:[], redoStack:[], saving:false, kpiFlash:false, recalc:false,
+      pdfPage:0, confirmOpen:false, done:false, marquee:null, marqueeStart:null,
+      fillKey:0, editedSince:false, listEmptyLocal:null
+    };
+    this._t=[];
+  }
+  seedFace(){return {id:1,name:'Fläche A',pts:[[320,440],[840,440],[840,640],[320,640]],type:'schraeg',tilt:35,az:'Süd',attika:0.8,orient:'portrait',mTop:0.3,mSide:0.3,mBot:0.35,mount:'sued',winkel:12,abst:0.75};}
+  later(fn,ms){const t=setTimeout(fn,ms);this._t.push(t);}
+  componentWillUnmount(){this._t.forEach(clearTimeout);}
+  // ---------- Helpers ----------
+  num(s,f){const v=parseFloat(String(s).replace(/\./g,'').replace(',','.'));return isNaN(v)?f:v;}
+  fmt(n,d){return n.toLocaleString('de-DE',{minimumFractionDigits:d||0,maximumFractionDigits:d||0});}
+  snap(){const s=this.state;return JSON.stringify({faces:s.faces,obstacles:s.obstacles,removed:s.removed,assign:s.assign,measures:s.measures});}
+  push(extra){
+    const snap=this.snap();
+    this.setState(s=>({undoStack:[...s.undoStack.slice(-30),snap],redoStack:[],saving:true,editedSince:true,...extra}));
+    this.later(()=>this.setState({saving:false}),900);
+    this.flashKpi();
+  }
+  flashKpi(){this.setState({kpiFlash:true,recalc:this.state.phase>1});this.later(()=>this.setState({kpiFlash:false,recalc:false}),1100);}
+  restore(json){const d=JSON.parse(json);this.setState({faces:d.faces,obstacles:d.obstacles,removed:d.removed,assign:d.assign,measures:d.measures});}
+  svgPt(e){
+    const svg=e.currentTarget.tagName==='svg'?e.currentTarget:e.currentTarget.ownerSVGElement;
+    try{const m=svg.getScreenCTM().inverse();const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(m);return [p.x,p.y];}catch(err){return null;}
+  }
+  inPoly(x,y,pts){let ins=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))ins=!ins;}return ins;}
+  // ---------- Module generation (derived) ----------
+  genModules(){
+    const s=this.state,PX=this.PX,prod=this.PRODS[s.prodIdx],out=[];
+    s.faces.forEach(f=>{
+      const xs=f.pts.map(p=>p[0]),ys=f.pts.map(p=>p[1]);
+      const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+      let mw,mh,pitchY,gap=3;
+      if(f.type==='schraeg'){
+        const fore=Math.cos(f.tilt*Math.PI/180);
+        mw=(f.orient==='portrait'?prod.w:prod.h)*PX;
+        mh=(f.orient==='portrait'?prod.h:prod.w)*PX*fore;
+        pitchY=mh+gap;
+      }else{
+        const tilt=f.winkel*Math.PI/180;
+        mw=prod.h*PX; mh=prod.w*PX*Math.cos(tilt);
+        pitchY=mh+f.abst*PX;
+      }
+      const mT=(f.type==='schraeg'?f.mTop:0.4)*PX, mS=(f.type==='schraeg'?f.mSide:0.4)*PX, mB=(f.type==='schraeg'?f.mBot:0.4)*PX;
+      let row=0;
+      for(let y=y0+mT;y+mh<=y1-mB+0.5;y+=pitchY,row++){
+        let col=0;
+        for(let x=x0+mS;x+mw<=x1-mS+0.5;x+=mw+gap,col++){
+          const corners=[[x,y],[x+mw,y],[x,y+mh],[x+mw,y+mh]];
+          if(!corners.every(c=>this.inPoly(c[0],c[1],f.pts)))continue;
+          const marg=s.obsMargin*PX;
+          const hit=s.obstacles.some(o=>x<o.x+o.w+marg&&x+mw>o.x-marg&&y<o.y+o.h+marg&&y+mh>o.y-marg);
+          if(hit)continue;
+          out.push({id:f.id+'-'+row+'-'+col,face:f.id,x,y,w:mw,h:mh,row,col,ow:f.type==='flach'&&f.mount==='ow'?(row%2):0});
+        }
+      }
+    });
+    return out;
+  }
+  stringOf(mod,mods){
+    const s=this.state;
+    if(s.assign[mod.id]!==undefined)return s.assign[mod.id];
+    if(this.props.fehlerDemo)return 0;
+    const act=mods.filter(m=>!s.removed[m.id]);
+    const idx=act.indexOf(mod);
+    return idx<Math.ceil(act.length/2)?0:1;
+  }
+  // ---------- Econ ----------
+  econ(mods){
+    const s=this.state,prod=this.PRODS[s.prodIdx];
+    const act=mods.filter(m=>!s.removed[m.id]);
+    const n=act.length, kwp=n*prod.wp/1000;
+    let yf=1000;
+    const f=s.faces[0];
+    if(f){if(f.type==='flach')yf=f.mount==='ow'?920:980; else yf={'Süd':1030,'SO':985,'SW':985,'Ost':880,'West':880}[f.az]||1000;}
+    const ertrag=Math.round(kwp*yf);
+    const verb=s.verbrauch;
+    const spk=s.mitSp?s.storage:0;
+    let evQuote=0.30+(spk>0?Math.min(0.38,spk*0.035):0);
+    const eigen=Math.min(verb,Math.round(ertrag*Math.min(evQuote*Math.max(0.55,verb/Math.max(ertrag,1)),0.95)));
+    const autarkie=verb>0?Math.min(0.99,eigen/verb):0;
+    const einsp=Math.max(0,ertrag-eigen);
+    const sp=this.num(s.strompreis,0.32), vg=this.num(s.verg,0.08);
+    const ersparnis=Math.round(eigen*sp+einsp*vg);
+    const richt=Math.round((kwp*1350+spk*750+1900)/100)*100;
+    const preis=s.preisOv!==null?this.num(s.preisOv,richt):richt;
+    const foerd=this.num(s.foerd,0);
+    const invest=Math.max(0,preis-foerd);
+    const amort=ersparnis>0?invest/ersparnis:99;
+    // 20a Kurve
+    let cum=0;const pts=[0];
+    for(let y=1;y<=20;y++){cum+=ersparnis*Math.pow(1.02,y-1)*Math.pow(0.995,y-1);pts.push(cum);}
+    return {n,kwp,ertrag,verb,eigen,einsp,autarkie,ersparnis,richt,preis,invest,amort,pts,spk};
+  }
+  // ---------- Actions ----------
+  openProject(demo){
+    this.setState({screen:'planner',phase:1,drone:false,calib:0,calibPts:[],introOn:true,
+      faces:demo?[this.seedFace()]:[],obstacles:demo?[{id:1,x:602,y:468,w:26,h:26}]:[],removed:{},assign:{},measures:[],drawPts:[],
+      undoStack:[],redoStack:[],dlgFace:null,panelOpen:true,tool:'roof',preisOv:null});
+    this.later(()=>this.setState({introOn:false}),80);
+  }
+  goPhase(n){
+    const s=this.state;
+    if(n===2&&s.phase!==2)this.setState({fillKey:Date.now()});
+    this.setState({phase:n,dlgFace:null});
+    if(s.editedSince&&n>1){this.setState({recalc:true,editedSince:false});this.later(()=>this.setState({recalc:false}),1600);}
+  }
+  closePoly(){
+    const s=this.state;if(s.drawPts.length<3){this.setState({drawPts:[]});return;}
+    const id=s.faceSeq;
+    const f={id,name:'Fläche '+String.fromCharCode(64+id),pts:s.drawPts,type:'schraeg',tilt:35,az:'Süd',attika:0.8,orient:'portrait',mTop:0.3,mSide:0.3,mBot:0.35,mount:'sued',winkel:12,abst:0.75};
+    this.push({faces:[...s.faces,f],faceSeq:id+1,drawPts:[],dlgFace:id,selFace:id});
+  }
+  onCanvasClick(e){
+    const s=this.state,pt=this.svgPt(e);if(!pt)return;
+    if(s.drone&&s.calib===1){
+      const cp=[...s.calibPts,{x:pt[0],y:pt[1]}];
+      this.setState({calibPts:cp,calib:cp.length>=2?2:1});return;
+    }
+    if(s.phase!==1)return;
+    if(s.tool==='roof'){
+      let [x,y]=pt;
+      const prev=s.drawPts[s.drawPts.length-1];
+      if(prev){if(Math.abs(x-prev[0])<14)x=prev[0];if(Math.abs(y-prev[1])<14)y=prev[1];}
+      const first=s.drawPts[0];
+      if(first&&Math.hypot(x-first[0],y-first[1])<16){this.closePoly();return;}
+      this.setState({drawPts:[...s.drawPts,[x,y]]});
+    }else if(s.tool==='measure'){
+      if(!s.measStart)this.setState({measStart:pt});
+      else{
+        const a=s.measStart,b=pt,len=Math.hypot(b[0]-a[0],b[1]-a[1])/this.PX;
+        this.push({measures:[...s.measures,{x1:a[0],y1:a[1],x2:b[0],y2:b[1],len}],measStart:null});
+      }
+    }else if(s.tool==='ridge'){
+      const f=s.faces.find(ff=>this.inPoly(pt[0],pt[1],ff.pts));
+      if(f)this.setState({dlgFace:f.id,selFace:f.id});
+    }
+  }
+  onCanvasDown(e){
+    const s=this.state,pt=this.svgPt(e);if(!pt)return;
+    if(s.phase===1&&s.tool==='obstacle')this.setState({marqueeStart:pt,marquee:{x:pt[0],y:pt[1],w:0,h:0},tempObs:true});
+    if(s.phase===2)this.setState({marqueeStart:pt,marquee:null});
+  }
+  onCanvasMove(e){
+    const s=this.state,pt=this.svgPt(e);if(!pt)return;
+    const up={cursor:pt};
+    if(s.marqueeStart){
+      const a=s.marqueeStart;
+      up.marquee={x:Math.min(a[0],pt[0]),y:Math.min(a[1],pt[1]),w:Math.abs(pt[0]-a[0]),h:Math.abs(pt[1]-a[1])};
+    }
+    this.setState(up);
+  }
+  onCanvasUp(e){
+    const s=this.state;if(!s.marqueeStart)return;
+    const mq=s.marquee;
+    if(s.phase===1&&s.tool==='obstacle'&&mq&&mq.w>8&&mq.h>8){
+      this.push({obstacles:[...s.obstacles,{id:s.obsSeq,x:mq.x,y:mq.y,w:mq.w,h:mq.h}],obsSeq:s.obsSeq+1});
+    }
+    if(s.phase===2&&mq&&mq.w>10&&mq.h>10){
+      const mods=this.genModules().filter(m=>m.x>=mq.x&&m.y>=mq.y&&m.x+m.w<=mq.x+mq.w&&m.y+m.h<=mq.y+mq.h);
+      if(mods.length){
+        const allOff=mods.every(m=>s.removed[m.id]);
+        const removed={...s.removed};
+        mods.forEach(m=>{if(allOff)delete removed[m.id];else removed[m.id]=true;});
+        this.push({removed});
+      }
+    }
+    this.setState({marqueeStart:null,marquee:null,tempObs:null});
+  }
+  tapModule(m){
+    const s=this.state;
+    if(s.phase===2){
+      const removed={...s.removed};
+      if(removed[m.id])delete removed[m.id];else removed[m.id]=true;
+      this.push({removed});
+    }else if(s.phase===3&&!s.removed[m.id]){
+      this.push({assign:{...s.assign,[m.id]:s.activeString}});
+    }
+  }
+  // ---------- renderVals ----------
+  renderVals(){
+    const s=this.state,PX=this.PX;
+    const mods=this.genModules();
+    const e=this.econ(mods);
+    const set=(o)=>()=>this.setState(o);
+    const listEmpty=s.listEmptyLocal!==null?s.listEmptyLocal:(this.props.listEmpty??false);
+    // Projektliste
+    const projData=[
+      {name:'Familie Brunner',addr:'Musterweg 12, 4600 Wels',kwp:'10,7',status:'Entwurf',stBg:'#EAE4D8',stFg:'#57503F',time:'vor 2 Std.',tx:120,ty:40,tw:150,th:80,mx:132,my:58,mw:120,mh:50},
+      {name:'Huber GmbH',addr:'Gewerbepark 3, 4020 Linz',kwp:'29,4',status:'Angebot erstellt',stBg:'#F3E3C3',stFg:'#8F5A08',time:'gestern',tx:90,ty:30,tw:200,th:90,mx:100,my:44,mw:180,mh:62},
+      {name:'Familie Steiner',addr:'Am Hang 7, 5020 Salzburg',kwp:'7,6',status:'V-2026-0803',stBg:'#DCEBD9',stFg:'#3E6B44',time:'vor 4 Tagen',tx:140,ty:44,tw:130,th:70,mx:150,my:60,mw:108,mh:40}
+    ];
+    const q=s.q.toLowerCase();
+    const projects=listEmpty?[]:projData.filter(p=>!q||p.name.toLowerCase().includes(q)||p.addr.toLowerCase().includes(q)).map(p=>({...p,onOpen:()=>this.openProject(true)}));
+    // Adresse
+    const sugsRaw=s.addr.trim().length>2?[
+      {main:s.addr.replace(/\d.*$/,'').trim()||'Musterweg',sub:'12, 4600 Wels, Österreich'},
+      {main:s.addr.replace(/\d.*$/,'').trim()||'Musterweg',sub:'14a, 86152 Augsburg, Deutschland'}
+    ]:[];
+    // Phasen
+    const labels=['Dach','Belegung','Technik','Wirtschaft','Ergebnis'];
+    const phases=labels.map((l,i)=>{
+      const n=i+1,active=s.phase===n,done=n<s.phase;
+      return {label:l,mark:done?'✓':String(n),onGo:()=>this.goPhase(n),
+        bg:active?'#EAE4D8':'transparent',fg:active?'#26221B':'#8A8071',
+        nBg:active?'#E8960C':(done?'#DCEBD9':'transparent'),nFg:active?'#fff':(done?'#3E6B44':'#8A8071'),nBr:active?'#E8960C':(done?'#A9C9A4':'#C9C1B2')};
+    });
+    // Anbieter
+    const provs=['Google','Apple','Bing','Basemap'];
+    const provDates=['Bild: 03/2026','Bild: 09/2025','Bild: 06/2025','Bild: 04/2026'];
+    const filters=['none','brightness(1.12) saturate(1.05)','sepia(0.25) brightness(1.05)','grayscale(0.5) brightness(1.15)'];
+    // Werkzeuge
+    const toolDefs=[['roof','▰','Dach'],['obstacle','▣','Hindernis'],['ridge','⌂','First'],['measure','⟷','Messen'],['delete','✕','Löschen']];
+    const tools=toolDefs.map(t=>({glyph:t[1],label:t[2],onPick:set({tool:t[0],drawPts:[],measStart:null}),
+      bg:s.tool===t[0]?'#E8960C':'transparent',fg:s.tool===t[0]?'#fff':'#B9B2A4'}));
+    // Faces render
+    const faces=s.faces.map((f,i)=>{
+      const col=this.FCOLORS[i%3];
+      return {ptsStr:f.pts.map(p=>p.join(',')).join(' '),
+        fill:s.phase===1?col+'22':'rgba(0,0,0,0.06)',stroke:s.selFace===f.id&&s.phase===1?col:col+'99',
+        onClick:(ev)=>{if(s.phase!==1)return;ev.stopPropagation();
+          if(s.tool==='delete'){this.push({faces:s.faces.filter(x=>x.id!==f.id)});}
+          else if(s.tool!=='roof'&&s.tool!=='obstacle'&&s.tool!=='measure'){this.setState({selFace:f.id,dlgFace:f.id});}
+          else if(s.tool==='roof'&&s.drawPts.length===0){this.setState({selFace:f.id,dlgFace:f.id});}
+        }};
+    });
+    // Obstacles
+    const marg=s.obsMargin*PX;
+    let obstacles=s.obstacles.map(o=>({...o,mx:o.x-marg,my:o.y-marg,mw:o.w+2*marg,mh:o.h+2*marg,
+      onClick:(ev)=>{if(s.phase===1&&s.tool==='delete'){ev.stopPropagation();this.push({obstacles:s.obstacles.filter(x=>x.id!==o.id)});}}}));
+    if(s.tempObs&&s.marquee&&s.phase===1)obstacles=[...obstacles,{...s.marquee,id:-1,mx:s.marquee.x,my:s.marquee.y,mw:s.marquee.w,mh:s.marquee.h,onClick:()=>{}}];
+    // Module render
+    const anim=s.fillKey&&(Date.now()-s.fillKey<2500);
+    const modules=mods.map((m,i)=>{
+      const off=!!s.removed[m.id];
+      let fill='#22304F',stroke='#47588A',sw=1,op=1;
+      if(m.ow)fill='#1C2A45';
+      if(off){fill='#2E2C28';stroke='#514D45';op=0.55;}
+      if(s.phase===3&&!off){
+        const sg=this.stringOf(m,mods);
+        const c=this.SCOLORS[sg%3];
+        fill=c+(sg===s.activeString?'E6':'66');stroke=c;sw=sg===s.activeString?1.8:1;
+      }
+      return {x:m.x,y:m.y,w:m.w,h:m.h,fill,stroke,sw,op,
+        anim:anim&&s.phase===2?('pop .3s both '+(i*0.02)+'s'):'none',
+        onTap:(ev)=>{ev.stopPropagation();this.tapModule(m);}};
+    });
+    // Messen
+    const measures=s.measures.map(ms=>{
+      const cx=(ms.x1+ms.x2)/2,cy=(ms.y1+ms.y2)/2,label=this.fmt(ms.len,2)+' m',bw=label.length*7.5+16;
+      return {...ms,label,bx:cx-bw/2,by:cy-24,bw,tx:cx,ty:cy-10};
+    });
+    // Zeichnen
+    const drawPts=s.drawPts.map((p,i)=>({x:p[0],y:p[1],r:i===0?7:5}));
+    const drawSegs=[];
+    for(let i=1;i<s.drawPts.length;i++){
+      const a=s.drawPts[i-1],b=s.drawPts[i];
+      const len=Math.hypot(b[0]-a[0],b[1]-a[1])/PX;
+      const text=this.fmt(len,1)+' m',bw=text.length*7.5+16;
+      const cx=(a[0]+b[0])/2,cy=(a[1]+b[1])/2;
+      drawSegs.push({text,x:cx,y:cy-8,bx:cx-bw/2,by:cy-22,bw});
+    }
+    if(s.drawPts.length&&s.cursor){
+      const a=s.drawPts[s.drawPts.length-1],b=s.cursor;
+      const len=Math.hypot(b[0]-a[0],b[1]-a[1])/PX;
+      const text=this.fmt(len,1)+' m',bw=text.length*7.5+16;
+      drawSegs.push({text,x:(a[0]+b[0])/2,y:(a[1]+b[1])/2-8,bx:(a[0]+b[0])/2-bw/2,by:(a[1]+b[1])/2-22,bw});
+    }
+    const lastPt=s.drawPts[s.drawPts.length-1],cur=s.cursor||[0,0];
+    // KPIs
+    const kc=s.kpiFlash?'#E8960C':'#F6F3EE';
+    const kpis=[
+      {val:this.fmt(e.n),label:'MODULE',color:kc},
+      {val:this.fmt(e.kwp,1),label:'kWp',color:kc},
+      {val:this.fmt(e.ertrag),label:'kWh/JAHR',color:kc},
+      {val:this.fmt(e.spk),label:'SPEICHER kWh',color:kc},
+      {val:this.fmt(e.richt)+' €',label:'RICHTPREIS',color:kc}
+    ];
+    // Panel P1
+    const dlg=s.faces.find(f=>f.id===s.dlgFace);
+    const upFace=(patch)=>{this.push({faces:s.faces.map(f=>f.id===s.dlgFace?{...f,...patch}:f)});};
+    const upSel=(patch)=>{this.push({faces:s.faces.map(f=>f.id===s.selFace?{...f,...patch}:f)});};
+    const faceList=s.faces.map((f,i)=>{
+      const xs=f.pts.map(p=>p[0]),ys=f.pts.map(p=>p[1]);
+      const x0=Math.min(...xs),y0=Math.min(...ys),sc=Math.min(24/((Math.max(...xs)-x0)||1),18/((Math.max(...ys)-y0)||1));
+      const mini=f.pts.map(p=>((p[0]-x0)*sc+1).toFixed(1)+','+((p[1]-y0)*sc+1).toFixed(1)).join(' ');
+      const area=Math.abs(f.pts.reduce((a,p,j)=>{const q=f.pts[(j+1)%f.pts.length];return a+p[0]*q[1]-q[0]*p[1];},0))/2/PX/PX;
+      return {name:f.name,color:this.FCOLORS[i%3],mini,
+        meta:(f.type==='schraeg'?('Schrägdach · '+f.tilt+'° · '+f.az):('Flachdach · '+(f.mount==='ow'?'Ost-West':'Süd')))+' · '+this.fmt(area,0)+' m²',
+        border:s.selFace===f.id?'#E8960C':'#D9D2C6',
+        onSel:()=>this.setState({selFace:f.id,dlgFace:f.id}),
+        onDel:(ev)=>{ev.stopPropagation();this.push({faces:s.faces.filter(x=>x.id!==f.id),dlgFace:null});}};
+    });
+    const azList=['Süd','SO','SW','Ost','West'];
+    const azRot={'Süd':0,'SO':-45,'SW':45,'Ost':-90,'West':90};
+    // Panel P2
+    const selF=s.faces.find(f=>f.id===s.selFace)||s.faces[0];
+    const prodList=this.PRODS.map((p,i)=>({name:p.name,meta:p.meta,checkOp:s.prodIdx===i?1:0,
+      border:s.prodIdx===i?'#E8960C':'#D9D2C6',onSel:()=>this.push({prodIdx:i})}));
+    const faceStats={};
+    mods.forEach(m=>{if(!s.removed[m.id]){faceStats[m.face]=(faceStats[m.face]||0)+1;}});
+    const statRows=s.faces.map((f,i)=>({name:f.name,color:this.FCOLORS[i%3],
+      meta:(faceStats[f.id]||0)+' Module · '+this.fmt((faceStats[f.id]||0)*this.PRODS[s.prodIdx].wp/1000,1)+' kWp'}));
+    const removedCount=mods.filter(m=>s.removed[m.id]).length;
+    // P3 Strings
+    const actMods=mods.filter(m=>!s.removed[m.id]);
+    const byString=[[],[],[]];
+    actMods.forEach(m=>{byString[this.stringOf(m,mods)%3].push(m);});
+    const wr=this.WRS[s.wrIdx];
+    const stringsArr=[0,1,2].filter(i=>i<2||byString[2].length).map(i=>{
+      const n=byString[i].length;
+      const uoc=Math.round(n*49.9),umpp=Math.round(n*41.6);
+      const maxN=Math.floor(wr.maxdc/49.9);
+      const bad=uoc>wr.maxdc;
+      return {name:'String '+(i+1),mppt:'MPPT '+(i<1?'A':'B'),color:this.SCOLORS[i],
+        meta:n+' Mod. · '+this.fmt(uoc)+' V · 13,8 A',
+        dot:n===0?'#C9C1B2':(bad?'#C4553C':'#5FA463'),bad,
+        msg:n+' Module: Leerlaufspannung '+this.fmt(uoc)+' V überschreitet Max-DC '+this.fmt(wr.maxdc)+' V des Wechselrichters — maximal '+maxN+' Module.',
+        border:s.activeString===i?this.SCOLORS[i]:'#D9D2C6',
+        onSel:()=>this.setState({activeString:i})};
+    });
+    const anyBad=stringsArr.some(x=>x.bad);
+    const wrList=this.WRS.map((w,i)=>({name:w.name,meta:w.meta,checkOp:s.wrIdx===i?1:0,
+      border:s.wrIdx===i?'#E8960C':'#D9D2C6',onSel:()=>this.push({wrIdx:i})}));
+    const spOpts=[0,5,10,15];
+    const spChips=spOpts.map(v=>({label:v===0?'ohne':v+' kWh',
+      br:s.storage===v?'#E8960C':'#D9D2C6',bg:s.storage===v?'#F9EDD8':'#FCFBF9',fg:s.storage===v?'#8F5A08':'#57503F',
+      onPick:()=>this.push({storage:v})}));
+    const dcac=wr.kw>0?e.kwp/wr.kw:1;
+    // P4
+    const chipDefs=[['p2','2 Personen',2300],['p4','4 Personen',4500],['wp','Wärmepumpe',3500],['ev','E-Auto',2500]];
+    const chips=chipDefs.map(c=>({label:c[1],
+      br:s.chipsSel[c[0]]?'#E8960C':'#D9D2C6',bg:s.chipsSel[c[0]]?'#F9EDD8':'#FCFBF9',fg:s.chipsSel[c[0]]?'#8F5A08':'#57503F',
+      onPick:()=>{
+        const sel={...s.chipsSel};
+        if(c[0]==='p2'||c[0]==='p4'){sel.p2=c[0]==='p2'?!sel.p2:false;sel.p4=c[0]==='p4'?!sel.p4:false;}
+        else sel[c[0]]=!sel[c[0]];
+        let v=(sel.p2?2300:0)+(sel.p4?4500:0)+(sel.wp?3500:0)+(sel.ev?2500:0);
+        if(v===0)v=s.verbrauch;
+        this.setState({chipsSel:sel,verbrauch:v});
+      }}));
+    const laenderDefs=[['Oberösterreich','2.400'],['Bayern','1.800'],['Ohne','0']];
+    const laender=laenderDefs.map((l,i)=>({label:l[0],
+      br:s.land===i?'#E8960C':'#D9D2C6',bg:s.land===i?'#F9EDD8':'#FCFBF9',fg:s.land===i?'#8F5A08':'#57503F',
+      onPick:()=>this.setState({land:i,foerd:l[1]})}));
+    const circ=2*Math.PI*64;
+    const donutDash=(e.autarkie*circ).toFixed(1)+' '+circ.toFixed(1);
+    const maxBar=Math.max(e.ertrag,e.verb,1);
+    const bars=[
+      {label:'Erzeugung',val:this.fmt(e.ertrag)+' kWh',pct:(e.ertrag/maxBar*100)+'%',color:'#E8960C'},
+      {label:'Eigenverbrauch',val:this.fmt(e.eigen)+' kWh',pct:(e.eigen/maxBar*100)+'%',color:'#C77E3B'},
+      {label:'Einspeisung',val:this.fmt(e.einsp)+' kWh',pct:(e.einsp/maxBar*100)+'%',color:'#DDD6C9'}
+    ];
+    // Chart
+    const maxV=Math.max(e.pts[20],e.invest*1.15,1);
+    const X=(y)=>y/20*640, Y=(v)=>152-(v/maxV)*128;
+    let line='M0,'+Y(0).toFixed(1);
+    e.pts.forEach((v,i)=>{if(i>0)line+=' L'+X(i).toFixed(1)+','+Y(v).toFixed(1);});
+    const area=line+' L640,152 L0,152 Z';
+    let beYear=20;
+    for(let i=1;i<=20;i++){if(e.pts[i]>=e.invest){const p=e.pts[i-1],q=e.pts[i];beYear=i-1+(e.invest-p)/((q-p)||1);break;}}
+    const beX=X(Math.min(beYear,20));
+    // PDF
+    const prod=this.PRODS[s.prodIdx];
+    const pdfRows=[
+      {k:'Module',v:e.n+' × '+prod.name},
+      {k:'Anlagenleistung',v:this.fmt(e.kwp,1)+' kWp'},
+      {k:'Wechselrichter',v:wr.name},
+      {k:'Speicher',v:e.spk>0?e.spk+' kWh':'—'},
+      {k:'Jahresertrag (geschätzt)',v:this.fmt(e.ertrag)+' kWh'},
+      {k:'Autarkiegrad',v:Math.round(e.autarkie*100)+' %'}
+    ];
+    const pdfComps=[
+      {n:e.n,name:prod.name,sub:'PV-Modul, '+prod.wp+' Wp'},
+      {n:1,name:wr.name,sub:'Wechselrichter'},
+      ...(e.spk>0?[{n:1,name:'BYD Battery-Box HVS '+e.spk+'.0',sub:'Batteriespeicher, '+e.spk+' kWh'}]:[]),
+      {n:1,name:'Unterkonstruktion + Montagematerial',sub:'je nach Dachtyp'},
+      {n:1,name:'AC-Installation & Inbetriebnahme',sub:'inkl. Zählertausch-Koordination'}
+    ];
+    const pdfTabNames=['Deckblatt','Anlage','Wirtschaftlichkeit','Komponenten'];
+    const pdfTabs=pdfTabNames.map((t,i)=>({label:t,onPick:set({pdfPage:i}),
+      bg:s.pdfPage===i?'#26221B':'#F6F3EE',fg:s.pdfPage===i?'#F6F3EE':'#57503F',br:s.pdfPage===i?'#26221B':'#D9D2C6'}));
+    const bedarfsliste=[
+      {n:e.n,name:prod.name},
+      {n:1,name:wr.name},
+      ...(e.spk>0?[{n:1,name:'BYD Battery-Box HVS '+e.spk+'.0'}]:[]),
+      {n:1,name:'Montagematerial (Bedarfsliste)'}
+    ];
+    const sumRows=[
+      {k:'Anlage',v:this.fmt(e.kwp,1)+' kWp · '+e.n+' Module'},
+      {k:'Speicher',v:e.spk>0?e.spk+' kWh':'ohne'},
+      {k:'Amortisation',v:this.fmt(e.amort,1)+' Jahre'},
+      {k:'Preis',v:this.fmt(e.preis)+' €'}
+    ];
+    const addrLabel=s.drone?'Drohnenfoto · unbenannt':'Musterweg 12, 4600 Wels';
+    return {
+      // screens
+      isList:s.screen==='list',isNew:s.screen==='new',isPlanner:s.screen==='planner',
+      qVal:s.q,onQ:(ev)=>this.setState({q:ev.target.value}),
+      onNew:()=>this.setState({screen:'new',addr:''}),
+      showEmpty:projects.length===0,projects,
+      addrVal:s.addr,onAddr:(ev)=>this.setState({addr:ev.target.value}),
+      hasSugs:sugsRaw.length>0,
+      sugs:sugsRaw.map(x=>({...x,onPick:()=>{this.openProject(false);}})),
+      onDrone:()=>{this.openProject(false);this.setState({drone:true,calib:1,calibPts:[]});},
+      onBack:()=>this.setState({screen:'list',done:false}),
+      // topbar
+      projLabel:s.drone?'Neues Projekt':'Familie Brunner',addrLabel,
+      undoDo:()=>{if(!s.undoStack.length)return;const last=s.undoStack[s.undoStack.length-1];this.setState({undoStack:s.undoStack.slice(0,-1),redoStack:[...s.redoStack,this.snap()]});this.restore(last);},
+      redoDo:()=>{if(!s.redoStack.length)return;const last=s.redoStack[s.redoStack.length-1];this.setState({redoStack:s.redoStack.slice(0,-1),undoStack:[...s.undoStack,this.snap()]});this.restore(last);},
+      undoOp:s.undoStack.length?1:0.35,redoOp:s.redoStack.length?1:0.35,
+      providers:provs.map((p,i)=>({label:p,onPick:set({provider:i}),bg:s.provider===i?'#FCFBF9':'transparent',fg:s.provider===i?'#26221B':'#8A8071'})),
+      provDate:s.drone?'':provDates[s.provider],
+      zoomInFn:()=>this.setState({zoom:Math.min(2.4,s.zoom*1.25)}),
+      zoomOutFn:()=>this.setState({zoom:Math.max(0.6,s.zoom/1.25)}),
+      zoomLabel:Math.round(s.zoom*100)+' %',
+      saveDot:s.saving?'#E8960C':'#5FA463',saveLabel:s.saving?'speichert…':'gespeichert',
+      saveMl:s.phase>3?'auto':'0',
+      // stepper
+      phases,recalcShow:s.recalc,
+      showCanvas:s.phase<=3,isP1:s.phase===1,isP2:s.phase===2,isP3:s.phase===3,isP4:s.phase===4,isP5:s.phase===5,
+      // canvas
+      viewBox:(600-600/s.zoom)+' '+(400-400/s.zoom)+' '+(1200/s.zoom)+' '+(800/s.zoom),
+      introT:s.introOn?'scale(3.6)':'scale(1)',introTr:s.introOn?'none':'transform 1.2s cubic-bezier(.25,.7,.3,1)',
+      mapFilter:s.drone?'brightness(1.05)':filters[s.provider],
+      watermark:s.drone?'DROHNENFOTO-PLATZHALTER':'LUFTBILD-PLATZHALTER · '+provs[s.provider].toUpperCase()+' (MOCK)',
+      isDrone:s.drone,
+      onCClick:(ev)=>this.onCanvasClick(ev),onCDbl:()=>this.closePoly(),
+      onCMove:(ev)=>this.onCanvasMove(ev),onCDown:(ev)=>this.onCanvasDown(ev),onCUp:(ev)=>this.onCanvasUp(ev),
+      canvasCursor:s.phase===1&&(s.tool==='roof'||s.tool==='obstacle'||s.tool==='measure')?'crosshair':'default',
+      faces,obstacles,modules,measures,tools,
+      isDrawing:s.drawPts.length>0,
+      drawPtsStr:s.drawPts.map(p=>p.join(',')).join(' '),
+      drawPts,drawSegs,
+      curX1:lastPt?lastPt[0]:0,curY1:lastPt?lastPt[1]:0,curX2:cur[0],curY2:cur[1],
+      showGuide:s.phase===1&&s.faces.length===0&&s.drawPts.length===0&&s.calib===0,
+      autoDrawFn:()=>{this.push({faces:[this.seedFace()],selFace:1,dlgFace:1});},
+      calibPts:s.calibPts,calibLineShow:s.calibPts.length===2,
+      clX1:s.calibPts[0]?s.calibPts[0].x:0,clY1:s.calibPts[0]?s.calibPts[0].y:0,
+      clX2:s.calibPts[1]?s.calibPts[1].x:0,clY2:s.calibPts[1]?s.calibPts[1].y:0,
+      calibStep1:s.calib===1,calibStep2:s.calib===2,
+      calibLenVal:s.calibLen,onCalibLen:(ev)=>this.setState({calibLen:ev.target.value}),
+      calibDone:()=>{
+        const d=s.calibPts.length===2?Math.hypot(s.calibPts[1].x-s.calibPts[0].x,s.calibPts[1].y-s.calibPts[0].y):1;
+        const cm=this.num(s.calibLen,12.5)*100/d;
+        this.setState({calib:3,calibText:'kalibriert: 1 px = '+this.fmt(cm,1)+' cm'});
+      },
+      calibBadge:s.calib===3,calibBadgeText:s.calibText,
+      marqueeShow:!!s.marquee&&!s.tempObs,mqX:s.marquee?s.marquee.x:0,mqY:s.marquee?s.marquee.y:0,mqW:s.marquee?s.marquee.w:0,mqH:s.marquee?s.marquee.h:0,
+      kpis,
+      panelShow:s.panelOpen&&s.phase<=3,panelClosed:!s.panelOpen&&s.phase<=3,
+      togglePanel:()=>this.setState({panelOpen:!s.panelOpen}),
+      panelTitle:['Dachflächen','Belegung','Technik'][Math.min(s.phase,3)-1],
+      // P1 panel
+      p1Empty:s.faces.length===0&&s.calib!==1&&s.calib!==2,faceList,
+      dlgOpen:!!dlg,dlgName:dlg?dlg.name:'',
+      dlgIsSchraeg:dlg?dlg.type==='schraeg':true,dlgIsFlach:dlg?dlg.type==='flach':false,
+      setSchraeg:()=>upFace({type:'schraeg'}),setFlach:()=>upFace({type:'flach'}),
+      schraegBg:dlg&&dlg.type==='schraeg'?'#FCFBF9':'transparent',schraegFg:dlg&&dlg.type==='schraeg'?'#26221B':'#8A8071',
+      flachBg:dlg&&dlg.type==='flach'?'#FCFBF9':'transparent',flachFg:dlg&&dlg.type==='flach'?'#26221B':'#8A8071',
+      tiltVal:dlg?dlg.tilt:35,tiltLabel:(dlg?dlg.tilt:35)+'°',
+      onTilt:(ev)=>upFace({tilt:+ev.target.value}),
+      tiltPresets:[22,30,35,45].map(v=>({label:v+'°',onPick:()=>upFace({tilt:v}),
+        br:dlg&&dlg.tilt===v?'#E8960C':'#D9D2C6',bg:dlg&&dlg.tilt===v?'#F9EDD8':'#FCFBF9',fg:dlg&&dlg.tilt===v?'#8F5A08':'#57503F'})),
+      needleRot:dlg?(azRot[dlg.az]||0):0,
+      azChips:azList.map(a=>({label:a,onPick:()=>upFace({az:a}),
+        br:dlg&&dlg.az===a?'#E8960C':'#D9D2C6',bg:dlg&&dlg.az===a?'#F9EDD8':'#FCFBF9',fg:dlg&&dlg.az===a?'#8F5A08':'#57503F'})),
+      attikaVal:dlg?dlg.attika:0.8,attikaLabel:this.fmt(dlg?dlg.attika:0.8,1)+' m',
+      onAttika:(ev)=>upFace({attika:+ev.target.value}),
+      dlgClose:()=>this.setState({dlgFace:null}),
+      hasObstacles:s.obstacles.length>0,obsCount:s.obstacles.length,
+      obsMarginVal:s.obsMargin,obsMarginLabel:this.fmt(s.obsMargin,2)+' m',
+      onObsMargin:(ev)=>this.push({obsMargin:+ev.target.value}),
+      // P2 panel
+      noFaces:s.faces.length===0,hasFaces:s.faces.length>0,goP1:()=>this.goPhase(1),goP3:()=>this.goPhase(3),
+      prodList,selFaceName:selF?selF.name:'',
+      selIsSchraeg:selF?selF.type==='schraeg':true,selIsFlach:selF?selF.type==='flach':false,
+      setPortrait:()=>upSel({orient:'portrait'}),setLandscape:()=>upSel({orient:'landscape'}),
+      portBg:selF&&selF.orient==='portrait'?'#FCFBF9':'transparent',portFg:selF&&selF.orient==='portrait'?'#26221B':'#8A8071',
+      landBg:selF&&selF.orient==='landscape'?'#FCFBF9':'transparent',landFg:selF&&selF.orient==='landscape'?'#26221B':'#8A8071',
+      mTopVal:selF?selF.mTop:0.3,mTopLabel:this.fmt(selF?selF.mTop:0.3,2)+' m',onMTop:(ev)=>upSel({mTop:+ev.target.value}),
+      mSideVal:selF?selF.mSide:0.3,mSideLabel:this.fmt(selF?selF.mSide:0.3,2)+' m',onMSide:(ev)=>upSel({mSide:+ev.target.value}),
+      mBotVal:selF?selF.mBot:0.35,mBotLabel:this.fmt(selF?selF.mBot:0.35,2)+' m',onMBot:(ev)=>upSel({mBot:+ev.target.value}),
+      setSued:()=>upSel({mount:'sued'}),setOW:()=>upSel({mount:'ow'}),
+      suedBg:selF&&selF.mount==='sued'?'#FCFBF9':'transparent',suedFg:selF&&selF.mount==='sued'?'#26221B':'#8A8071',
+      owBg:selF&&selF.mount==='ow'?'#FCFBF9':'transparent',owFg:selF&&selF.mount==='ow'?'#26221B':'#8A8071',
+      winkelVal:selF?selF.winkel:12,winkelLabel:(selF?selF.winkel:12)+'°',onWinkel:(ev)=>{const w=+ev.target.value;upSel({winkel:w,abst:Math.round(w*6.3)/100});},
+      abstVal:selF?selF.abst:0.75,abstLabel:this.fmt(selF?selF.abst:0.75,2)+' m',onAbst:(ev)=>upSel({abst:+ev.target.value}),
+      abstHint:'Vorschlag aus '+(selF?selF.winkel:12)+'° Aufständerung — manuell übersteuerbar.',
+      statRows,statTotal:e.n+' Module · '+this.fmt(e.kwp,1)+' kWp',
+      hasRemoved:removedCount>0,removedLabel:removedCount+' Module deaktiviert',
+      restoreAll:()=>this.push({removed:{}}),
+      // P3 panel
+      checkLabel:anyBad?'1 String prüfen':'Elektrisch geprüft ✓',
+      checkBg:anyBad?'#F7E6E1':'#DCEBD9',checkFg:anyBad?'#8C3B28':'#3E6B44',checkBr:anyBad?'#E7C4BA':'#A9C9A4',
+      checkWarn:anyBad,
+      wrList,spChips,strings:stringsArr,
+      dcacLabel:this.fmt(dcac,2),dcacPos:Math.min(97,Math.max(1,(dcac-0.6)/1.4*100))+'%',
+      // Footer
+      nextPhase:()=>this.goPhase(Math.min(5,s.phase+1)),
+      nextLabel:['Zur Belegung','Zur Technik','Zur Wirtschaftlichkeit','Zum Ergebnis',''][s.phase-1]||'',
+      // P4
+      verbVal:s.verbrauch,verbLabel:this.fmt(s.verbrauch)+' kWh',
+      onVerb:(ev)=>this.setState({verbrauch:+ev.target.value,chipsSel:{p2:false,p4:false,wp:false,ev:false}}),
+      chips,laender,
+      preisStromVal:s.strompreis,onPreisStrom:(ev)=>this.setState({strompreis:ev.target.value}),
+      vergVal:s.verg,onVerg:(ev)=>this.setState({verg:ev.target.value}),
+      anlPreisVal:s.preisOv!==null?s.preisOv:this.fmt(e.richt),onAnlPreis:(ev)=>this.setState({preisOv:ev.target.value}),
+      foerdVal:s.foerd,onFoerd:(ev)=>this.setState({foerd:ev.target.value}),
+      setOhneSp:set({mitSp:false}),setMitSp:set({mitSp:true}),
+      ohneBg:!s.mitSp?'#FCFBF9':'transparent',ohneFg:!s.mitSp?'#26221B':'#8A8071',
+      mitBg:s.mitSp?'#FCFBF9':'transparent',mitFg:s.mitSp?'#26221B':'#8A8071',
+      spKurz:s.storage+' kWh',
+      donutDash,autarkiePct:Math.round(e.autarkie*100)+'%',bars,
+      amortLabel:this.fmt(Math.min(e.amort,99),1)+' Jahre',ersparnisLabel:this.fmt(e.ersparnis)+' €',
+      chartArea:area,chartLine:line,
+      investY:Y(e.invest).toFixed(1),investLblY:(Y(e.invest)-6).toFixed(1),investLabel:this.fmt(e.invest)+' €',
+      beX:beX.toFixed(1),beTx:(beX>500?beX-8:beX+8).toFixed(1),beAnchor:beX>500?'end':'start',
+      beLabel:'Jahr '+this.fmt(Math.min(beYear,20),1),
+      // P5
+      pdfPage:s.pdfPage,pdfP0:s.pdfPage===0,pdfP1:s.pdfPage===1,pdfP2:s.pdfPage===2,pdfP3:s.pdfPage===3,
+      pdfTabs,pdfRows,pdfComps,pdfDate:'Angebot · 06.08.2026',
+      pdfKwp:this.fmt(e.kwp,1)+' kWp',pdfErtrag:this.fmt(e.ertrag)+' kWh',pdfAmort:this.fmt(Math.min(e.amort,99),1)+' J.',
+      pdfPreis:this.fmt(e.preis)+' €',
+      pdfCheckLabel:anyBad?'elektrisch ungeprüft':'Elektrisch geprüft ✓',
+      pdfCheckBg:anyBad?'#F7E6E1':'#DCEBD9',pdfCheckFg:anyBad?'#8C3B28':'#3E6B44',
+      sendPdf:()=>{this.setState({toast:'PDF an kunde@beispiel.at gesendet'});this.later(()=>this.setState({toast:null}),2600);},
+      duplicate:()=>{this.setState({toast:'Kopie erstellt: „Familie Brunner (Variante)"'});this.later(()=>this.setState({toast:null}),2600);},
+      toastShow:!!s.toast,toastText:s.toast||'',
+      openConfirm:set({confirmOpen:true}),closeConfirm:set({confirmOpen:false}),
+      confirmShow:s.confirmOpen,bedarfsliste,sumRows,
+      doHandover:()=>this.setState({confirmOpen:false,done:true}),
+      doneShow:s.done,backToList:()=>this.setState({screen:'list',done:false})
+    };
+  }
+}
+</script>
+</body>
+</html>

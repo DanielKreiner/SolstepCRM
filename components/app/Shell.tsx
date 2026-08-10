@@ -137,7 +137,14 @@ export async function Shell({
           dann ins Leere scrollen.
         */}
         <main className="relative flex-1 overflow-auto rounded-panel bg-panel px-4 pt-[26px] pb-8 shadow-soft sm:px-[26px]">
-          <div className="mx-auto w-full max-w-[var(--content-max)]">
+          {/*
+            h-full, damit ein Screen die verfuegbare Hoehe nutzen kann statt
+            sie zu schaetzen. Der Planer braucht das: seine Karte fuellt den
+            Rest der Seite. Auf normale Screens wirkt es sich nicht aus —
+            der Container traegt keine eigene Flaeche, und laengere Inhalte
+            scrollen weiter ueber main.
+          */}
+          <div className="mx-auto h-full w-full max-w-[var(--content-max)]">
             {children}
           </div>
         </main>

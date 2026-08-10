@@ -48,10 +48,10 @@ select c.id, r.role, a.area,
     when r.role = 'gf' then 'write'::perm_level
 
     when r.role = 'buero' and a.area in
-      ('pipelines','angebote','crm','rechnungen','zeiterfassung') then 'write'
+      ('pipelines','angebote','crm','rechnungen','zeiterfassung','planer') then 'write'
     when r.role = 'buero' and a.area in ('lager','mitarbeiter','berichte') then 'read'
 
-    when r.role = 'bauleitung' and a.area in ('pipelines','zeiterfassung') then 'write'
+    when r.role = 'bauleitung' and a.area in ('pipelines','zeiterfassung','planer') then 'write'
     -- Leserecht auf mitarbeiter: die Bauleitung muss die Zeiten und
     -- Abwesenheiten ihrer Leute sehen. Ohne diesen Eintrag sieht sie nach
     -- Migration 0008 nur noch die eigenen.
@@ -68,7 +68,10 @@ select c.id, r.role, a.area,
 from company c
 cross join (select unnest(enum_range(null::user_role)) as role) r
 cross join (values ('pipelines'),('angebote'),('crm'),('lager'),('rechnungen'),
-                   ('zeiterfassung'),('mitarbeiter'),('berichte'),('einstellungen')) a(area)
+                   ('zeiterfassung'),('mitarbeiter'),('berichte'),('einstellungen'),
+                   -- Eigener Bereich: 'pipelines' liest auch der Monteur,
+                   -- planen darf er nicht (Briefing 10).
+                   ('planer')) a(area)
 where c.id in ('11111111-1111-4111-8111-111111111111',
                '22222222-2222-4222-8222-222222222222');
 
