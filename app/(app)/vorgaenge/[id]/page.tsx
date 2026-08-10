@@ -176,18 +176,40 @@ export default async function VorgangPage({
           .eq("vorgang_id", id)
       : { count: 0 };
 
+  /*
+   * Hängt eine Planung an diesem Vorgang, gehört der Weg dorthin in den
+   * Kopf. Der Verweis läuft in beide Richtungen (Briefing 8.2) — wer im
+   * Vorgang sitzt und wissen will, wie die Anlage aufs Dach kommt, soll
+   * nicht in der Projektliste suchen müssen.
+   */
+  const { data: planung } = await supabase
+    .from("planer_projekt")
+    .select("id, name")
+    .eq("vorgang_id", id)
+    .maybeSingle();
+
   return (
     <>
       <PageHeader
         title={kopf.number}
         subtitle={`${kopf.kundeName}${kopf.ort ? ` · ${kopf.ort}` : ""}`}
         actions={
-          <Link
-            href="/vorgaenge"
-            className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
-          >
-            Zum Board
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {planung ? (
+              <Link
+                href={`/planer/${planung.id as string}`}
+                className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
+              >
+                Planung öffnen
+              </Link>
+            ) : null}
+            <Link
+              href="/vorgaenge"
+              className="rounded-pill border border-line bg-surface px-5 py-[13px] text-sm font-medium text-ink transition-colors hover:bg-sunk"
+            >
+              Zum Board
+            </Link>
+          </div>
         }
       />
 

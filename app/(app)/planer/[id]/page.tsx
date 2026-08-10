@@ -118,6 +118,7 @@ export default async function PlanerProjektPage({
     { data: geraeteSpeicher },
     { data: vorgabeZeile },
     { data: foerderZeilen },
+    { data: kundenZeilen },
   ] = await Promise.all([
     supabase.from("planer_modul").select("*").order("hersteller").order("bezeichnung"),
     supabase.from("planer_wechselrichter").select("*").order("hersteller").order("bezeichnung"),
@@ -127,6 +128,19 @@ export default async function PlanerProjektPage({
       .select("verlust_prozent, steigerung, strompreis, verguetung, preisstaffel, speicher_eur_pro_kwh")
       .maybeSingle(),
     supabase.from("planer_foerderung").select("region, betrag, hinweis").order("region"),
+    /*
+     * Kunden für die Übergabe. Nur Name und Ort, und nur aktive: der
+     * Dialog sucht darin, er zeigt sie nicht alle an. Eine Volltextsuche
+     * über eine Serveraktion wäre genauer, aber ein Betrieb mit ein paar
+     * hundert Kunden lädt die Liste schneller, als eine Anfrage
+     * unterwegs ist.
+     */
+    supabase
+      .from("customer")
+      .select("id, name, city")
+      .is("deleted_at", null)
+      .order("name")
+      .limit(500),
   ]);
 
   /*
@@ -179,6 +193,9 @@ export default async function PlanerProjektPage({
       }}
       vorgabe={vorgabe}
       regionen={regionen}
+      kunden={((kundenZeilen ?? []) as Array<{ id: string; name: string; city: string | null }>).map(
+        (k) => ({ id: k.id, name: k.name, ort: k.city }),
+      )}
     />
   );
 }

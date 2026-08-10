@@ -7,7 +7,7 @@ import {
   type String as PvString,
   type Wechselrichter as WrElektrik,
 } from "@/lib/planer/elektrik";
-import { anzahlModule, aktiveZellen, type Modulgruppe } from "@/lib/planer/module";
+import { anzahlModule, aktiveZellen, type Modulgruppe, nachfuehren } from "@/lib/planer/module";
 import { modulSchluessel, naechsteId, type Plan, strangFarbe } from "@/lib/planer/plan";
 
 /*
@@ -116,6 +116,39 @@ export function TechnikPanel({
   const setzeTechnik = (teil: Partial<Plan["technik"]>) =>
     onPlan({ ...plan, technik: { ...plan.technik, ...teil } }, true);
 
+  /**
+   * Modul wechseln — und die belegten Gruppen mitziehen.
+   *
+   * Ohne das gäbe es zwei Wahrheiten über dieselbe Anlage: die Prüfung
+   * rechnet mit dem gewählten Stammsatz, die Belegung behält Maße,
+   * Leistung und Namen des alten Moduls. Die kWp-Anzeige stimmte dann
+   * nicht mehr, und in der Bedarfsliste stünde das falsche Modul.
+   *
+   * Andere Maße heissen andere Belegung: `nachfuehren` prüft jede Zelle
+   * neu gegen Fläche und Hindernisse. Module, die mit dem grösseren Typ
+   * nicht mehr passen, fallen dabei heraus — sichtbar, statt über den
+   * Rand zu ragen.
+   */
+  const setzeModul = (id: string | null) => {
+    const gewaehlt = module.find((m) => m.id === id);
+    if (!gewaehlt) {
+      setzeTechnik({ modul: null });
+      return;
+    }
+    const typ = {
+      breite: Number(gewaehlt.breite),
+      hoehe: Number(gewaehlt.hoehe),
+      wp: Number(gewaehlt.wp),
+      bezeichnung: `${gewaehlt.hersteller} ${gewaehlt.bezeichnung}`,
+    };
+    const gruppen = plan.gruppen.map((g) => {
+      const flaeche = plan.flaechen.find((f) => f.id === g.flaeche);
+      const mitTyp = { ...g, typ };
+      return flaeche ? nachfuehren(mitTyp, flaeche) : mitTyp;
+    });
+    onPlan({ ...plan, gruppen, technik: { ...plan.technik, modul: id } }, true);
+  };
+
   return (
     <div className="flex flex-col gap-3">
       {/* ── Befunde ──────────────────────────────────────────────── */}
@@ -179,7 +212,7 @@ export function TechnikPanel({
             aria-label="Modul"
             value={plan.technik.modul ?? ""}
             disabled={!schreibrecht}
-            onChange={(e) => setzeTechnik({ modul: e.target.value || null })}
+            onChange={(e) => setzeModul(e.target.value || null)}
             className={FELD}
           >
             <option value="">— wählen —</option>

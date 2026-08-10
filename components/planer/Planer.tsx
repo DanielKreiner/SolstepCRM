@@ -12,6 +12,7 @@ import {
 } from "./TechnikPanel";
 import { FotoLeiste } from "./FotoLeiste";
 import { Ergebnis } from "./Ergebnis";
+import { type KundeKurz, Uebergabe } from "./Uebergabe";
 import { useErtrag } from "./useErtrag";
 import {
   type FoerderRegion,
@@ -72,7 +73,7 @@ const PHASEN = [
   { nr: 2 as const, mark: "2", label: "Belegung", fertig: true },
   { nr: 3 as const, mark: "3", label: "Technik", fertig: true },
   { nr: 4 as const, mark: "4", label: "Ertrag", fertig: true },
-  { nr: 5 as const, mark: "5", label: "Übergabe", fertig: false },
+  { nr: 5 as const, mark: "5", label: "Übergabe", fertig: true },
 ];
 
 const WERKZEUGE: Array<{ id: Werkzeug; glyph: string; label: string; titel: string }> = [
@@ -92,6 +93,7 @@ export function Planer({
   geraete,
   vorgabe,
   regionen,
+  kunden,
 }: {
   projekt: PlanerProjekt;
   staende: AnbieterStand[];
@@ -99,6 +101,7 @@ export function Planer({
   geraete: { module: GeraetModul[]; wechselrichter: GeraetWr[]; speicher: GeraetSpeicher[] };
   vorgabe: WirtschaftVorgabe;
   regionen: FoerderRegion[];
+  kunden: KundeKurz[];
 }) {
   const [anbieter, setAnbieter] = useState<AnbieterId>(projekt.anbieter);
   const [zoom, setZoom] = useState(projekt.zoom);
@@ -111,7 +114,7 @@ export function Planer({
    * rechnet. In Phase 4 tritt die Karte ganz zurück — dort wird nicht
    * mehr geplant, sondern gezeigt, und der Kunde schaut mit.
    */
-  const [phase, setPhase] = useState<1 | 3 | 4>(1);
+  const [phase, setPhase] = useState<1 | 3 | 4 | 5>(1);
   const [fang, setFang] = useState<FangOptionen>(FANG_STANDARD);
   const [gemerkt, setGemerkt] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
   const [mitte, setMitte] = useState<Meter>({ x: 0, y: 0 });
@@ -175,6 +178,28 @@ export function Planer({
     },
     [projekt.id],
   );
+
+  /**
+   * Sofort sichern und warten, bis es durch ist.
+   *
+   * Der Autosave läuft gedrosselt — beim Planen genau richtig, bei der
+   * Übergabe fatal: Der Dialog liest den Plan aus der Datenbank, und
+   * wer eben noch das Modul gewählt hat, bekäme sonst eine
+   * Bedarfsliste aus dem Stand von vor anderthalb Sekunden. Genau das
+   * ist im Test passiert.
+   */
+  const jetztSichern = useCallback(async () => {
+    if (planUhr.current) {
+      clearTimeout(planUhr.current);
+      planUhr.current = null;
+    }
+    const roh = JSON.stringify(plan);
+    if (roh === letzterPlan.current) return;
+    setGemerkt("speichert");
+    const { ok } = await planSpeichern({ id: projekt.id, plan });
+    letzterPlan.current = roh;
+    setGemerkt(ok ? "ruhe" : "fehler");
+  }, [plan, projekt.id]);
 
   useEffect(
     () => () => {
@@ -422,14 +447,20 @@ export function Planer({
              */
             const anklickbar = ph.fertig;
             const aktivePhase =
-              ph.nr === 3 ? phase === 3 : ph.nr === 4 ? phase === 4 : ph.nr <= 2 && phase === 1;
+              ph.nr === 3
+                ? phase === 3
+                : ph.nr === 4
+                  ? phase === 4
+                  : ph.nr === 5
+                    ? phase === 5
+                    : ph.nr <= 2 && phase === 1;
             return (
             <button
               key={ph.nr}
               type="button"
               disabled={!anklickbar}
               aria-pressed={aktivePhase}
-              onClick={() => setPhase(ph.nr === 3 ? 3 : ph.nr === 4 ? 4 : 1)}
+              onClick={() => setPhase(ph.nr === 3 ? 3 : ph.nr === 4 ? 4 : ph.nr === 5 ? 5 : 1)}
               className={[
                 "flex w-16 flex-col items-center gap-1 rounded-[11px] pb-[7px] pt-[9px]",
                 aktivePhase ? "bg-accent-sunk" : "",
@@ -457,8 +488,53 @@ export function Planer({
           })}
         </nav>
 
-        {/* ── Ergebnisfläche (Phase 4) ─────────────────────────────── */}
-        {phase === 4 ? (
+        {/* ── Übergabe (Phase 5) ───────────────────────────────────── */}
+        {phase === 5 ? (
+          <div className="min-w-0 flex-1 overflow-auto bg-app px-5 py-5">
+            <h2 className="text-[18px] font-extrabold tracking-[-0.01em]">Übergabe</h2>
+            <p className="mt-1 max-w-xl text-[13px] leading-[1.55] text-muted">
+              Aus der Planung wird ein Vorgang: mit Kunde, Adresse, Anlagengrösse und einer
+              Bedarfsliste, die schon steht. Was der Planer nicht sicher zuordnen kann, wird als
+              Freitext übergeben und im Material ergänzt — geraten wird nichts.
+            </p>
+
+            <dl className="mt-4 grid max-w-xl gap-2.5 sm:grid-cols-2">
+              {[
+                ["Anlage", `${leistung.toFixed(2).replace(".", ",")} kWp`],
+                ["Module", String(modulzahl)],
+                [
+                  "Speicher",
+                  speicherKwh > 0 && plan.wirtschaft.mitSpeicher
+                    ? `${num(speicherKwh)} kWh`
+                    : "keiner",
+                ],
+                [
+                  "Ertrag",
+                  ertrag.anlage.jahresertragKwh > 0
+                    ? `${num(Math.round(ertrag.anlage.jahresertragKwh))} kWh/Jahr`
+                    : "—",
+                ],
+              ].map(([k, v]) => (
+                <div key={k} className="rounded-card border border-line bg-surface px-4 py-3">
+                  <dt className="text-[12px] text-muted">{k}</dt>
+                  <dd className="num mt-0.5 text-[15px] font-bold">{v}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Uebergabe
+                projektId={projekt.id}
+                kunden={kunden}
+                schreibrecht={schreibrecht}
+                onVorOeffnen={jetztSichern}
+              />
+              <span className="text-[12px] text-muted">
+                Das Kunden-PDF folgt im nächsten Schritt.
+              </span>
+            </div>
+          </div>
+        ) : phase === 4 ? (
           /*
            * In Phase 4 tritt die Karte ganz zurück. Hier wird nicht mehr
            * geplant, sondern gezeigt — und zwar hell, weil der Kunde
@@ -619,7 +695,7 @@ export function Planer({
         )}
 
         {/* ── Panel, 344 px ───────────────────────────────────────── */}
-        {panelOffen ? (
+        {panelOffen && phase !== 5 ? (
           <div className="absolute inset-y-0 right-0 z-30 flex w-[var(--pl-panel-breite)] max-w-[86%] shadow-soft lg:static lg:z-auto lg:shadow-none">
             {phase === 4 ? (
               <aside className="flex w-full flex-col border-l border-line bg-panel">
