@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Abschnitt } from "@/components/ui/Abschnitt";
+import {
+  type ModulZeile,
+  PlanerStammdaten,
+  type SpeicherZeile,
+  type WrZeile,
+} from "./PlanerStammdaten";
 import { ChecklisteForm, FirmaForm, MarkeForm } from "./MarkeForms";
 import { ausJson } from "@/lib/rules/zeitregeln";
 import { KpiKarte } from "@/components/ui/KpiKarte";
@@ -44,6 +50,7 @@ const BEREICHE = [
   ["firma", "Firmendaten"],
   ["erscheinungsbild", "Erscheinungsbild"],
   ["checklisten", "Checklisten"],
+  ["planer", "Planer-Stammdaten"],
   ["standorte", "Standorte"],
   ["zeit", "Zeiterfassung"],
   ["nummernkreise", "Nummernkreise"],
@@ -98,6 +105,9 @@ export default async function EinstellungenPage({
     { data: leute },
     { data: zaehlerstand },
     { data: postfaecher },
+    { data: planerModule },
+    { data: planerWr },
+    { data: planerSpeicher },
   ] = await Promise.all([
     supabase.from("role_permission").select("role, area, level"),
     supabase
@@ -118,6 +128,26 @@ export default async function EinstellungenPage({
     supabase
       .from("v_mail_account")
       .select("id, address, provider, status, last_sync_at, is_default"),
+    /*
+     * Planer-Stammdaten. Eigene Geräte UND der gemeinsame Katalog — die
+     * RLS-Policy liefert beides, sortiert wird nach Hersteller, damit
+     * Kopien neben ihrem Original stehen.
+     */
+    supabase
+      .from("planer_modul")
+      .select("*")
+      .order("hersteller")
+      .order("bezeichnung"),
+    supabase
+      .from("planer_wechselrichter")
+      .select("*")
+      .order("hersteller")
+      .order("bezeichnung"),
+    supabase
+      .from("planer_speicher")
+      .select("*")
+      .order("hersteller")
+      .order("bezeichnung"),
   ]);
 
   /*
@@ -292,6 +322,22 @@ export default async function EinstellungenPage({
                   Für Einstellungen fehlt deiner Rolle das Schreibrecht.
                 </p>
               )}
+            </Abschnitt>
+          ) : null}
+
+          {bereich === "planer" ? (
+            <Abschnitt titel="Planer-Stammdaten">
+              <p className="mb-4 max-w-2xl text-[13px] leading-[1.5] text-muted">
+                Module, Wechselrichter und Speicher für die Auslegung. Die Werte stammen aus den
+                Datenblättern — sie entscheiden, wie viele Module in einen String dürfen, und ein
+                geschätzter Wert ist hier schlimmer als eine Lücke.
+              </p>
+              <PlanerStammdaten
+                module={(planerModule ?? []) as unknown as ModulZeile[]}
+                wechselrichter={(planerWr ?? []) as unknown as WrZeile[]}
+                speicher={(planerSpeicher ?? []) as unknown as SpeicherZeile[]}
+                schreibrecht={darfSchreiben}
+              />
             </Abschnitt>
           ) : null}
 

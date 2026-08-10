@@ -194,7 +194,6 @@ export function pruefe(e: PruefEingabe): PruefErgebnis {
     }
 
     // 1) Leerlaufspannung im Winter gegen die DC-Grenze.
-    const kalt = uocKalt(m, tMin);
     const uString = stringSpannungKalt(anzahl, m, tMin);
     if (uString > wr.maxDc) {
       const nMax = maxModuleProString(m, wr, tMin);
