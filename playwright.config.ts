@@ -38,14 +38,19 @@ export default defineConfig({
      * Eigener Port und eigenes Build-Verzeichnis, damit ein laufender
      * Dev-Server auf 3000 nicht gestört wird.
      *
-     * Der grössere Heap ist kein Luxus: Der Dev-Server kompiliert jede
-     * Route beim ersten Aufruf und behält sie im Speicher. Ab rund
-     * vierzig Tests reichte der Standardwert nicht mehr — der Prozess
-     * starb mitten im Lauf, und alle folgenden Tests scheiterten binnen
-     * Millisekunden mit ERR_CONNECTION_REFUSED. Das sah nach einem
-     * Fehler in der Anwendung aus und war keiner.
+     * Das Heap-Limit ist bewusst KLEIN, nicht gross. Der Dev-Server
+     * kompiliert jede Route beim ersten Aufruf und behält sie im
+     * Speicher; ab rund vierzig Tests starb der Prozess mitten im Lauf,
+     * und alle folgenden Tests scheiterten binnen Millisekunden mit
+     * ERR_CONNECTION_REFUSED — was wie ein Fehler in der Anwendung
+     * aussah und keiner war.
+     *
+     * Der erste Versuch war ein grösseres Limit (6 GB). Das machte es
+     * schlimmer: auf einem 16-GB-Rechner wächst der Prozess dann bis
+     * dorthin und wird samt Chromium vom Betriebssystem abgeräumt. Ein
+     * enges Limit zwingt V8 stattdessen, früher und öfter aufzuräumen.
      */
-    command: `NODE_OPTIONS=--max-old-space-size=6144 NEXT_DIST_DIR=.next-e2e next dev --port ${PORT}`,
+    command: `NODE_OPTIONS=--max-old-space-size=2560 NEXT_DIST_DIR=.next-e2e next dev --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}/login`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

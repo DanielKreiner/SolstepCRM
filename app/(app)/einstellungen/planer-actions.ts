@@ -412,3 +412,131 @@ export async function ausLagerUebernehmen(): Promise<UebernahmeBericht> {
     fehler: schreibfehler,
   };
 }
+
+/* ── Rechenvorgaben und Fördersätze (Briefing 7) ─────────────────── */
+
+const vorgabeSchema = z.object({
+  /*
+   * Grenzen mit Bedacht: 0 % Systemverlust gibt es nicht (Leitungen,
+   * Wechselrichter und Verschmutzung kosten immer etwas), 40 % wäre
+   * eine kaputte Anlage. Wer hier danebengreift, verschiebt jeden
+   * Ertrag im Betrieb.
+   */
+  verlust: z.number().min(2).max(40),
+  steigerung: z.number().min(0).max(20),
+  strompreis: z.number().min(0.01).max(2),
+  verguetung: z.number().min(0).max(2),
+  speicherPreis: z.number().min(0).max(5000),
+});
+
+export async function vorgabeSpeichern(
+  _prev: StammState,
+  formData: FormData,
+): Promise<StammState> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const geprueft = vorgabeSchema.safeParse({
+    verlust: zahl(formData.get("verlust")),
+    steigerung: zahl(formData.get("steigerung")),
+    strompreis: zahl(formData.get("strompreis")),
+    verguetung: zahl(formData.get("verguetung")),
+    speicherPreis: zahl(formData.get("speicherPreis")),
+  });
+  if (!geprueft.success) return { error: fehlertext(geprueft.error), ok: null };
+  const v = geprueft.data;
+
+  /*
+   * Die Staffel kommt als parallele Felder ab_kwp[] / eur[]. Leere
+   * Zeilen fallen weg, der Rest wird nach Untergrenze sortiert — sonst
+   * hängt das Ergebnis der Preisfindung an der Eingabereihenfolge.
+   */
+  const abWerte = formData.getAll("ab_kwp").map((x) => zahl(x));
+  const eurWerte = formData.getAll("eur_pro_kwp").map((x) => zahl(x));
+  const staffel = abWerte
+    .map((ab, i) => ({ ab_kwp: ab, eur_pro_kwp: eurWerte[i] ?? NaN }))
+    .filter((s) => Number.isFinite(s.ab_kwp) && Number.isFinite(s.eur_pro_kwp) && s.eur_pro_kwp > 0)
+    .sort((a, b) => a.ab_kwp - b.ab_kwp);
+
+  if (staffel.some((s) => s.ab_kwp < 0 || s.eur_pro_kwp > 10000)) {
+    return { error: "Eine Preisstufe liegt ausserhalb des Sinnvollen.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("planer_wirtschaft_vorgabe").upsert(
+    {
+      company_id: z1.me.companyId,
+      verlust_prozent: v.verlust,
+      // Im Formular stehen Prozent, in der Spalte ein Faktor.
+      steigerung: v.steigerung / 100,
+      strompreis: v.strompreis,
+      verguetung: v.verguetung,
+      preisstaffel: staffel,
+      speicher_eur_pro_kwh: v.speicherPreis,
+    },
+    { onConflict: "company_id" },
+  );
+  if (error) return { error: `Nicht gespeichert: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  return { error: null, ok: "Rechenvorgaben gespeichert." };
+}
+
+const foerderSchema = z.object({
+  region: z.string().trim().min(2, "Region fehlt.").max(80),
+  betrag: z.number().min(0).max(200000),
+  hinweis: z.string().trim().max(300),
+});
+
+export async function foerderungSpeichern(
+  _prev: StammState,
+  formData: FormData,
+): Promise<StammState> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const geprueft = foerderSchema.safeParse({
+    region: formData.get("region"),
+    betrag: zahl(formData.get("betrag")),
+    hinweis: String(formData.get("hinweis") ?? ""),
+  });
+  if (!geprueft.success) return { error: fehlertext(geprueft.error), ok: null };
+  const f = geprueft.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("planer_foerderung").upsert(
+    {
+      company_id: z1.me.companyId,
+      region: f.region,
+      betrag: f.betrag,
+      hinweis: f.hinweis || null,
+    },
+    { onConflict: "company_id,region" },
+  );
+  if (error) return { error: `Nicht gespeichert: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  return { error: null, ok: `${f.region} gespeichert.` };
+}
+
+export async function foerderungLoeschen(
+  _prev: StammState,
+  formData: FormData,
+): Promise<StammState> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const region = String(formData.get("region") ?? "").trim();
+  if (!region) return { error: "Region fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("planer_foerderung")
+    .delete()
+    .eq("company_id", z1.me.companyId)
+    .eq("region", region);
+  if (error) return { error: `Nicht entfernt: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  return { error: null, ok: `${region} entfernt.` };
+}

@@ -7,6 +7,11 @@ import {
   type SpeicherZeile,
   type WrZeile,
 } from "./PlanerStammdaten";
+import {
+  type FoerderZeile,
+  PlanerVorgaben,
+  type VorgabeZeile,
+} from "./PlanerVorgaben";
 import { ChecklisteForm, FirmaForm, MarkeForm } from "./MarkeForms";
 import { ausJson } from "@/lib/rules/zeitregeln";
 import { KpiKarte } from "@/components/ui/KpiKarte";
@@ -108,6 +113,8 @@ export default async function EinstellungenPage({
     { data: planerModule },
     { data: planerWr },
     { data: planerSpeicher },
+    { data: planerVorgabe },
+    { data: planerFoerderung },
   ] = await Promise.all([
     supabase.from("role_permission").select("role, area, level"),
     supabase
@@ -148,6 +155,15 @@ export default async function EinstellungenPage({
       .select("*")
       .order("hersteller")
       .order("bezeichnung"),
+    /*
+     * Rechenvorgaben und Fördersätze. Sie wirken auf jedes Angebot des
+     * Planers und liegen deshalb hier, nicht im Planer selbst.
+     */
+    supabase
+      .from("planer_wirtschaft_vorgabe")
+      .select("verlust_prozent, steigerung, strompreis, verguetung, preisstaffel, speicher_eur_pro_kwh")
+      .maybeSingle(),
+    supabase.from("planer_foerderung").select("region, betrag, hinweis").order("region"),
   ]);
 
   /*
@@ -338,6 +354,19 @@ export default async function EinstellungenPage({
                 speicher={(planerSpeicher ?? []) as unknown as SpeicherZeile[]}
                 schreibrecht={darfSchreiben}
               />
+
+              <div className="mt-6 border-t border-line pt-5">
+                <h3 className="text-[15px] font-extrabold">Rechnung und Förderung</h3>
+                <p className="mb-4 mt-1 max-w-2xl text-[13px] leading-[1.5] text-muted">
+                  Womit die Wirtschaftlichkeit anfängt, bevor im Kundengespräch etwas
+                  überschrieben wird.
+                </p>
+                <PlanerVorgaben
+                  vorgabe={(planerVorgabe ?? null) as unknown as VorgabeZeile | null}
+                  foerderungen={(planerFoerderung ?? []) as unknown as FoerderZeile[]}
+                  schreibrecht={darfSchreiben}
+                />
+              </div>
             </Abschnitt>
           ) : null}
 
