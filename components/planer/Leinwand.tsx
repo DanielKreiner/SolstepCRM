@@ -28,10 +28,17 @@ import {
 import { naechsteId, naechsterFlaechenName, type Plan } from "@/lib/planer/plan";
 import { anbieter as anbieterZu, type AnbieterId, kachelUrl } from "@/lib/planer/anbieter";
 import {
+  aktiveZellen,
+  modulEcken,
+  nachfuehren,
+  zelle as zellSchluessel,
+} from "@/lib/planer/module";
+import {
   kantenMitte,
   meterText,
   zeichneEntwurf,
   zeichneFlaeche,
+  zeichneGruppe,
   zeichneMessung,
   zeichneUrsprung,
 } from "./zeichnen";
@@ -88,6 +95,8 @@ export interface LeinwandProps {
   onKalibriert: (meterProPixel: number, faktor: number) => void;
   aktiv: string | null;
   onAktiv: (id: string | null) => void;
+  aktiveGruppe: string | null;
+  onAktiveGruppe: (id: string | null) => void;
   /** `schritt` legt einen Rückschritt an; false für Zwischenstände beim Ziehen. */
   onPlan: (plan: Plan, schritt: boolean) => void;
   onWerkzeug: (w: Werkzeug) => void;
@@ -129,6 +138,7 @@ export function Leinwand(p: LeinwandProps) {
     | { art: "ecke"; flaeche: string; index: number }
     | { art: "kante"; flaeche: string; index: number; letzte: Meter }
     | { art: "hindernis"; flaeche: string; von: Meter }
+    | { art: "gruppe"; gruppe: string; reihe: number; spalte: number; letzte: Meter }
     | { art: "messen" }
     | { art: "schwenk" }
     | null
@@ -255,6 +265,12 @@ export function Leinwand(p: LeinwandProps) {
     const sicht = { kamera: k, aktiv: stand.current.aktiv, betont: null };
     for (const f of stand.current.plan.flaechen) zeichneFlaeche(ctx, sicht, f);
 
+    // Module über die Flächen — sie liegen ja auch darauf.
+    for (const g of stand.current.plan.gruppen) {
+      const f = stand.current.plan.flaechen.find((x) => x.id === g.flaeche);
+      if (f) zeichneGruppe(ctx, k, g, f, stand.current.aktiveGruppe === g.id);
+    }
+
     if (entwurf.current.length > 0) {
       const vorschau = zeigerRef.current;
       const kette = vorschau ? [...entwurf.current, vorschau] : entwurf.current;
@@ -281,7 +297,7 @@ export function Leinwand(p: LeinwandProps) {
   /* Neuzeichnen, wenn sich Plan, Auswahl oder Werkzeug ändern. */
   useEffect(() => {
     anstossen();
-  }, [p.plan, p.aktiv, p.werkzeug, p.foto, anstossen]);
+  }, [p.plan, p.aktiv, p.aktiveGruppe, p.werkzeug, p.foto, anstossen]);
 
   /* ── Grösse, Anbieter, Ursprung ──────────────────────────────── */
 
@@ -323,6 +339,23 @@ export function Leinwand(p: LeinwandProps) {
     const k = kamera.current;
     const s = stand.current;
     const aktive = s.plan.flaechen.find((f) => f.id === s.aktiv);
+
+    /*
+     * Module zuerst: sie liegen obenauf, und wer auf ein Modul tippt,
+     * meint das Modul — nicht die Fläche darunter.
+     */
+    const zeigerM = bildZuMeter(k, bp);
+    for (const g of s.plan.gruppen) {
+      const f = s.plan.flaechen.find((x) => x.id === g.flaeche);
+      if (!f) continue;
+      for (let r = 0; r < g.reihen; r++) {
+        for (let c = 0; c < g.spalten; c++) {
+          if (punktInPolygon(zeigerM, modulEcken(g, f, r, c))) {
+            return { art: "modul" as const, gruppe: g.id, reihe: r, spalte: c };
+          }
+        }
+      }
+    }
 
     if (aktive) {
       for (let i = 0; i < aktive.punkte.length; i++) {
@@ -520,7 +553,17 @@ export function Leinwand(p: LeinwandProps) {
       }
 
       const t = treffer(bp);
-      if (t?.art === "ecke") {
+      if (t?.art === "modul") {
+        // Tippen schaltet das Modul, Ziehen verschiebt die Gruppe —
+        // entschieden wird erst beim Loslassen, an der Wegstrecke.
+        zieht.current = {
+          art: "gruppe",
+          gruppe: t.gruppe,
+          reihe: t.reihe,
+          spalte: t.spalte,
+          letzte: bildZuMeter(kamera.current, bp),
+        };
+      } else if (t?.art === "ecke") {
         zieht.current = { art: "ecke", flaeche: t.flaeche, index: t.index };
       } else if (t?.art === "kante") {
         zieht.current = {
@@ -616,6 +659,24 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
+      if (z.art === "gruppe") {
+        const jetztM = bildZuMeter(k, jetzt);
+        const um = { x: jetztM.x - z.letzte.x, y: jetztM.y - z.letzte.y };
+        z.letzte = jetztM;
+        s.onPlan(
+          {
+            ...s.plan,
+            gruppen: s.plan.gruppen.map((g) =>
+              g.id === z.gruppe
+                ? { ...g, anker: { x: g.anker.x + um.x, y: g.anker.y + um.y } }
+                : g,
+            ),
+          },
+          false,
+        );
+        return;
+      }
+
       if (z.art === "kante") {
         const jetztM = bildZuMeter(k, jetzt);
         const um = { x: jetztM.x - z.letzte.x, y: jetztM.y - z.letzte.y };
@@ -649,6 +710,49 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = null;
         return;
       }
+      if (z?.art === "gruppe") {
+        zieht.current = null;
+        const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
+        const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
+        if (!g || !f) return;
+
+        if (bewegt <= 6) {
+          /*
+           * Tippen: Modul abschalten oder zurückholen. Es wird nicht
+           * gelöscht — die Zelle bleibt im Raster, damit man sie
+           * wiederfindet (Briefing 4.2).
+           */
+          const schluessel = zellSchluessel(z.reihe, z.spalte);
+          const aus = g.aus.includes(schluessel)
+            ? g.aus.filter((x) => x !== schluessel)
+            : [...g.aus, schluessel];
+          s.onAktiveGruppe(g.id);
+          s.onPlan(
+            { ...s.plan, gruppen: s.plan.gruppen.map((x) => (x.id === g.id ? { ...x, aus } : x)) },
+            true,
+          );
+          return;
+        }
+
+        /*
+         * Verschoben: Module, die jetzt über den Rand oder ein Hindernis
+         * ragen, fallen weg — und kommen zurück, sobald wieder Platz ist.
+         * Fremde Gruppen bleiben besetzt.
+         */
+        const besetzt = s.plan.gruppen
+          .filter((x) => x.id !== g.id && x.flaeche === g.flaeche)
+          .flatMap((x) => {
+            const ff = s.plan.flaechen.find((y) => y.id === x.flaeche)!;
+            return aktiveZellen(x).map((zz) => modulEcken(x, ff, zz.reihe, zz.spalte));
+          });
+        const gefuehrt = nachfuehren(g, f, besetzt);
+        s.onPlan(
+          { ...s.plan, gruppen: s.plan.gruppen.map((x) => (x.id === g.id ? gefuehrt : x)) },
+          true,
+        );
+        return;
+      }
+
       if (z?.art === "ecke" || z?.art === "kante") {
         // Jetzt erst ein Rückschritt — nicht für jede Mausbewegung.
         s.onPlan(s.plan, true);
@@ -731,7 +835,17 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
       const t = treffer(bp);
-      if (t?.art === "ecke") {
+      if (t?.art === "modul") {
+        // Tippen schaltet das Modul, Ziehen verschiebt die Gruppe —
+        // entschieden wird erst beim Loslassen, an der Wegstrecke.
+        zieht.current = {
+          art: "gruppe",
+          gruppe: t.gruppe,
+          reihe: t.reihe,
+          spalte: t.spalte,
+          letzte: bildZuMeter(kamera.current, bp),
+        };
+      } else if (t?.art === "ecke") {
         const f = s.plan.flaechen.find((x) => x.id === t.flaeche)!;
         // Unter drei Punkten ist es kein Polygon mehr.
         if (f.punkte.length <= 3) return;

@@ -14,6 +14,7 @@ import {
 } from "@/lib/planer/anbieter";
 import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
+import { anzahlModule, kwp } from "@/lib/planer/module";
 import type { Plan } from "@/lib/planer/plan";
 import {
   kannVor,
@@ -78,6 +79,7 @@ export function Planer({
   const [zoom, setZoom] = useState(projekt.zoom);
   const [werkzeug, setWerkzeug] = useState<Werkzeug>("auswahl");
   const [aktiv, setAktiv] = useState<string | null>(null);
+  const [aktiveGruppe, setAktiveGruppe] = useState<string | null>(null);
   const [fang, setFang] = useState<FangOptionen>(FANG_STANDARD);
   const [gemerkt, setGemerkt] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
   const [mitte, setMitte] = useState<Meter>({ x: 0, y: 0 });
@@ -253,13 +255,12 @@ export function Planer({
 
   /* Kennzahlenleiste. Ab Stufe 3 kommen Module, kWp und Ertrag dazu. */
   const dach = plan.flaechen.reduce((s, f) => s + dachflaeche(f.punkte, f.neigung), 0);
+  const modulzahl = plan.gruppen.reduce((s, g) => s + anzahlModule(g), 0);
+  const leistung = plan.gruppen.reduce((s, g) => s + kwp(g), 0);
   const kennzahlen = [
-    { wert: String(plan.flaechen.length), label: "FLÄCHEN" },
     { wert: `${dach.toFixed(0)} m²`, label: "DACHFLÄCHE" },
-    {
-      wert: String(plan.flaechen.reduce((s, f) => s + f.hindernisse.length, 0)),
-      label: "HINDERNISSE",
-    },
+    { wert: String(modulzahl), label: "MODULE" },
+    { wert: `${leistung.toFixed(2).replace(".", ",")}`, label: "KWP" },
   ];
 
   return (
@@ -383,6 +384,8 @@ export function Planer({
               onKalibriert={onKalibriert}
               aktiv={aktiv}
               onAktiv={setAktiv}
+              aktiveGruppe={aktiveGruppe}
+              onAktiveGruppe={setAktiveGruppe}
               onPlan={onPlan}
               onWerkzeug={setWerkzeug}
               onKamera={onKamera}
@@ -493,6 +496,9 @@ export function Planer({
               onPlan={onPlan}
               mitte={mitte}
               schreibrecht={schreibrecht}
+              aktiveGruppe={aktiveGruppe}
+              onAktiveGruppe={setAktiveGruppe}
+              breitengrad={projekt.ursprung.lat}
               onSchliessen={() => setPanelOffen(false)}
               foto={
                 schreibrecht ? (

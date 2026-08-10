@@ -13,6 +13,7 @@
 
 import { z } from "zod";
 import { azimutAusTraufe, type Dachflaeche } from "./flaeche";
+import type { Modulgruppe } from "./module";
 import type { Meter } from "./geo";
 
 export const PLAN_VERSION = 1;
@@ -38,19 +39,46 @@ const flaecheSchema = z.object({
   hindernisse: z.array(hindernisSchema).default([]),
 });
 
+const modultypSchema = z.object({
+  breite: z.number().positive().max(5),
+  hoehe: z.number().positive().max(5),
+  wp: z.number().positive().max(2000),
+  bezeichnung: z.string().default(""),
+});
+
+const gruppeSchema = z.object({
+  id: z.string(),
+  name: z.string().default("Feld"),
+  flaeche: z.string(),
+  typ: modultypSchema,
+  ausrichtung: z.enum(["hoch", "quer"]).default("hoch"),
+  reihenabstand: z.number().min(0).max(10).default(0.02),
+  spaltenabstand: z.number().min(0).max(10).default(0.02),
+  winkel: z.number().min(-180).max(180).default(0),
+  anker: meterSchema,
+  spalten: z.number().int().min(0).max(400).default(0),
+  reihen: z.number().int().min(0).max(400).default(0),
+  aufstaenderung: z
+    .object({ art: z.enum(["sued", "ost-west"]), winkel: z.number().min(0).max(60) })
+    .nullable()
+    .default(null),
+  aus: z.array(z.string()).default([]),
+  frei: z.record(z.string(), meterSchema).default({}),
+});
+
 export const planSchema = z.object({
   version: z.number().default(PLAN_VERSION),
   flaechen: z.array(flaecheSchema).default([]),
-  /* Ab Stufe 3. Hier schon vorgesehen, damit das Dokument nicht später
+  gruppen: z.array(gruppeSchema).default([]),
+  /* Ab Stufe 4. Hier schon vorgesehen, damit das Dokument nicht später
      seine Form wechselt und alte Stände ungültig werden. */
-  gruppen: z.array(z.unknown()).default([]),
   strings: z.array(z.unknown()).default([]),
 });
 
 export type Plan = {
   version: number;
   flaechen: Dachflaeche[];
-  gruppen: unknown[];
+  gruppen: Modulgruppe[];
   strings: unknown[];
 };
 

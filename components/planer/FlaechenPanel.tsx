@@ -11,6 +11,7 @@ import {
 } from "@/lib/planer/flaeche";
 import { DACHFORMEN, type Dachform, dachformFlaechen, type Plan } from "@/lib/planer/plan";
 import type { Meter } from "@/lib/planer/geo";
+import { BelegungsPanel } from "./BelegungsPanel";
 
 /*
  * Panel rechts — 344 px, heller Grund, Karten mit 12er-Radius.
@@ -41,6 +42,10 @@ export interface PanelProps {
   onSchliessen: () => void;
   /** Bildquelle (Drohnenfoto) — steckt oben im Panel. */
   foto?: ReactNode;
+  aktiveGruppe: string | null;
+  onAktiveGruppe: (id: string | null) => void;
+  /** Für den Reihenabstands-Vorschlag beim Flachdach. */
+  breitengrad: number;
 }
 
 export function FlaechenPanel({
@@ -52,6 +57,9 @@ export function FlaechenPanel({
   schreibrecht,
   onSchliessen,
   foto,
+  aktiveGruppe,
+  onAktiveGruppe,
+  breitengrad,
 }: PanelProps) {
   const flaeche = plan.flaechen.find((f) => f.id === aktiv) ?? null;
 
@@ -110,6 +118,18 @@ export function FlaechenPanel({
             </ul>
           )}
         </section>
+
+        {flaeche ? (
+          <BelegungsPanel
+            plan={plan}
+            flaeche={flaeche}
+            aktiveGruppe={aktiveGruppe}
+            onAktiveGruppe={onAktiveGruppe}
+            onPlan={onPlan}
+            schreibrecht={schreibrecht}
+            breitengrad={breitengrad}
+          />
+        ) : null}
 
         {flaeche ? (
           <Eigenschaften

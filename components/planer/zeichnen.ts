@@ -16,6 +16,12 @@ import {
   type Dachflaeche,
 } from "@/lib/planer/flaeche";
 import { type Kamera, meterZuBild, type Meter } from "@/lib/planer/geo";
+import {
+  aktiveZellen,
+  modulEcken,
+  type Modulgruppe,
+  zelle as zellSchluessel,
+} from "@/lib/planer/module";
 
 /* Farben aus tokens.css. Der Canvas kann keine CSS-Variablen lesen,
    deshalb stehen sie hier einmal als Werte — die einzige Stelle. */
@@ -28,6 +34,12 @@ export const FARBEN = {
   hindernis: "rgba(21, 18, 16, 0.55)",
   warnung: "#d2543f",
   schrift: "#151210",
+  /* Module: dunkles Blau-Grau wie echte Zellen, nicht bunt. Die Fläche
+     darunter soll erkennbar bleiben. */
+  modul: "rgba(28, 42, 60, 0.88)",
+  modulRand: "rgba(255, 255, 255, 0.55)",
+  modulAus: "rgba(120, 120, 120, 0.28)",
+  gruppeRahmen: "#7fd1c8",
 } as const;
 
 export interface Sicht {
@@ -274,5 +286,93 @@ export function zeichneUrsprung(ctx: CanvasRenderingContext2D, k: Kamera) {
   ctx.moveTo(p.x, p.y - 8);
   ctx.lineTo(p.x, p.y + 8);
   ctx.stroke();
+  ctx.restore();
+}
+
+
+/*
+ * ── Module ─────────────────────────────────────────────────────────
+ */
+
+/**
+ * Eine Modulgruppe zeichnen.
+ *
+ * Abgeschaltete Module verschwinden nicht, sie werden blass und
+ * gestrichelt (Briefing 4.2) — wer ein Modul wegtippt, soll sehen, wo
+ * es war, und es zurückholen können.
+ */
+export function zeichneGruppe(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  g: Modulgruppe,
+  f: Dachflaeche,
+  gewaehlt: boolean,
+) {
+  const aus = new Set(g.aus);
+  // Klein gezeichnete Module brauchen keinen Rand — sonst ist das Feld
+  // nur noch Rand.
+  const probe = modulEcken(g, f, 0, 0);
+  const p1 = bild(k, probe[0]!);
+  const p2 = bild(k, probe[1]!);
+  const breitePx = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  const feineLinie = breitePx > 9;
+
+  for (let r = 0; r < g.reihen; r++) {
+    for (let c = 0; c < g.spalten; c++) {
+      const an = !aus.has(zellSchluessel(r, c));
+      const ecken = modulEcken(g, f, r, c);
+      ctx.beginPath();
+      ecken.forEach((p, i) => {
+        const b = bild(k, p);
+        if (i === 0) ctx.moveTo(b.x, b.y);
+        else ctx.lineTo(b.x, b.y);
+      });
+      ctx.closePath();
+
+      if (an) {
+        ctx.fillStyle = FARBEN.modul;
+        ctx.fill();
+        if (feineLinie) {
+          ctx.strokeStyle = FARBEN.modulRand;
+          ctx.lineWidth = 0.7;
+          ctx.stroke();
+        }
+      } else if (feineLinie) {
+        ctx.save();
+        ctx.setLineDash([3, 3]);
+        ctx.fillStyle = FARBEN.modulAus;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  if (gewaehlt) zeichneGruppenRahmen(ctx, k, g, f);
+}
+
+/** Rahmen um die belegten Zellen — der Griff zum Verschieben. */
+function zeichneGruppenRahmen(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  g: Modulgruppe,
+  f: Dachflaeche,
+) {
+  const zellen = aktiveZellen(g);
+  if (zellen.length === 0) return;
+
+  const punkte = zellen.flatMap((z) => modulEcken(g, f, z.reihe, z.spalte)).map((p) => bild(k, p));
+  const links = Math.min(...punkte.map((p) => p.x));
+  const rechts = Math.max(...punkte.map((p) => p.x));
+  const oben = Math.min(...punkte.map((p) => p.y));
+  const unten = Math.max(...punkte.map((p) => p.y));
+
+  ctx.save();
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = FARBEN.gruppeRahmen;
+  ctx.lineWidth = 1.6;
+  ctx.strokeRect(links - 4, oben - 4, rechts - links + 8, unten - oben + 8);
   ctx.restore();
 }
