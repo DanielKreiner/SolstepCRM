@@ -32,6 +32,18 @@
   --color-s-warn: var(--s-warn);
   --color-s-crit: var(--s-crit);
 
+  --color-pl-flaeche: var(--pl-flaeche);
+  --color-pl-chrome: var(--pl-chrome);
+  --color-pl-chrome-linie: var(--pl-chrome-linie);
+  --color-pl-auf-dunkel: var(--pl-auf-dunkel);
+  --color-pl-auf-dunkel-2: var(--pl-auf-dunkel-2);
+  --color-pl-auf-dunkel-3: var(--pl-auf-dunkel-3);
+  --color-pl-auf-dunkel-4: var(--pl-auf-dunkel-4);
+  --color-pl-mess: var(--pl-mess);
+  --color-pl-mess-flaeche: var(--pl-mess-flaeche);
+  --color-pl-hinweis: var(--pl-hinweis);
+  --color-pl-hinweis-text: var(--pl-hinweis-text);
+
   --radius-panel: var(--r-panel);
   --radius-card: var(--r-card);
   --radius-pill: var(--r-pill);

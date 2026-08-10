@@ -46,6 +46,31 @@
   --shadow: 0 1px 2px rgba(21, 18, 16, 0.04), 0 8px 24px rgba(21, 18, 16, 0.04);
   --ease: cubic-bezier(0.2, 0, 0, 1);
 
+  /*
+   * Planer — Werte aus Planer-HTML.html.
+   *
+   * Der Planer bricht bewusst mit der hellen Fläche des übrigen
+   * Backoffice: die Zeichenfläche ist dunkel, damit Luftbild und
+   * Drohnenfoto den Blick tragen und die Bedienung als schwebende
+   * Schicht darüberliegt. Alles andere (Kopf, Stepper, Panel) bleibt in
+   * der bekannten hellen Welt.
+   */
+  --pl-flaeche: #17150f; /* Zeichenflaeche */
+  --pl-chrome: rgba(23, 21, 15, 0.86); /* schwebende Bedienleisten */
+  --pl-chrome-linie: #3a362c;
+  --pl-auf-dunkel: #eae6e0; /* Text auf der Zeichenflaeche */
+  --pl-auf-dunkel-2: #b9b2a4;
+  --pl-auf-dunkel-3: #8a8071;
+  --pl-auf-dunkel-4: #57503f;
+  /* Messen und Kalibrieren — bewusst NICHT der Akzent: das sind
+     Hilfslinien, keine Handlungen. */
+  --pl-mess: #7fd1c8;
+  --pl-mess-flaeche: rgba(127, 209, 200, 0.15);
+  --pl-hinweis: #f3e3c3;
+  --pl-hinweis-text: #8f5a08;
+  --pl-panel-breite: 344px;
+  --pl-stepper-breite: 76px;
+
   /* Layout */
   --sidebar-w: 246px;
   --content-max: 1680px;

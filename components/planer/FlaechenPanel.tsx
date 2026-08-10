@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { type ReactNode, useState } from "react";
 import {
   azimutAusTraufe,
   type Dachflaeche,
@@ -13,21 +12,23 @@ import {
 import { DACHFORMEN, type Dachform, dachformFlaechen, type Plan } from "@/lib/planer/plan";
 import type { Meter } from "@/lib/planer/geo";
 
-/* Eingabefeld wie in components/ui/Field.tsx — dort steckt der Stil in der
-   Komponente, hier brauchen wir ihn auch für select und number. */
-const FELD =
-  "rounded-input border border-transparent bg-sunk px-2.5 py-1.5 text-[13px] text-ink " +
-  "outline-0 transition-colors focus:border-accent focus:bg-surface disabled:opacity-60";
-
 /*
- * Panel rechts (Prototyp): Flächenliste und die Eigenschaften der
- * gewählten Fläche.
+ * Panel rechts — 344 px, heller Grund, Karten mit 12er-Radius.
+ * Masse und Farben aus Planer-HTML.html.
  *
- * Jede Zahl hier ist eine Eingabe, keine Anzeige — Neigung und Azimut
+ * Jede Zahl hier ist eine Eingabe, keine Anzeige: Neigung und Azimut
  * bestimmen später den Ertrag, und das Luftbild verrät beides nicht.
- * Was sich ableiten lässt, wird vorbelegt: der Azimut folgt aus der
+ * Was sich ableiten lässt, wird vorbelegt — der Azimut folgt aus der
  * Traufkante, bleibt aber übersteuerbar.
  */
+
+/* Eingabefeld nach Entwurf: 44 px hoch, Radius 10, heller Grund. */
+const FELD =
+  "h-11 w-full rounded-[10px] border border-line bg-surface px-3 text-[14px] text-ink " +
+  "outline-none transition-colors focus:border-accent disabled:opacity-60";
+const FELD_NUM = `${FELD} num tabular-nums`;
+/* Karte nach Entwurf: 1 px Linie, Radius 12, 14 px Innenabstand. */
+const KARTE = "rounded-[12px] border border-line bg-surface p-3.5";
 
 export interface PanelProps {
   plan: Plan;
@@ -37,8 +38,9 @@ export interface PanelProps {
   /** Bildmitte in Metern — dorthin setzt der Assistent das Dach. */
   mitte: Meter;
   schreibrecht: boolean;
-  /** Nur in der überlagerten Fassung unter lg. */
-  onSchliessen?: () => void;
+  onSchliessen: () => void;
+  /** Bildquelle (Drohnenfoto) — steckt oben im Panel. */
+  foto?: ReactNode;
 }
 
 export function FlaechenPanel({
@@ -49,74 +51,82 @@ export function FlaechenPanel({
   mitte,
   schreibrecht,
   onSchliessen,
+  foto,
 }: PanelProps) {
   const flaeche = plan.flaechen.find((f) => f.id === aktiv) ?? null;
 
   const aendere = (wie: (f: Dachflaeche) => Dachflaeche) => {
     if (!flaeche) return;
-    onPlan(
-      { ...plan, flaechen: plan.flaechen.map((f) => (f.id === flaeche.id ? wie(f) : f)) },
-      true,
-    );
+    onPlan({ ...plan, flaechen: plan.flaechen.map((f) => (f.id === flaeche.id ? wie(f) : f)) }, true);
   };
 
   return (
-    <aside className="flex w-full shrink-0 flex-col gap-4 overflow-y-auto border-l border-line bg-panel p-3.5 lg:w-[300px]">
-      {onSchliessen ? (
+    <aside className="flex w-full flex-col border-l border-line bg-panel">
+      <div className="flex items-center px-4 pb-2.5 pt-3.5">
+        <h2 className="text-[15px] font-extrabold">
+          {flaeche ? flaeche.name : "Dach erfassen"}
+        </h2>
         <button
           type="button"
           onClick={onSchliessen}
-          className="self-end text-[12.5px] text-muted hover:text-ink lg:hidden"
+          aria-label="Seitenleiste schliessen"
+          className="ml-auto flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[15px] text-muted hover:bg-sunk"
         >
-          schliessen ✕
+          ›
         </button>
-      ) : null}
+      </div>
 
-      {schreibrecht ? <Assistent plan={plan} onPlan={onPlan} onAktiv={onAktiv} mitte={mitte} /> : null}
+      <div className="flex flex-1 flex-col gap-3 overflow-auto px-4 pb-4">
+        {foto}
 
-      <section>
-        <h3 className="text-[11px] font-bold uppercase tracking-wide text-muted">
-          Dachflächen ({plan.flaechen.length})
-        </h3>
-        {plan.flaechen.length === 0 ? (
-          <p className="mt-2 text-[12.5px] text-muted">
-            Noch keine Fläche. Mit dem Zeichenwerkzeug den Dachumriss abfahren oder oben eine
-            Standardform setzen.
+        {schreibrecht ? <Assistent plan={plan} onPlan={onPlan} onAktiv={onAktiv} mitte={mitte} /> : null}
+
+        <section className={KARTE}>
+          <h3 className="text-[13px] font-bold">Dachflächen ({plan.flaechen.length})</h3>
+          {plan.flaechen.length === 0 ? (
+            <p className="mt-1.5 text-[12.5px] leading-[1.45] text-muted">
+              Noch keine Fläche. Links das Werkzeug „Fläche“ wählen und den Dachumriss abfahren —
+              oder oben eine Standardform setzen.
+            </p>
+          ) : (
+            <ul className="mt-2 flex flex-col gap-1">
+              {plan.flaechen.map((f) => (
+                <li key={f.id}>
+                  <button
+                    type="button"
+                    onClick={() => onAktiv(f.id)}
+                    className={[
+                      "flex w-full items-center justify-between rounded-[10px] px-2.5 py-2 text-left text-[13px]",
+                      f.id === aktiv ? "bg-accent-sunk font-semibold" : "hover:bg-sunk",
+                    ].join(" ")}
+                  >
+                    <span className="truncate">{f.name}</span>
+                    <span className="num shrink-0 text-[11.5px] tabular-nums text-muted">
+                      {dachflaeche(f.punkte, f.neigung).toFixed(1).replace(".", ",")} m²
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {flaeche ? (
+          <Eigenschaften
+            flaeche={flaeche}
+            aendere={aendere}
+            schreibrecht={schreibrecht}
+            onLoeschen={() => {
+              onPlan({ ...plan, flaechen: plan.flaechen.filter((f) => f.id !== flaeche.id) }, true);
+              onAktiv(null);
+            }}
+          />
+        ) : plan.flaechen.length > 0 ? (
+          <p className="px-0.5 text-[12.5px] leading-[1.5] text-muted">
+            Eine Fläche antippen, um Neigung, Ausrichtung und Randabstand zu setzen.
           </p>
-        ) : (
-          <ul className="mt-2 flex flex-col gap-1">
-            {plan.flaechen.map((f) => (
-              <li key={f.id}>
-                <button
-                  type="button"
-                  onClick={() => onAktiv(f.id)}
-                  className={[
-                    "flex w-full items-center justify-between rounded-input px-2.5 py-2 text-left text-[13px]",
-                    f.id === aktiv ? "bg-accent-sunk font-semibold" : "hover:bg-sunk",
-                  ].join(" ")}
-                >
-                  <span className="truncate">{f.name}</span>
-                  <span className="num shrink-0 text-[11.5px] tabular-nums text-muted">
-                    {dachflaeche(f.punkte, f.neigung).toFixed(1).replace(".", ",")} m²
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {flaeche ? (
-        <Eigenschaften
-          flaeche={flaeche}
-          aendere={aendere}
-          schreibrecht={schreibrecht}
-          onLoeschen={() => {
-            onPlan({ ...plan, flaechen: plan.flaechen.filter((f) => f.id !== flaeche.id) }, true);
-            onAktiv(null);
-          }}
-        />
-      ) : null}
+        ) : null}
+      </div>
     </aside>
   );
 }
@@ -136,17 +146,13 @@ function Eigenschaften({
   const wahr = dachflaeche(flaeche.punkte, flaeche.neigung);
 
   return (
-    <section className="flex flex-col gap-3 border-t border-line pt-4">
-      <h3 className="text-[11px] font-bold uppercase tracking-wide text-muted">
-        {flaeche.name}
-      </h3>
-
+    <section className={`${KARTE} flex flex-col gap-3`}>
       <Feld label="Bezeichnung">
         <input
           value={flaeche.name}
           disabled={!schreibrecht}
           onChange={(e) => aendere((f) => ({ ...f, name: e.target.value }))}
-          className={`${FELD} w-full`}
+          className={FELD}
         />
       </Feld>
 
@@ -160,12 +166,9 @@ function Eigenschaften({
             value={flaeche.neigung}
             disabled={!schreibrecht}
             onChange={(e) =>
-              aendere((f) => ({
-                ...f,
-                neigung: Math.max(0, Math.min(75, Number(e.target.value) || 0)),
-              }))
+              aendere((f) => ({ ...f, neigung: Math.max(0, Math.min(75, Number(e.target.value) || 0)) }))
             }
-            className={`${FELD} num w-full`}
+            className={FELD_NUM}
           />
         </Feld>
         <Feld label="Azimut (°)">
@@ -176,10 +179,8 @@ function Eigenschaften({
             step={1}
             value={Math.round(flaeche.azimut)}
             disabled={!schreibrecht}
-            onChange={(e) =>
-              aendere((f) => ({ ...f, azimut: ((Number(e.target.value) || 0) + 360) % 360 }))
-            }
-            className={`${FELD} num w-full`}
+            onChange={(e) => aendere((f) => ({ ...f, azimut: ((Number(e.target.value) || 0) + 360) % 360 }))}
+            className={FELD_NUM}
           />
         </Feld>
       </div>
@@ -195,12 +196,12 @@ function Eigenschaften({
             const wert = e.target.value === "" ? null : Number(e.target.value);
             aendere((f) => {
               const neu = { ...f, traufe: wert };
-              // Azimut folgt der Traufe — das ist der Sinn der Angabe.
+              // Der Azimut folgt der Traufe — das ist der Sinn der Angabe.
               const abgeleitet = azimutAusTraufe(neu);
               return abgeleitet === null ? neu : { ...neu, azimut: abgeleitet };
             });
           }}
-          className={`${FELD} w-full`}
+          className={FELD}
         >
           <option value="">keine (Flachdach)</option>
           {kanten(flaeche.punkte).map((k) => (
@@ -220,21 +221,18 @@ function Eigenschaften({
           value={flaeche.randabstand}
           disabled={!schreibrecht}
           onChange={(e) =>
-            aendere((f) => ({
-              ...f,
-              randabstand: Math.max(0, Math.min(5, Number(e.target.value) || 0)),
-            }))
+            aendere((f) => ({ ...f, randabstand: Math.max(0, Math.min(5, Number(e.target.value) || 0)) }))
           }
-          className={`${FELD} num w-full`}
+          className={FELD_NUM}
         />
       </Feld>
       {flaeche.neigung === 0 && flaeche.randabstand < 1 ? (
-        <p className="-mt-1.5 text-[11px] text-s-warn">
+        <p className="-mt-1.5 rounded-[10px] bg-pl-hinweis px-2.5 py-1.5 text-[11px] leading-[1.4] text-pl-hinweis-text">
           Flachdächer haben eine Windlast-Randzone; üblich ist 1,00 m. Entscheidet der Betrieb.
         </p>
       ) : null}
 
-      <dl className="rounded-card bg-sunk p-2.5 text-[12px]">
+      <dl className="rounded-[10px] bg-sunk p-2.5 text-[12px]">
         <Zeile label="Grundfläche" wert={`${grund.toFixed(1).replace(".", ",")} m²`} />
         <Zeile label="Dachfläche" wert={`${wahr.toFixed(1).replace(".", ",")} m²`} />
         <Zeile label="Ecken" wert={String(flaeche.punkte.length)} />
@@ -242,10 +240,8 @@ function Eigenschaften({
 
       {flaeche.hindernisse.length > 0 ? (
         <section>
-          <h4 className="text-[11px] font-bold uppercase tracking-wide text-muted">
-            Hindernisse ({flaeche.hindernisse.length})
-          </h4>
-          <ul className="mt-1.5 flex flex-col gap-1">
+          <h4 className="text-[12px] font-bold">Hindernisse ({flaeche.hindernisse.length})</h4>
+          <ul className="mt-1.5 flex flex-col gap-1.5">
             {flaeche.hindernisse.map((h) => (
               <li key={h.id} className="flex items-center gap-2 text-[12.5px]">
                 <span className="min-w-0 flex-1 truncate">{h.name}</span>
@@ -267,16 +263,13 @@ function Eigenschaften({
                       ),
                     }))
                   }
-                  className={`${FELD} num w-[68px] shrink-0`}
+                  className={`${FELD_NUM} h-9 w-[72px] shrink-0 px-2 text-center`}
                 />
                 {schreibrecht ? (
                   <button
                     type="button"
                     onClick={() =>
-                      aendere((f) => ({
-                        ...f,
-                        hindernisse: f.hindernisse.filter((x) => x.id !== h.id),
-                      }))
+                      aendere((f) => ({ ...f, hindernisse: f.hindernisse.filter((x) => x.id !== h.id) }))
                     }
                     className="shrink-0 text-[11.5px] text-muted hover:text-s-crit"
                   >
@@ -321,20 +314,22 @@ function Assistent({
   const [neigung, setNeigung] = useState(30);
 
   return (
-    <section>
+    <section className={KARTE}>
       <button
         type="button"
         onClick={() => setOffen((o) => !o)}
-        className="flex w-full items-center justify-between text-[11px] font-bold uppercase tracking-wide text-muted"
+        className="flex w-full items-center justify-between text-[13px] font-bold"
       >
         Standardform setzen
-        <span aria-hidden>{offen ? "−" : "+"}</span>
+        <span className="text-muted" aria-hidden>
+          {offen ? "−" : "+"}
+        </span>
       </button>
 
       {offen ? (
-        <div className="mt-2 flex flex-col gap-2.5 rounded-card bg-sunk p-2.5">
+        <div className="mt-3 flex flex-col gap-2.5">
           <Feld label="Form">
-            <select value={form} onChange={(e) => setForm(e.target.value as Dachform)} className={`${FELD} w-full`}>
+            <select value={form} onChange={(e) => setForm(e.target.value as Dachform)} className={FELD}>
               {DACHFORMEN.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.label} — {d.hinweis}
@@ -345,37 +340,34 @@ function Assistent({
           <div className="grid grid-cols-2 gap-2.5">
             <Feld label="Länge (m)">
               <input type="number" min={1} step={0.5} value={breite}
-                onChange={(e) => setBreite(Number(e.target.value) || 1)} className={`${FELD} num w-full`} />
+                onChange={(e) => setBreite(Number(e.target.value) || 1)} className={FELD_NUM} />
             </Feld>
             <Feld label="Tiefe (m)">
               <input type="number" min={1} step={0.5} value={tiefe}
-                onChange={(e) => setTiefe(Number(e.target.value) || 1)} className={`${FELD} num w-full`} />
+                onChange={(e) => setTiefe(Number(e.target.value) || 1)} className={FELD_NUM} />
             </Feld>
             <Feld label="Drehung (°)">
               <input type="number" step={1} value={drehung}
-                onChange={(e) => setDrehung(Number(e.target.value) || 0)} className={`${FELD} num w-full`} />
+                onChange={(e) => setDrehung(Number(e.target.value) || 0)} className={FELD_NUM} />
             </Feld>
             <Feld label="Neigung (°)">
               <input type="number" min={0} max={75} step={1} value={neigung}
-                onChange={(e) => setNeigung(Number(e.target.value) || 0)} className={`${FELD} num w-full`} />
+                onChange={(e) => setNeigung(Number(e.target.value) || 0)} className={FELD_NUM} />
             </Feld>
           </div>
-          <Button
+          <button
             type="button"
-            className="self-start"
+            className="flex h-11 items-center justify-center rounded-[10px] bg-accent px-4 font-bold text-white transition-colors hover:bg-accent-to"
             onClick={() => {
-              const neue = dachformFlaechen(
-                { form, breite, tiefe, mitte, drehung, neigung },
-                plan.flaechen,
-              );
+              const neue = dachformFlaechen({ form, breite, tiefe, mitte, drehung, neigung }, plan.flaechen);
               onPlan({ ...plan, flaechen: [...plan.flaechen, ...neue] }, true);
               if (neue[0]) onAktiv(neue[0].id);
               setOffen(false);
             }}
           >
             In die Bildmitte setzen
-          </Button>
-          <p className="text-[11px] text-muted">
+          </button>
+          <p className="text-[11px] leading-[1.45] text-muted">
             Es entstehen normale Flächen — danach frei verschiebbar und editierbar wie
             handgezeichnete.
           </p>
@@ -390,10 +382,10 @@ function himmelsrichtung(azimut: number): string {
   return namen[Math.round((((azimut % 360) + 360) % 360) / 45) % 8]!;
 }
 
-function Feld({ label, children }: { label: string; children: React.ReactNode }) {
+function Feld({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-semibold text-muted">{label}</span>
+      <span className="text-[11.5px] font-semibold text-muted">{label}</span>
       {children}
     </label>
   );

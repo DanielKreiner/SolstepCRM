@@ -812,7 +812,7 @@ export function Leinwand(p: LeinwandProps) {
     <div
       ref={huelle}
       data-testid="planer-leinwand"
-      className="relative h-full w-full overflow-hidden bg-sunk"
+      className="relative h-full w-full overflow-hidden bg-pl-flaeche"
       style={{
         touchAction: "none",
         cursor: p.werkzeug === "auswahl" ? "grab" : "crosshair",
@@ -825,7 +825,7 @@ export function Leinwand(p: LeinwandProps) {
       {maszEingabe ? (
         <form
           className="absolute z-20"
-          style={{ left: maszEingabe.x - 46, top: maszEingabe.y - 15 }}
+          style={{ left: maszEingabe.x - 52, top: maszEingabe.y - 22 }}
           onSubmit={(e) => {
             e.preventDefault();
             const meter = Number(maszEingabe.wert.replace(",", "."));
@@ -846,7 +846,7 @@ export function Leinwand(p: LeinwandProps) {
             onChange={(e) => setMaszEingabe({ ...maszEingabe, wert: e.target.value })}
             onBlur={() => setMaszEingabe(null)}
             onKeyDown={(e) => e.key === "Escape" && setMaszEingabe(null)}
-            className="num h-[30px] w-[92px] rounded-pill border-2 border-accent bg-surface px-3 text-center text-[12px] tabular-nums outline-none"
+            className="num h-11 w-[104px] rounded-[10px] border-2 border-accent bg-surface px-3 text-center text-[14px] tabular-nums outline-none shadow-soft"
           />
         </form>
       ) : null}
@@ -894,7 +894,7 @@ export function Leinwand(p: LeinwandProps) {
             anstossen();
           }}
         >
-          <div className="rounded-card border border-accent bg-surface p-2 shadow-soft">
+          <div className="rounded-[12px] border border-pl-mess bg-surface p-3 shadow-soft">
             <p className="mb-1 text-[11px] text-muted">
               {kalibrierEingabe.art === "kalibrieren" ? "Wahre Länge dieser Strecke" : "Wahre Länge der Gegenprobe"}
             </p>
@@ -914,7 +914,7 @@ export function Leinwand(p: LeinwandProps) {
                   setKalibrierEingabe(null);
                 }
               }}
-              className="num h-8 w-[176px] rounded-input border border-line bg-sunk px-2 text-center text-[13px] tabular-nums outline-none focus:border-accent"
+              className="num h-11 w-[176px] rounded-[10px] border border-line bg-surface px-3 text-center text-[15px] tabular-nums outline-none focus:border-accent"
             />
           </div>
         </form>
@@ -922,7 +922,7 @@ export function Leinwand(p: LeinwandProps) {
 
       {kachelFehler ? (
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
-          <p className="rounded-pill bg-surface/95 px-3 py-1.5 text-[12.5px] shadow-soft">
+          <p className="rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3.5 py-1.5 text-[12.5px] text-pl-auf-dunkel backdrop-blur-md">
             {quelle.label} liefert gerade keine Bilder — anderen Anbieter wählen.
           </p>
         </div>
@@ -934,45 +934,65 @@ export function Leinwand(p: LeinwandProps) {
         der Hinweis verdeckte die Ablehnung, auf die es gerade ankommt.
       */}
       {!meldung && (p.werkzeug !== "auswahl" || entwurfLaenge > 0) ? (
-        <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
-          <p className="rounded-pill bg-surface/95 px-3 py-1.5 text-[12.5px] shadow-soft">
+        /*
+          Grosser, mittiger Hinweis wie im Entwurf — nicht als kleine
+          Pille am Rand. Beim Zeichnen schaut der Nutzer auf die Mitte
+          der Fläche, nicht auf die Randleisten.
+        */
+        <div className="pointer-events-none absolute left-1/2 top-[38%] z-10 w-[min(420px,80%)] -translate-x-1/2 -translate-y-1/2 text-center">
+          <p
+            className="text-[19px] font-bold text-pl-auf-dunkel"
+            style={{ textShadow: "0 2px 12px rgba(0,0,0,.6)" }}
+          >
+            {p.werkzeug === "flaeche"
+              ? "Zeichne die Dachfläche"
+              : p.werkzeug === "hindernis"
+                ? "Hindernis aufziehen"
+                : p.werkzeug === "messen"
+                  ? "Strecke messen"
+                  : p.werkzeug === "kalibrieren"
+                    ? "Foto kalibrieren"
+                    : "Gegenprobe"}
+          </p>
+          <p
+            className="mt-1.5 text-[13px] text-pl-auf-dunkel-2"
+            style={{ textShadow: "0 2px 12px rgba(0,0,0,.6)" }}
+          >
             {p.werkzeug === "flaeche"
               ? entwurfLaenge >= 3
                 ? "Auf den ersten Punkt tippen oder Enter — schliesst die Fläche. Esc bricht ab."
                 : "Ecken antippen. Ab drei Punkten lässt sich die Fläche schliessen."
               : p.werkzeug === "hindernis"
-                ? "Rechteck über das Hindernis ziehen — Kamin, Fenster, Gaube."
+                ? "Rechteck über Kamin, Fenster oder Gaube ziehen."
                 : p.werkzeug === "messen"
                   ? "Strecke ziehen. Esc beendet das Messen."
                   : p.werkzeug === "kalibrieren"
                     ? "Eine Strecke ziehen, deren wahre Länge du kennst — Firstlänge, Garagentor, Auto."
-                    : p.werkzeug === "gegenprobe"
-                      ? "Zweite Strecke QUER zur ersten ziehen. Weicht sie ab, ist das Foto schräg aufgenommen."
-                      : ""}
+                    : "Zweite Strecke QUER zur ersten ziehen. Weicht sie ab, ist das Foto schräg aufgenommen."}
           </p>
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute bottom-3 left-3 flex items-end gap-3">
-        <div className="rounded-card bg-surface/90 px-2.5 py-1.5 shadow-soft">
+      <div className="pointer-events-none absolute bottom-3.5 left-3 z-10 flex items-end gap-2">
+        <div className="rounded-[12px] border border-pl-chrome-linie bg-pl-chrome px-2.5 py-1.5 backdrop-blur-md">
           <div
-            className="border-b-2 border-l-2 border-r-2 border-ink/70"
+            className="border-b-2 border-l-2 border-r-2 border-pl-auf-dunkel-2"
             style={{ width: `${Math.round(anzeige.leiste.punkte)}px`, height: "6px" }}
           />
-          <p className="num mt-1 text-[11px] tabular-nums text-muted">{anzeige.leiste.meter} m</p>
+          <p className="num mt-1 text-[11px] tabular-nums text-pl-auf-dunkel-2">{anzeige.leiste.meter} m</p>
         </div>
         {zeigerMeter ? (
-          <p className="num rounded-pill bg-surface/90 px-2.5 py-1 text-[11px] tabular-nums text-muted shadow-soft">
+          <p className="num rounded-pill border border-pl-chrome-linie bg-pl-chrome px-2.5 py-1 text-[11px] tabular-nums text-pl-auf-dunkel-2 backdrop-blur-md">
             {zeigerMeter.x.toFixed(1)} / {zeigerMeter.y.toFixed(1)} m
           </p>
         ) : null}
         {fangHinweis ? (
-          <p className="rounded-pill bg-accent px-2.5 py-1 text-[11px] font-semibold text-white shadow-soft">
+          <p className="rounded-pill border border-pl-mess bg-pl-mess-flaeche px-2.5 py-1 text-[11px] font-semibold text-pl-mess backdrop-blur-md">
             {fangHinweis}
           </p>
         ) : null}
         {messung.current ? (
-          <p className="num rounded-pill bg-surface/90 px-2.5 py-1 text-[11px] tabular-nums shadow-soft">
+          <p className="num rounded-pill border border-pl-mess bg-pl-mess-flaeche px-2.5 py-1 text-[11px] tabular-nums text-pl-mess backdrop-blur-md">
             {meterText(laenge(messung.current.von, messung.current.nach))}
           </p>
         ) : null}
@@ -983,7 +1003,7 @@ export function Leinwand(p: LeinwandProps) {
         weiterhin „basemap.at" — eine Zuschreibung an einen Anbieter,
         dessen Bild gar nicht zu sehen ist.
       */}
-      <p className="pointer-events-none absolute bottom-3 right-3 text-[11px] text-muted/80">
+      <p className="pointer-events-none absolute bottom-3 right-3 text-[10px] text-pl-auf-dunkel-4">
         {p.foto ? "eigenes Drohnenfoto" : quelle.quelle}
       </p>
     </div>

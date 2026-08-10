@@ -70,8 +70,13 @@ export function FotoLeiste({
 
   if (!foto) {
     return (
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1.5">
-        <form ref={formular} action={hochladen} className="flex items-center gap-2">
+      <section className="rounded-[12px] border border-line bg-surface p-3.5">
+        <h3 className="text-[13px] font-bold">Bildquelle</h3>
+        <p className="mt-1 text-[12px] leading-[1.45] text-muted">
+          Standard ist das Luftbild. Ein Drohnenfoto ist schärfer und aktueller — es braucht
+          danach eine Kalibrierung.
+        </p>
+        <form ref={formular} action={hochladen} className="mt-2.5 flex items-center gap-2">
           <input type="hidden" name="id" value={projektId} />
           <input ref={breiteFeld} type="hidden" name="breite" defaultValue="0" />
           <input ref={hoeheFeld} type="hidden" name="hoehe" defaultValue="0" />
@@ -82,16 +87,14 @@ export function FotoLeiste({
             accept="image/jpeg,image/png,image/webp"
             aria-label="Drohnenfoto hochladen"
             onChange={gewaehlt}
-            className="text-[12px] text-muted file:mr-2 file:rounded-pill file:border file:border-line file:bg-surface file:px-3 file:py-1 file:text-[12.5px] file:text-ink"
+            className="w-full text-[12px] text-muted file:mr-2 file:h-9 file:rounded-[10px] file:border file:border-line file:bg-sunk file:px-3 file:text-[12.5px] file:font-semibold file:text-ink"
           />
         </form>
-        <span className="text-[11.5px] text-muted">
-          {laedt ? "lädt hoch …" : "oder ein Drohnenfoto statt der Karte verwenden"}
-        </span>
+        {laedt ? <p className="mt-1.5 text-[11.5px] text-muted">lädt hoch …</p> : null}
         {hochStand.error ? (
-          <span className="text-[12px] font-semibold text-s-crit">{hochStand.error}</span>
+          <p className="mt-1.5 text-[12px] font-semibold text-s-crit">{hochStand.error}</p>
         ) : null}
-      </div>
+      </section>
     );
   }
 
@@ -99,7 +102,9 @@ export function FotoLeiste({
   const mpp = foto.meterProPixel ?? vorlaeufigerMassstab(foto.breite);
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1.5">
+    <section className="rounded-[12px] border border-pl-mess bg-surface p-3.5">
+      <div className="flex items-center gap-2">
+      <h3 className="text-[13px] font-bold">Drohnenfoto</h3>
       <span
         className={[
           "rounded-pill px-2.5 py-0.5 text-[11.5px] font-semibold",
@@ -108,18 +113,21 @@ export function FotoLeiste({
       >
         {kalibriert ? "kalibriert" : "nicht kalibriert"}
       </span>
+      </div>
 
-      <span className="num text-[11.5px] tabular-nums text-muted">
+      <p className="num mt-1.5 text-[11.5px] tabular-nums text-muted">
         {(mpp * 100).toFixed(2).replace(".", ",")} cm je Bildpunkt
         {kalibriert ? "" : " (geschätzt)"}
-      </span>
+      </p>
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
 
       <button
         type="button"
         onClick={() => onWerkzeug(werkzeug === "kalibrieren" ? "auswahl" : "kalibrieren")}
         aria-pressed={werkzeug === "kalibrieren"}
         className={[
-          "rounded-pill border px-3 py-1 text-[12.5px]",
+          "h-9 rounded-[10px] border px-3 text-[12.5px]",
           werkzeug === "kalibrieren" ? "border-accent bg-accent-sunk font-semibold" : "border-line",
         ].join(" ")}
       >
@@ -133,7 +141,7 @@ export function FotoLeiste({
         onClick={() => onWerkzeug(werkzeug === "gegenprobe" ? "auswahl" : "gegenprobe")}
         aria-pressed={werkzeug === "gegenprobe"}
         className={[
-          "rounded-pill border px-3 py-1 text-[12.5px]",
+          "h-9 rounded-[10px] border px-3 text-[12.5px]",
           werkzeug === "gegenprobe" ? "border-accent bg-accent-sunk font-semibold" : "border-line",
           kalibriert ? "" : "cursor-not-allowed text-muted/45",
         ].join(" ")}
@@ -141,7 +149,9 @@ export function FotoLeiste({
         Gegenprobe
       </button>
 
-      <form action={entfernen} className="ml-auto">
+      </div>
+
+      <form action={entfernen} className="mt-2.5">
         <input type="hidden" name="id" value={projektId} />
         <button type="submit" disabled={entfernt} className="text-[12px] text-muted hover:text-s-crit">
           {entfernt ? "entfernt …" : "Foto entfernen"}
@@ -152,11 +162,11 @@ export function FotoLeiste({
         <span className="text-[12px] font-semibold text-s-crit">{wegStand.error}</span>
       ) : null}
       {!kalibriert ? (
-        <p className="w-full text-[11.5px] text-muted">
+        <p className="mt-2 text-[11.5px] leading-[1.45] text-muted">
           Ohne Kalibrierung sind alle Längen im Bild geschätzt. Eine Strecke ziehen, deren wahres
           Mass bekannt ist — Firstlänge, Garagentor, ein Auto.
         </p>
       ) : null}
-    </div>
+    </section>
   );
 }

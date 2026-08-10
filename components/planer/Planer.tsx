@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type FotoQuelle, Leinwand, type Werkzeug } from "./Leinwand";
-import { FotoLeiste } from "./FotoLeiste";
 import { FlaechenPanel } from "./FlaechenPanel";
+import { FotoLeiste } from "./FotoLeiste";
 import { ansichtMerken, fotoKalibrieren, planSpeichern } from "@/app/(app)/planer/actions";
 import {
   ANBIETER,
@@ -13,7 +13,7 @@ import {
   anbieter as anbieterZu,
 } from "@/lib/planer/anbieter";
 import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
-import { FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
+import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
 import type { Plan } from "@/lib/planer/plan";
 import {
   kannVor,
@@ -27,13 +27,16 @@ import {
 } from "@/lib/planer/verlauf";
 
 /*
- * Rahmen um die Zeichenfläche: Kopfleiste, Phasenleiste, Werkzeuge,
- * Leinwand, Panel. Aufbau nach Planer-HTML.html.
+ * Rahmen um die Zeichenfläche. Aufbau, Masse und Farben stammen aus
+ * Planer-HTML.html — dem verbindlichen Entwurf:
  *
- * Die Phasen stehen vollständig da, obwohl erst zwei davon greifen. Das
- * ist Absicht: der Nutzer soll sehen, wie weit der Weg ist. Was noch
- * nicht geht, ist als „folgt" markiert und nicht anklickbar — kein
- * Knopf, der ins Leere führt.
+ *   Kopf 56 px hell · Stepper 76 px hell · Zeichenfläche DUNKEL
+ *   (#17150F) · Panel 344 px hell
+ *
+ * Die Bedienung auf der Zeichenfläche SCHWEBT darüber, statt sie zu
+ * umrahmen: Werkzeuge links, Kennzahlen unten mittig, beides in
+ * halbdurchsichtigem Dunkel mit Weichzeichner. Das hält die Karte gross
+ * — sie ist der Arbeitsgegenstand, nicht die Umrandung.
  */
 
 export interface PlanerProjekt {
@@ -48,18 +51,18 @@ export interface PlanerProjekt {
 }
 
 const PHASEN = [
-  { nr: 1, kurz: "01", label: "Dach", fertig: true },
-  { nr: 2, kurz: "02", label: "Belegung", fertig: false },
-  { nr: 3, kurz: "03", label: "Technik", fertig: false },
-  { nr: 4, kurz: "04", label: "Ertrag", fertig: false },
-  { nr: 5, kurz: "05", label: "Übergabe", fertig: false },
+  { nr: 1, mark: "1", label: "Dach", fertig: true },
+  { nr: 2, mark: "2", label: "Belegung", fertig: false },
+  { nr: 3, mark: "3", label: "Technik", fertig: false },
+  { nr: 4, mark: "4", label: "Ertrag", fertig: false },
+  { nr: 5, mark: "5", label: "Übergabe", fertig: false },
 ];
 
-const WERKZEUGE: Array<{ id: Werkzeug; label: string; kurz: string }> = [
-  { id: "auswahl", label: "Auswählen und bearbeiten", kurz: "Auswahl" },
-  { id: "flaeche", label: "Dachfläche zeichnen", kurz: "Fläche" },
-  { id: "hindernis", label: "Hindernis aufziehen (Kamin, Fenster)", kurz: "Hindernis" },
-  { id: "messen", label: "Strecke messen", kurz: "Messen" },
+const WERKZEUGE: Array<{ id: Werkzeug; glyph: string; label: string; titel: string }> = [
+  { id: "auswahl", glyph: "↖", label: "Wählen", titel: "Auswählen und bearbeiten" },
+  { id: "flaeche", glyph: "⬠", label: "Fläche", titel: "Dachfläche zeichnen" },
+  { id: "hindernis", glyph: "▣", label: "Hindernis", titel: "Hindernis aufziehen (Kamin, Fenster)" },
+  { id: "messen", glyph: "↔", label: "Messen", titel: "Strecke messen" },
 ];
 
 export function Planer({
@@ -78,17 +81,15 @@ export function Planer({
   const [fang, setFang] = useState<FangOptionen>(FANG_STANDARD);
   const [gemerkt, setGemerkt] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
   const [mitte, setMitte] = useState<Meter>({ x: 0, y: 0 });
-  /* Unter lg liegt das Panel über der Karte statt daneben — bei 834 px
-     blieben sonst von der Zeichenfläche keine 250 px übrig. */
-  const [panelOffen, setPanelOffen] = useState(false);
+  const [panelOffen, setPanelOffen] = useState(true);
   const [foto, setFoto] = useState<FotoQuelle | null>(projekt.foto);
 
   /*
    * Hochladen und Entfernen laufen über Serveraktionen mit
-   * revalidatePath; der neue Stand kommt also als Eigenschaft herein.
+   * revalidatePath; der neue Stand kommt als Eigenschaft herein.
    * Abhängig NUR von Adresse und Bildmassen, nicht vom Massstab: eine
    * gerade vorgenommene Kalibrierung darf ein nachlaufender
-   * Serverdurchlauf nicht wieder überschreiben.
+   * Serverdurchlauf nicht überschreiben.
    */
   useEffect(() => {
     setFoto(projekt.foto);
@@ -101,8 +102,7 @@ export function Planer({
   /*
    * Autosave, gedrosselt und ohne Speichern-Knopf (Briefing 1.4).
    * Ansicht und Plan laufen getrennt: die Ansicht ändert sich bei jedem
-   * Schwenk, der Plan nur beim Bearbeiten — beides in einen Schreibvorgang
-   * zu werfen hiesse, bei jedem Zoomen das ganze Dokument zu senden.
+   * Schwenk, der Plan nur beim Bearbeiten.
    */
   const letzteAnsicht = useRef({ anbieter: projekt.anbieter, zoom: projekt.zoom });
   const ansichtUhr = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -176,7 +176,6 @@ export function Planer({
     });
   }, [planSichern]);
 
-  /* Cmd/Strg+Z und Umschalt dazu — überall im Planer. */
   useEffect(() => {
     const taste = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
@@ -189,12 +188,6 @@ export function Planer({
     return () => window.removeEventListener("keydown", taste);
   }, [schrittVor, schrittZurueck]);
 
-  /*
-   * Nachkalibrieren skaliert die vorhandene Geometrie mit — sonst
-   * stünden Dachflächen, die auf dem falschen Massstab gezeichnet
-   * wurden, plötzlich neben dem Haus. Gefragt wird nur, wenn schon
-   * etwas gezeichnet ist und der Massstab sich wirklich ändert.
-   */
   const onKalibriert = useCallback(
     async (meterProPixel: number, faktor: number) => {
       const schonGezeichnet = plan.flaechen.length > 0;
@@ -211,17 +204,14 @@ export function Planer({
 
       /*
        * Zoom gegenläufig nachführen. Mit dem Massstab ändert sich, wie
-       * viele Meter das Foto abdeckt — ohne Ausgleich schrumpft oder
-       * wächst es beim Kalibrieren schlagartig, und der Nutzer sucht die
-       * Stelle wieder, an der er gerade gemessen hat.
-       *
-       * Nebeneffekt, der fachlich zählt: danach entspricht dieselbe
-       * Strecke auf dem Schirm wieder derselben Stelle im Bild. Nur so
-       * misst die Gegenprobe wirklich das Foto und nicht die Kamera.
+       * viele Meter das Foto abdeckt — ohne Ausgleich springt es beim
+       * Kalibrieren in der Grösse. Und nur so misst die Gegenprobe das
+       * Foto und nicht die Kamera.
        */
       setZoom((z) =>
         Math.max(ZOOM_GRENZEN.min, Math.min(ZOOM_GRENZEN.max, z - Math.log2(faktor))),
       );
+
       setGemerkt("speichert");
       const { ok } = await fotoKalibrieren({
         id: projekt.id,
@@ -259,24 +249,32 @@ export function Planer({
   );
 
   const verfuegbar = (id: AnbieterId) => staende.find((s) => s.id === id)?.verfuegbar ?? false;
+  const fangAn = fang.rechterWinkel || fang.parallel || fang.raster;
+
+  /* Kennzahlenleiste. Ab Stufe 3 kommen Module, kWp und Ertrag dazu. */
+  const dach = plan.flaechen.reduce((s, f) => s + dachflaeche(f.punkte, f.neigung), 0);
+  const kennzahlen = [
+    { wert: String(plan.flaechen.length), label: "FLÄCHEN" },
+    { wert: `${dach.toFixed(0)} m²`, label: "DACHFLÄCHE" },
+    {
+      wert: String(plan.flaechen.reduce((s, f) => s + f.hindernisse.length, 0)),
+      label: "HINDERNISSE",
+    },
+  ];
 
   return (
-    <div className="flex h-full min-h-[520px] flex-col">
-      {/*
-        Kopfleiste bricht nicht um: sie ist 56 px hoch, ein Umbruch schob
-        Zoom und Sicherungsanzeige hinter die Karte. Auf schmalen Geräten
-        fallen stattdessen die entbehrlichen Teile weg.
-      */}
+    <div className="flex h-full min-h-[520px] flex-col overflow-hidden rounded-card border border-line">
+      {/* ── Kopf, 56 px ────────────────────────────────────────────── */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-panel px-4">
         <Link
           href="/planer"
-          className="shrink-0 text-[18px] leading-none text-muted hover:text-ink"
+          className="shrink-0 text-[17px] leading-none text-muted hover:text-ink"
           aria-label="Zurück zur Projektliste"
         >
           ←
         </Link>
         <div className="min-w-[72px] flex-1">
-          <p className="truncate text-[14.5px] font-bold leading-tight">{projekt.name}</p>
+          <p className="truncate text-[15px] font-bold leading-tight">{projekt.name}</p>
           {projekt.adresse ? (
             <p className="hidden truncate text-[12px] leading-tight text-muted md:block">
               {projekt.adresse}
@@ -285,19 +283,9 @@ export function Planer({
         </div>
 
         {schreibrecht ? (
-          <div className="hidden shrink-0 items-center gap-1 md:flex">
-            <KopfKnopf
-              zeichen="↺"
-              beschriftung="Rückgängig"
-              aus={!kannZurueck(verlauf)}
-              onClick={schrittZurueck}
-            />
-            <KopfKnopf
-              zeichen="↻"
-              beschriftung="Wiederholen"
-              aus={!kannVor(verlauf)}
-              onClick={schrittVor}
-            />
+          <div className="hidden shrink-0 items-center gap-1.5 md:flex">
+            <RundKnopf zeichen="↺" beschriftung="Rückgängig" aus={!kannZurueck(verlauf)} onClick={schrittZurueck} />
+            <RundKnopf zeichen="↻" beschriftung="Wiederholen" aus={!kannVor(verlauf)} onClick={schrittVor} />
           </div>
         ) : null}
 
@@ -314,205 +302,218 @@ export function Planer({
           />
         )}
 
-        <div className="hidden shrink-0 items-center gap-1 sm:flex">
-          <KopfKnopf zeichen="−" beschriftung="Weiter weg"
-            onClick={() => setZoom((z) => Math.max(ZOOM_GRENZEN.min, z - 1))} />
-          <span className="num w-14 text-center text-[12px] tabular-nums text-muted">
+        <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
+          <RundKnopf
+            zeichen="−"
+            beschriftung="Weiter weg"
+            onClick={() => setZoom((z) => Math.max(ZOOM_GRENZEN.min, z - 1))}
+          />
+          <span className="num w-12 text-center text-[11px] tabular-nums text-muted">
             {zoom.toFixed(1)}
           </span>
-          <KopfKnopf zeichen="+" beschriftung="Näher heran"
-            onClick={() => setZoom((z) => Math.min(ZOOM_GRENZEN.max, z + 1))} />
+          <RundKnopf
+            zeichen="+"
+            beschriftung="Näher heran"
+            onClick={() => setZoom((z) => Math.min(ZOOM_GRENZEN.max, z + 1))}
+          />
         </div>
 
-        <span className="hidden w-24 shrink-0 text-right text-[12px] text-muted lg:block" aria-live="polite">
-          {gemerkt === "speichert" ? "sichert …" : gemerkt === "fehler" ? "nicht gesichert" : "gesichert"}
-        </span>
+        {/* Sicherungsanzeige wie im Entwurf: Punkt plus Wort. */}
+        <div className="flex shrink-0 items-center gap-1.5 px-1" aria-live="polite">
+          <span
+            className="h-[7px] w-[7px] rounded-pill"
+            style={{
+              background:
+                gemerkt === "fehler"
+                  ? "var(--s-crit)"
+                  : gemerkt === "speichert"
+                    ? "var(--s-warn)"
+                    : "var(--s-done)",
+            }}
+          />
+          <span className="hidden text-[12px] text-muted lg:inline">
+            {gemerkt === "speichert" ? "sichert" : gemerkt === "fehler" ? "nicht gesichert" : "gesichert"}
+          </span>
+        </div>
       </header>
 
       <div className="relative flex min-h-0 flex-1">
+        {/* ── Stepper, 76 px ───────────────────────────────────────── */}
         <nav
-          className="hidden w-[76px] shrink-0 flex-col gap-4 border-r border-line bg-panel py-5 sm:flex"
+          className="z-20 hidden w-[var(--pl-stepper-breite)] shrink-0 flex-col items-center gap-1 border-r border-line bg-panel pt-3.5 sm:flex"
           aria-label="Planungsphasen"
         >
           {PHASEN.map((ph) => (
-            <div key={ph.nr} className="px-2 text-center">
-              <p className={`num text-[13px] font-bold ${ph.fertig ? "text-accent-ink" : "text-muted/60"}`}>
-                {ph.kurz}
-              </p>
-              <p className={`text-[11px] ${ph.fertig ? "text-ink" : "text-muted/60"}`}>{ph.label}</p>
-              {!ph.fertig ? <p className="text-[9.5px] text-muted/50">folgt</p> : null}
+            <div
+              key={ph.nr}
+              className={[
+                "flex w-16 flex-col items-center gap-1 rounded-[11px] pb-[7px] pt-[9px]",
+                ph.fertig ? "bg-accent-sunk" : "",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "num flex h-[26px] w-[26px] items-center justify-center rounded-pill border-[1.5px] text-[12px] font-bold",
+                  ph.fertig
+                    ? "border-accent bg-accent text-white"
+                    : "border-line-strong/40 bg-surface text-muted",
+                ].join(" ")}
+              >
+                {ph.mark}
+              </span>
+              <span className={`text-[10px] font-semibold ${ph.fertig ? "text-ink" : "text-muted/70"}`}>
+                {ph.label}
+              </span>
+              {!ph.fertig ? <span className="text-[9px] text-muted/50">folgt</span> : null}
             </div>
           ))}
         </nav>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Werkzeugleiste
-            werkzeug={werkzeug}
-            onWerkzeug={setWerkzeug}
-            fang={fang}
-            onFang={setFang}
-            hatFlaeche={plan.flaechen.length > 0}
-            hatAuswahl={aktiv !== null}
-            schreibrecht={schreibrecht}
-            anzahl={plan.flaechen.length}
-            onPanel={() => setPanelOffen((o) => !o)}
-          />
-
-          {schreibrecht ? (
-            <FotoLeiste
-              projektId={projekt.id}
+        {/* ── Zeichenfläche, dunkel ────────────────────────────────── */}
+        <div className="relative min-w-0 flex-1 bg-pl-flaeche">
+          {foto || verfuegbar(anbieter) ? (
+            <Leinwand
+              ursprung={projekt.ursprung}
+              anbieter={anbieter}
+              zoom={zoom}
+              plan={plan}
+              werkzeug={schreibrecht ? werkzeug : "auswahl"}
+              fang={fang}
               foto={foto}
-              werkzeug={werkzeug}
+              onKalibriert={onKalibriert}
+              aktiv={aktiv}
+              onAktiv={setAktiv}
+              onPlan={onPlan}
               onWerkzeug={setWerkzeug}
+              onKamera={onKamera}
             />
+          ) : (
+            <NichtEingerichtet stand={staende.find((s) => s.id === anbieter)} />
+          )}
+
+          {/* Werkzeugpalette, schwebend links */}
+          {schreibrecht ? (
+            <div
+              className="absolute left-3 top-3.5 z-10 flex flex-col gap-1.5 rounded-[14px] border border-pl-chrome-linie bg-pl-chrome p-2 backdrop-blur-md"
+              role="group"
+              aria-label="Werkzeug"
+            >
+              {WERKZEUGE.map((w) => {
+                const gesperrt = w.id === "hindernis" && (plan.flaechen.length === 0 || !aktiv);
+                const an = werkzeug === w.id;
+                return (
+                  <button
+                    key={w.id}
+                    type="button"
+                    disabled={gesperrt}
+                    title={gesperrt ? "Zuerst eine Dachfläche auswählen." : w.titel}
+                    aria-label={w.titel}
+                    aria-pressed={an}
+                    onClick={() => setWerkzeug(w.id)}
+                    className={[
+                      "flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-[10px] transition-colors",
+                      an
+                        ? "bg-accent text-white"
+                        : gesperrt
+                          ? "cursor-not-allowed text-pl-auf-dunkel-4"
+                          : "text-pl-auf-dunkel-2 hover:bg-white/10",
+                    ].join(" ")}
+                  >
+                    <span className="text-[16px] leading-none">{w.glyph}</span>
+                    <span className="text-[8px] font-semibold tracking-[0.02em]">{w.label}</span>
+                  </button>
+                );
+              })}
+
+              <span className="mx-1 my-0.5 h-px bg-pl-chrome-linie" />
+
+              <button
+                type="button"
+                aria-pressed={fangAn}
+                title="Rechte Winkel, Parallelität und 5-cm-Raster"
+                aria-label="Fanghilfen"
+                onClick={() =>
+                  setFang((f) =>
+                    fangAn ? { ...f, rechterWinkel: false, parallel: false, raster: false } : FANG_STANDARD,
+                  )
+                }
+                className={[
+                  "flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-[10px] transition-colors",
+                  fangAn
+                    ? "bg-pl-mess-flaeche text-pl-mess"
+                    : "text-pl-auf-dunkel-4 hover:bg-white/10",
+                ].join(" ")}
+              >
+                <span className="text-[16px] leading-none">⊹</span>
+                <span className="text-[8px] font-semibold tracking-[0.02em]">Fang</span>
+              </button>
+            </div>
           ) : null}
 
-          <div className="relative min-h-0 flex-1">
-            {foto || verfuegbar(anbieter) ? (
-              <Leinwand
-                ursprung={projekt.ursprung}
-                anbieter={anbieter}
-                zoom={zoom}
-                plan={plan}
-                werkzeug={schreibrecht ? werkzeug : "auswahl"}
-                fang={fang}
-                foto={foto}
-                onKalibriert={onKalibriert}
-                aktiv={aktiv}
-                onAktiv={setAktiv}
-                onPlan={onPlan}
-                onWerkzeug={setWerkzeug}
-                onKamera={onKamera}
-              />
-            ) : (
-              <NichtEingerichtet stand={staende.find((s) => s.id === anbieter)} />
-            )}
+          {/* Kennzahlen, schwebend unten mittig */}
+          <div className="pointer-events-none absolute bottom-3.5 left-1/2 z-10 flex -translate-x-1/2 items-stretch rounded-[14px] border border-pl-chrome-linie bg-pl-chrome px-1.5 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,.4)] backdrop-blur-md">
+            {kennzahlen.map((k) => (
+              <div
+                key={k.label}
+                className="min-w-[92px] whitespace-nowrap border-r border-pl-chrome-linie px-[17px] text-center last:border-r-0"
+              >
+                <div className="num text-[19px] font-bold leading-none text-pl-auf-dunkel">{k.wert}</div>
+                <div className="mt-1 text-[10px] font-semibold tracking-[0.04em] text-pl-auf-dunkel-3">
+                  {k.label}
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center pl-3 pr-1">
+              <span className="w-[62px] text-[10px] leading-[1.25] text-pl-auf-dunkel-4">
+                Richtwerte, unverbindlich
+              </span>
+            </div>
           </div>
 
-        </div>
-
-        {/*
-          EIN Panel, nicht zwei. Zwei Instanzen — eine angedockt, eine
-          überlagert — standen beide im DOM: jedes Feld doppelt, jede
-          Beschriftung mehrdeutig. Stattdessen wechselt derselbe Knoten
-          per Klassen zwischen „daneben" und „darüber".
-        */}
-        <div
-          className={[
-            "shrink-0 lg:static lg:flex lg:shadow-none",
-            panelOffen
-              ? "absolute inset-y-0 right-0 z-30 flex w-[300px] max-w-[86%] shadow-soft"
-              : "hidden",
-          ].join(" ")}
-        >
-          <FlaechenPanel
-            plan={plan}
-            aktiv={aktiv}
-            onAktiv={setAktiv}
-            onPlan={onPlan}
-            mitte={mitte}
-            schreibrecht={schreibrecht}
-            onSchliessen={() => setPanelOffen(false)}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Werkzeugleiste({
-  werkzeug,
-  onWerkzeug,
-  fang,
-  onFang,
-  hatFlaeche,
-  hatAuswahl,
-  schreibrecht,
-  anzahl,
-  onPanel,
-}: {
-  werkzeug: Werkzeug;
-  onWerkzeug: (w: Werkzeug) => void;
-  fang: FangOptionen;
-  onFang: (f: FangOptionen) => void;
-  hatFlaeche: boolean;
-  hatAuswahl: boolean;
-  schreibrecht: boolean;
-  anzahl: number;
-  onPanel: () => void;
-}) {
-  const alleAus = !fang.rechterWinkel && !fang.parallel && !fang.raster;
-
-  return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-2">
-      {/* Ohne Schreibrecht bleibt die Werkzeugleiste leer bis auf den
-          Panel-Schalter — ansehen darf man den Plan trotzdem. */}
-      <div
-        className={`gap-0.5 rounded-pill bg-sunk p-0.5 ${schreibrecht ? "flex" : "hidden"}`}
-        role="group"
-        aria-label="Werkzeug"
-      >
-        {WERKZEUGE.map((w) => {
-          // Ein Hindernis braucht eine Fläche, auf der es liegen kann.
-          const gesperrt = w.id === "hindernis" && (!hatFlaeche || !hatAuswahl);
-          return (
+          {/* Griff zum Ausklappen, wenn das Panel zu ist */}
+          {!panelOffen ? (
             <button
-              key={w.id}
               type="button"
-              title={gesperrt ? "Zuerst eine Dachfläche auswählen." : w.label}
-              aria-label={w.label}
-              aria-pressed={werkzeug === w.id}
-              disabled={gesperrt}
-              onClick={() => onWerkzeug(w.id)}
-              className={[
-                "rounded-pill px-3 py-1 text-[12.5px] transition-colors",
-                werkzeug === w.id ? "bg-surface font-semibold shadow-soft" : "",
-                gesperrt ? "cursor-not-allowed text-muted/45" : "hover:bg-surface/70",
-              ].join(" ")}
+              onClick={() => setPanelOffen(true)}
+              aria-label="Seitenleiste öffnen"
+              className="absolute right-0 top-1/2 z-10 flex h-[88px] w-[30px] -translate-y-1/2 items-center justify-center rounded-l-[12px] bg-panel text-[15px] font-bold text-muted shadow-[-4px_0_14px_rgba(0,0,0,.3)]"
             >
-              {w.kurz}
+              ‹
             </button>
-          );
-        })}
+          ) : null}
+        </div>
+
+        {/* ── Panel, 344 px ───────────────────────────────────────── */}
+        {panelOffen ? (
+          <div className="absolute inset-y-0 right-0 z-30 flex w-[var(--pl-panel-breite)] max-w-[86%] shadow-soft lg:static lg:z-auto lg:shadow-none">
+            <FlaechenPanel
+              plan={plan}
+              aktiv={aktiv}
+              onAktiv={setAktiv}
+              onPlan={onPlan}
+              mitte={mitte}
+              schreibrecht={schreibrecht}
+              onSchliessen={() => setPanelOffen(false)}
+              foto={
+                schreibrecht ? (
+                  <FotoLeiste
+                    projektId={projekt.id}
+                    foto={foto}
+                    werkzeug={werkzeug}
+                    onWerkzeug={setWerkzeug}
+                  />
+                ) : null
+              }
+            />
+          </div>
+        ) : null}
       </div>
-
-      <button
-        type="button"
-        onClick={onPanel}
-        className="rounded-pill border border-line px-3 py-1 text-[12.5px] lg:hidden"
-      >
-        Flächen ({anzahl})
-      </button>
-
-      <button
-        type="button"
-        aria-pressed={!alleAus}
-        hidden={!schreibrecht}
-        onClick={() =>
-          onFang(
-            alleAus
-              ? FANG_STANDARD
-              : { ...fang, rechterWinkel: false, parallel: false, raster: false },
-          )
-        }
-        title="Rechte Winkel, Parallelität und 5-cm-Raster"
-        className={[
-          "rounded-pill border px-3 py-1 text-[12.5px] transition-colors",
-          alleAus ? "border-line text-muted" : "border-accent bg-accent-sunk font-semibold",
-        ].join(" ")}
-      >
-        Fang {alleAus ? "aus" : "an"}
-      </button>
-
-      <p className="hidden text-[11.5px] text-muted xl:block">
-        Doppeltipp auf eine Kante setzt einen Punkt, auf einen Punkt entfernt ihn. Kantenmass
-        antippen und Zahl eintippen.
-      </p>
     </div>
   );
 }
 
-function KopfKnopf({
+/** Knopf im Kopf — 36 px, Radius 9, wie im Entwurf. */
+function RundKnopf({
   zeichen,
   beschriftung,
   onClick,
@@ -530,7 +531,7 @@ function KopfKnopf({
       disabled={aus}
       aria-label={beschriftung}
       title={beschriftung}
-      className="h-8 w-8 rounded-icon border border-line bg-surface text-[15px] leading-none hover:border-accent disabled:opacity-35 disabled:hover:border-line"
+      className="flex h-9 w-9 items-center justify-center rounded-[9px] border border-line bg-surface text-[15px] leading-none hover:border-accent disabled:opacity-35 disabled:hover:border-line"
     >
       {zeichen}
     </button>
@@ -552,11 +553,10 @@ function AnbieterLeiste({
     <>
       {/*
         Am Telefon reicht die Breite nicht für vier Pillen UND den
-        Projektnamen — der wurde dabei auf null gequetscht. Dort steht
-        deshalb ein Auswahlfeld; ab sm die Leiste wie im Prototyp.
+        Projektnamen — der wurde dabei auf null gequetscht.
       */}
       <select
-        className="h-8 shrink-0 rounded-pill border border-line bg-surface px-2 text-[12.5px] sm:hidden"
+        className="h-9 shrink-0 rounded-[9px] border border-line bg-surface px-2 text-[12.5px] sm:hidden"
         aria-label="Bildquelle"
         value={aktiv}
         onChange={(e) => onWahl(e.target.value as AnbieterId)}
@@ -570,7 +570,7 @@ function AnbieterLeiste({
       </select>
 
       <div
-        className="hidden shrink-0 gap-0.5 rounded-pill bg-sunk p-0.5 sm:flex"
+        className="hidden shrink-0 gap-0.5 rounded-[10px] bg-sunk p-1 sm:flex"
         role="group"
         aria-label="Bildquelle"
       >
@@ -586,7 +586,7 @@ function AnbieterLeiste({
               aria-pressed={aktiv === a.id}
               onClick={() => onWahl(a.id)}
               className={[
-                "rounded-pill px-3 py-1 text-[12.5px] transition-colors",
+                "rounded-[7px] px-3 py-1 text-[12.5px] transition-colors",
                 aktiv === a.id ? "bg-surface font-semibold shadow-soft" : "",
                 frei ? "hover:bg-surface/70" : "cursor-not-allowed text-muted/45",
               ].join(" ")}
@@ -600,31 +600,16 @@ function AnbieterLeiste({
   );
 }
 
-/** Kein leerer Canvas, wenn ein Anbieter fehlt (Briefing 2.1). */
-function NichtEingerichtet({ stand }: { stand: AnbieterStand | undefined }) {
-  return (
-    <div className="flex h-full items-center justify-center bg-sunk p-6">
-      <div className="max-w-sm text-center">
-        <p className="text-[14.5px] font-semibold">
-          {stand ? anbieterZu(stand.id).label : "Dieser Anbieter"} steht nicht zur Verfügung
-        </p>
-        <p className="mt-1.5 text-[13px] text-muted">{stand?.grund}</p>
-        <p className="mt-3 text-[13px] text-muted">
-          Basemap läuft ohne Schlüssel und hat in Österreich die schärfsten Bilder.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/** Im Kopf steht bei Fotobetrieb die Quelle statt der Anbieterleiste. */
+/** Im Fotobetrieb steht im Kopf die Quelle statt der Anbieterleiste. */
 function FotoBadge({ foto }: { foto: FotoQuelle }) {
   const kalibriert = foto.meterProPixel != null;
   return (
     <span
       className={[
-        "shrink-0 rounded-pill px-3 py-1 text-[12.5px]",
-        kalibriert ? "bg-sunk text-ink" : "bg-s-crit text-white font-semibold",
+        "num shrink-0 rounded-pill border px-3 py-1 text-[11px]",
+        kalibriert
+          ? "border-pl-mess bg-pl-mess-flaeche text-pl-hinweis-text"
+          : "border-s-crit bg-s-crit/10 font-semibold text-s-crit",
       ].join(" ")}
       title={
         kalibriert
@@ -632,7 +617,24 @@ function FotoBadge({ foto }: { foto: FotoQuelle }) {
           : "Drohnenfoto ohne Massstab — Längen sind geschätzt"
       }
     >
-      Drohnenfoto{kalibriert ? "" : " (ungenau)"}
+      Drohnenfoto{kalibriert ? "" : " · ungenau"}
     </span>
+  );
+}
+
+/** Kein leerer Canvas, wenn ein Anbieter fehlt (Briefing 2.1). */
+function NichtEingerichtet({ stand }: { stand: AnbieterStand | undefined }) {
+  return (
+    <div className="flex h-full items-center justify-center bg-pl-flaeche p-6">
+      <div className="max-w-sm text-center">
+        <p className="text-[15px] font-bold text-pl-auf-dunkel">
+          {stand ? anbieterZu(stand.id).label : "Dieser Anbieter"} steht nicht zur Verfügung
+        </p>
+        <p className="mt-1.5 text-[13px] text-pl-auf-dunkel-2">{stand?.grund}</p>
+        <p className="mt-3 text-[13px] text-pl-auf-dunkel-3">
+          Basemap läuft ohne Schlüssel und hat in Österreich die schärfsten Bilder.
+        </p>
+      </div>
+    </div>
   );
 }
