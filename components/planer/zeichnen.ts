@@ -13,6 +13,7 @@ import {
   laenge,
   schwerpunkt,
   versatzNachInnen,
+  wahreKantenlaenge,
   type Dachflaeche,
 } from "@/lib/planer/flaeche";
 import { type Kamera, meterZuBild, type Meter } from "@/lib/planer/geo";
@@ -148,19 +149,31 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
 
   zeichneFalllinie(ctx, s, f);
 
-  // Kantenmasse. Bei zu kurzen Kanten weggelassen — sonst überdecken
-  // sich die Pillen gegenseitig und man liest keine einzige.
+  /*
+   * Kantenmasse — als WAHRE Länge auf dem Dach, nicht als Draufsicht.
+   *
+   * Gezeichnet wird auf dem Luftbild; was dort 8 m misst, sind auf
+   * einem 30°-Dach 9,24 m. Die Draufsicht-Zahl an die Kante zu
+   * schreiben hiesse, jemanden mit falschen Sparrenlängen aufs Dach zu
+   * schicken. Traufparallele Kanten ändern sich dabei nicht — nur der
+   * Anteil in Falllinienrichtung wird gestreckt.
+   *
+   * Bei zu kurzen Kanten weggelassen: sonst überdecken sich die Pillen
+   * gegenseitig und man liest keine einzige.
+   */
+  const gefaelle = falllinie(f);
   for (const kante of kanten(f.punkte)) {
     const p1 = bild(k, kante.a);
     const p2 = bild(k, kante.b);
     if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 46) continue;
     const m = kantenMitte(k, kante.a, kante.b);
     const istTraufe = f.traufe === kante.i;
+    const text = meterText(wahreKantenlaenge(kante.a, kante.b, gefaelle, f.neigung));
     pille(
       ctx,
       m.x,
       m.y,
-      istTraufe ? `Traufe · ${meterText(laenge(kante.a, kante.b))}` : meterText(laenge(kante.a, kante.b)),
+      istTraufe ? `Traufe · ${text}` : text,
       s.betont === `${f.id}:${kante.i}` || istTraufe,
     );
   }
@@ -457,4 +470,79 @@ export function zeichneAuswahl(
   ctx.fill();
   ctx.stroke();
   ctx.restore();
+}
+
+/*
+ * ── Anbaustellen ───────────────────────────────────────────────────
+ */
+
+/** Bildkoordinate der Mitte einer Rasterzelle, auch ausserhalb des Rasters. */
+export function anbauMitte(
+  k: Kamera,
+  g: Modulgruppe,
+  f: Dachflaeche,
+  stelle: { reihe: number; spalte: number },
+): { x: number; y: number } {
+  const ecken = modulEcken(g, f, stelle.reihe, stelle.spalte).map((p) => bild(k, p));
+  const x = ecken.reduce((s, p) => s + p.x, 0) / ecken.length;
+  const y = ecken.reduce((s, p) => s + p.y, 0) / ecken.length;
+  return { x, y };
+}
+
+/**
+ * Die Plus-Marken zum modulweisen Anbauen.
+ *
+ * Sie sitzen dort, wo das nächste Modul liegen würde — nicht am
+ * Gruppenrand. So sieht man vor dem Klick, wohin es kommt, und ob es
+ * noch aufs Dach passt.
+ *
+ * Gezeichnet wird der Umriss des künftigen Moduls schwach mit, sonst
+ * schwebt das Plus im Nichts.
+ */
+export function zeichneAnbaustellen(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  g: Modulgruppe,
+  f: Dachflaeche,
+  stellen: Array<{ reihe: number; spalte: number }>,
+) {
+  for (const stelle of stellen) {
+    const ecken = modulEcken(g, f, stelle.reihe, stelle.spalte).map((p) => bild(k, p));
+    if (ecken.length < 4) continue;
+
+    ctx.beginPath();
+    ctx.moveTo(ecken[0]!.x, ecken[0]!.y);
+    for (const p of ecken.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(232, 149, 43, 0.14)";
+    ctx.fill();
+    ctx.strokeStyle = FARBEN.akzent;
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const m = anbauMitte(k, g, f, stelle);
+    // Nur zeichnen, wenn genug Platz für die Marke ist — bei weit
+    // herausgezoomter Karte wäre sie grösser als das Modul.
+    const breite = Math.hypot(ecken[1]!.x - ecken[0]!.x, ecken[1]!.y - ecken[0]!.y);
+    if (breite < 22) continue;
+
+    const r = Math.min(11, breite / 2.6);
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = FARBEN.akzent;
+    ctx.fill();
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(m.x - r * 0.45, m.y);
+    ctx.lineTo(m.x + r * 0.45, m.y);
+    ctx.moveTo(m.x, m.y - r * 0.45);
+    ctx.lineTo(m.x, m.y + r * 0.45);
+    ctx.stroke();
+    ctx.lineCap = "butt";
+  }
 }

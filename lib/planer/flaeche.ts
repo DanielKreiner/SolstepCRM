@@ -230,6 +230,61 @@ export function schneidetSichSelbst(punkte: Meter[]): boolean {
  * weiss, das Dach ist 12,40 m" ist das wichtiger als ein perfektes
  * Luftbild.
  */
+/**
+ * Wahre Länge einer Kante AUF DEM DACH.
+ *
+ * Gezeichnet wird auf dem Luftbild, also in der Draufsicht. Was dort 8 m
+ * misst, sind auf einem 30°-Dach 9,24 m — und genau die misst der
+ * Monteur oben nach. Wer die Draufsicht-Zahl an die Kante schreibt,
+ * schickt jemanden mit falschen Sparrenlängen auf die Baustelle.
+ *
+ * Verkürzt wird nur der Anteil IN Falllinienrichtung. Eine traufparallele
+ * Kante ist in der Draufsicht so lang wie in Wirklichkeit; eine schräge
+ * Kante anteilig. Ohne Traufe (Flachdach, unbestimmte Richtung) ist die
+ * Draufsicht die Wahrheit.
+ */
+export function wahreKantenlaenge(
+  a: Meter,
+  b: Meter,
+  fall: Meter | null,
+  neigungGrad: number,
+): number {
+  const v = { x: b.x - a.x, y: b.y - a.y };
+  const plan = Math.hypot(v.x, v.y);
+  if (!fall || neigungGrad <= 0 || plan < 1e-9) return plan;
+
+  // Anteil längs der Falllinie und quer dazu.
+  const laengs = v.x * fall.x + v.y * fall.y;
+  const quer = Math.sqrt(Math.max(0, plan * plan - laengs * laengs));
+  const gestreckt = laengs / Math.cos((neigungGrad * Math.PI) / 180);
+  return Math.hypot(gestreckt, quer);
+}
+
+/**
+ * Umkehrung: Welche Länge muss die Kante in der Draufsicht haben, damit
+ * sie auf dem Dach `meter` misst?
+ *
+ * Wird gebraucht, sobald jemand ein Mass eintippt — er meint das Dach,
+ * gespeichert wird der Grundriss.
+ */
+export function planlaengeFuerDach(
+  a: Meter,
+  b: Meter,
+  fall: Meter | null,
+  neigungGrad: number,
+  meter: number,
+): number {
+  const jetztPlan = laenge(a, b);
+  if (jetztPlan < 1e-9) return meter;
+  const jetztWahr = wahreKantenlaenge(a, b, fall, neigungGrad);
+  if (jetztWahr < 1e-9) return meter;
+  /*
+   * Die Richtung der Kante bleibt beim Strecken gleich, also ist das
+   * Verhältnis Plan zu Wahr konstant — eine Skalierung genügt.
+   */
+  return meter * (jetztPlan / jetztWahr);
+}
+
 export function setzeKantenlaenge(punkte: Meter[], kante: number, meter: number): Meter[] {
   const n = punkte.length;
   const a = punkte[kante % n]!;

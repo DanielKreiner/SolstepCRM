@@ -15,7 +15,9 @@ import {
   punktInPolygon,
   schneidetSichSelbst,
   schwerpunkt,
+  planlaengeFuerDach,
   setzeKantenlaenge,
+  wahreKantenlaenge,
   umfang,
   umlaufGegenUhrzeiger,
   verkuerzt,
@@ -335,5 +337,75 @@ describe("Randabstandslinie", () => {
     expect(grundflaeche(innen)).toBeCloseTo(54, 6);
     // Alle Punkte müssen im Original liegen — sonst ging es nach aussen.
     for (const p of innen) expect(punktInPolygon(p, RECHTECK)).toBe(true);
+  });
+});
+
+describe("Wahre Kantenlängen auf dem geneigten Dach", () => {
+  /*
+   * Der Punkt, an dem sich der Planer sonst selbst belügt: Gezeichnet
+   * wird auf dem Luftbild, also in der Draufsicht. Was dort 8 m misst,
+   * sind auf einem 30°-Dach 9,24 m — und genau die misst der Monteur
+   * oben nach. Die Fläche wurde von Anfang an richtig gerechnet, die
+   * Kantenpillen zeigten aber die Draufsicht.
+   */
+  const traufeParallel = { x: 1, y: 0 };
+  const fall = { x: 0, y: 1 };
+
+  it("lässt eine traufparallele Kante unverändert", () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 12, y: 0 };
+    expect(wahreKantenlaenge(a, b, fall, 30)).toBeCloseTo(12, 6);
+    expect(wahreKantenlaenge(a, b, fall, 45)).toBeCloseTo(12, 6);
+  });
+
+  it("streckt eine Kante in Falllinienrichtung", () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 0, y: 8 };
+    // 8 / cos(30°) = 9,2376
+    expect(wahreKantenlaenge(a, b, fall, 30)).toBeCloseTo(9.2376, 3);
+    // 8 / cos(45°) = 11,3137
+    expect(wahreKantenlaenge(a, b, fall, 45)).toBeCloseTo(11.3137, 3);
+  });
+
+  it("streckt eine schräge Kante nur anteilig", () => {
+    /*
+     * Eine Kante, die 6 m quer und 8 m längs läuft: in der Draufsicht
+     * 10 m. Auf 30° wird nur der Längsanteil gestreckt —
+     * sqrt(6² + (8/cos30°)²) = sqrt(36 + 85,33) = 11,015 m.
+     */
+    const a = { x: 0, y: 0 };
+    const b = { x: 6, y: 8 };
+    expect(wahreKantenlaenge(a, b, fall, 30)).toBeCloseTo(11.0151, 3);
+  });
+
+  it("gibt ohne Traufe und bei Flachdach die Draufsicht zurück", () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 0, y: 8 };
+    // Kein Gefälle bekannt → keine Streckung.
+    expect(wahreKantenlaenge(a, b, null, 30)).toBeCloseTo(8, 6);
+    expect(wahreKantenlaenge(a, b, fall, 0)).toBeCloseTo(8, 6);
+    void traufeParallel;
+  });
+
+  it("rechnet eine eingetippte Dachlänge in den Grundriss zurück", () => {
+    /*
+     * Wer „9,24" an eine Sparrenkante schreibt, meint das Dach. Der
+     * Grundriss muss dann 8,00 m werden — sonst wächst die Fläche bei
+     * jeder Eingabe um den Neigungsfaktor.
+     */
+    const a = { x: 0, y: 0 };
+    const b = { x: 0, y: 8 };
+    const plan = planlaengeFuerDach(a, b, fall, 30, 9.2376);
+    expect(plan).toBeCloseTo(8, 3);
+
+    // Und die Gegenprobe: der neue Grundriss ergibt wieder 9,24 m.
+    const gestreckt = setzeKantenlaenge([a, b, { x: 5, y: 8 }], 0, plan);
+    expect(wahreKantenlaenge(gestreckt[0]!, gestreckt[1]!, fall, 30)).toBeCloseTo(9.2376, 3);
+  });
+
+  it("lässt eine traufparallele Eingabe unverändert durch", () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 12, y: 0 };
+    expect(planlaengeFuerDach(a, b, fall, 30, 14)).toBeCloseTo(14, 6);
   });
 });

@@ -4,6 +4,7 @@ import type { Meter } from "./geo";
 import {
   achsen,
   aktiveZellen,
+  anbaustellen,
   anzahlModule,
   autoBelegen,
   erweitere,
@@ -14,6 +15,7 @@ import {
   teileGruppe,
   eckenUm,
   kwp,
+  modulAnbauen,
   modulEcken,
   modulPasst,
   modulflaeche,
@@ -677,5 +679,118 @@ describe("Zwei Gruppen auf einer Fläche — Abnahmetests 10 und 11", () => {
     // Die erste Gruppe ist davon unberührt — sie teilt sich nichts mit
     // der zweiten ausser der Fläche.
     expect(gerade.ausrichtung).toBe("hoch");
+  });
+});
+
+describe("Modulweise anbauen", () => {
+  /*
+   * Die Bedienung, um die Daniel gebeten hat: ein Modul setzen und
+   * daran mit + weitere anfügen. Angeboten wird eine Stelle nur, wenn
+   * dort wirklich ein Modul liegen kann — und wer eines entfernt,
+   * bekommt an derselben Stelle wieder ein +.
+   */
+
+  /** Eine Gruppe mit genau einem aktiven Modul in der Mitte des Dachs. */
+  function einModul(): Modulgruppe {
+    return gruppe({ spalten: 1, reihen: 1, anker: { x: 4, y: 2.5 } });
+  }
+
+  it("bietet an einem einzelnen Modul vier Anbaustellen", () => {
+    const f = dach();
+    const stellen = anbaustellen(einModul(), f);
+    // Oben, unten, links, rechts — mitten auf einem 10 × 7 m Dach ist
+    // überall Platz.
+    expect(stellen).toHaveLength(4);
+    expect(stellen.map((s) => `${s.reihe}:${s.spalte}`).sort()).toEqual([
+      "-1:0",
+      "0:-1",
+      "0:1",
+      "1:0",
+    ]);
+  });
+
+  it("bietet keine Stelle an, wo kein Modul mehr hinpasst", () => {
+    /*
+     * Das Modul klebt an der linken unteren Ecke. Nach links und unten
+     * ist Schluss — dort würde es über den Rand ragen, und ein +, das
+     * nichts bewirkt, ist schlimmer als keines.
+     */
+    const f = dach();
+    const g = gruppe({ spalten: 1, reihen: 1, anker: { x: 0.35, y: 0.35 } });
+    const stellen = anbaustellen(g, f);
+    const schluessel = stellen.map((s) => `${s.reihe}:${s.spalte}`);
+    expect(schluessel).not.toContain("0:-1");
+    expect(schluessel).not.toContain("-1:0");
+    expect(schluessel).toContain("0:1");
+    expect(schluessel).toContain("1:0");
+  });
+
+  it("übergeht Plätze, die eine andere Gruppe schon belegt", () => {
+    const f = dach();
+    const g = einModul();
+    // Die Fläche des rechten Nachbarplatzes als fremd markieren.
+    const fremd = [modulEcken(g, f, 0, 1)];
+    const stellen = anbaustellen(g, f, fremd);
+    expect(stellen.map((s) => `${s.reihe}:${s.spalte}`)).not.toContain("0:1");
+  });
+
+  it("baut nach rechts genau ein Modul an", () => {
+    const f = dach();
+    const g = einModul();
+    const neu = modulAnbauen(g, f, { reihe: 0, spalte: 1 });
+
+    expect(anzahlModule(neu)).toBe(2);
+    expect(neu.spalten).toBe(2);
+    // Und die beiden liegen nebeneinander, nicht übereinander.
+    const a = modulMitte(neu, f, 0, 0);
+    const b = modulMitte(neu, f, 0, 1);
+    expect(Math.abs(a.y - b.y)).toBeLessThan(0.01);
+    expect(b.x).toBeGreaterThan(a.x);
+  });
+
+  it("baut nach links an, ohne das bestehende Modul zu verlieren", () => {
+    /*
+     * Nach links wächst das Raster am Nullpunkt — die bestehenden
+     * Zellen rutschen um eins weiter. Wer das übersieht, verliert beim
+     * Anbauen genau das Modul, an das angebaut werden sollte.
+     */
+    const f = dach();
+    const g = einModul();
+    const neu = modulAnbauen(g, f, { reihe: 0, spalte: -1 });
+
+    expect(anzahlModule(neu)).toBe(2);
+    const links = modulMitte(neu, f, 0, 0);
+    const rechts = modulMitte(neu, f, 0, 1);
+    expect(links.x).toBeLessThan(rechts.x);
+  });
+
+  it("fügt beim Anbauen keine ganze Reihe hinzu", () => {
+    /*
+     * `erweitere` hängt eine komplette Reihe an. Beim modulweisen
+     * Anbauen darf davon genau eine Zelle aktiv sein — sonst stünden
+     * mit einem Klick fünf Module mehr auf der Rechnung.
+     */
+    const f = dach();
+    const g = gruppe({ spalten: 4, reihen: 1, anker: { x: 0.4, y: 0.4 } });
+    const vorher = anzahlModule(g);
+    const neu = modulAnbauen(g, f, { reihe: 1, spalte: 0 });
+    expect(anzahlModule(neu)).toBe(vorher + 1);
+  });
+
+  it("bietet nach dem Entfernen eines Moduls dort wieder eine Stelle an", () => {
+    const f = dach();
+    const g = gruppe({ spalten: 3, reihen: 2, anker: { x: 0.4, y: 0.4 } });
+    expect(anzahlModule(g)).toBe(6);
+
+    // Ein Modul in der Mitte abschalten.
+    const ohne: Modulgruppe = { ...g, aus: [zelle(0, 1)] };
+    expect(anzahlModule(ohne)).toBe(5);
+
+    const stellen = anbaustellen(ohne, f);
+    expect(stellen.map((s) => `${s.reihe}:${s.spalte}`)).toContain("0:1");
+
+    // Und ein Klick darauf stellt genau dieses eine wieder her.
+    const zurueck = modulAnbauen(ohne, f, { reihe: 0, spalte: 1 });
+    expect(anzahlModule(zurueck)).toBe(6);
   });
 });

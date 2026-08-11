@@ -23,6 +23,8 @@ import {
   punktEinfuegen,
   punktInPolygon,
   schneidetSichSelbst,
+  falllinie,
+  planlaengeFuerDach,
   setzeKantenlaenge,
 } from "@/lib/planer/flaeche";
 import {
@@ -35,6 +37,8 @@ import {
 import { anbieter as anbieterZu, type AnbieterId, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
+  anbaustellen,
+  modulAnbauen,
   erweitere,
   fangeAufRaster,
   insRasterZurueck,
@@ -53,7 +57,9 @@ import {
   zeichneEntwurf,
   zeichneFlaeche,
   griffe,
+  anbauMitte,
   gruppenRahmen,
+  zeichneAnbaustellen,
   zeichneAuswahl,
   zeichneGruppe,
   zeichneMessung,
@@ -125,6 +131,8 @@ export interface LeinwandProps {
   /** `schritt` legt einen Rückschritt an; false für Zwischenstände beim Ziehen. */
   onPlan: (plan: Plan, schritt: boolean) => void;
   onWerkzeug: (w: Werkzeug) => void;
+  /** Ohne Schreibrecht keine Anbaustellen — sie liessen sich nicht nutzen. */
+  schreibrecht: boolean;
   onKamera?: (k: { zoom: number; mitte: Meter }) => void;
 }
 
@@ -350,6 +358,21 @@ export function Leinwand(p: LeinwandProps) {
     const gf = gewaehlt
       ? stand.current.plan.flaechen.find((x) => x.id === gewaehlt.flaeche)
       : null;
+
+    /*
+     * Anbaustellen der gewählten Gruppe: dort, wo das nächste Modul
+     * liegen würde. Sie werden bei jedem Zeichnen neu bestimmt — dann
+     * stimmen sie auch, nachdem jemand ein Modul entfernt oder die
+     * Gruppe verschoben hat, ohne dass es dafür einen Sonderfall
+     * braucht.
+     */
+    if (gewaehlt && gf && stand.current.werkzeug === "auswahl" && stand.current.schreibrecht) {
+      stellen.current = anbaustellen(gewaehlt, gf, fremdeModule(stand.current.plan, gewaehlt));
+      zeichneAnbaustellen(ctx, k, gewaehlt, gf, stellen.current);
+    } else {
+      stellen.current = [];
+    }
+
     const rahmen = gewaehlt && gf ? gruppenRahmen(k, gewaehlt, gf) : null;
     setRahmenAttribut(
       rahmen
@@ -359,6 +382,8 @@ export function Leinwand(p: LeinwandProps) {
   }, []);
 
   const zeigerRef = useRef<Meter | null>(null);
+  /** Anbaustellen aus dem letzten Zeichnen — Grundlage für den Treffer. */
+  const stellen = useRef<Array<{ reihe: number; spalte: number }>>([]);
 
   const anstossen = useCallback(() => {
     if (neuZeichnen.current) return;
@@ -433,6 +458,22 @@ export function Leinwand(p: LeinwandProps) {
       s.werkzeug === "auswahl" ? s.plan.gruppen.find((g) => g.id === s.aktiveGruppe) : undefined;
     if (gewaehlt) {
       const gf = s.plan.flaechen.find((x) => x.id === gewaehlt.flaeche);
+
+      /*
+       * Anbaustellen zuerst: Sie liegen ausserhalb der Gruppe und damit
+       * genau dort, wo sonst „nichts" wäre — der Klick würde sonst als
+       * Schwenk verpuffen. Sie stammen aus dem letzten Zeichnen, sind
+       * also immer auf dem Stand des Bildes.
+       */
+      if (gf) {
+        for (const stelle of stellen.current) {
+          const m = anbauMitte(k, gewaehlt, gf, stelle);
+          if (Math.hypot(m.x - bp.x, m.y - bp.y) <= GRIFF + 2) {
+            return { art: "anbau" as const, gruppe: gewaehlt.id, ...stelle };
+          }
+        }
+      }
+
       const rahmen = gf ? gruppenRahmen(k, gewaehlt, gf) : null;
       if (rahmen) {
         for (const griff of griffe(rahmen)) {
@@ -731,6 +772,25 @@ export function Leinwand(p: LeinwandProps) {
          */
         if (t?.art === "modul") malenAnStrang(t.gruppe, t.reihe, t.spalte);
         zieht.current = { art: "malen" };
+        return;
+      }
+      if (t?.art === "anbau") {
+        /*
+         * Ein Klick auf das Plus setzt genau ein Modul — kein Ziehen,
+         * kein Zwischenzustand. Als eigener Schritt im Verlauf, damit
+         * ein versehentliches Modul mit einem Rückschritt wieder
+         * verschwindet.
+         */
+        const g = s.plan.gruppen.find((x) => x.id === t.gruppe);
+        const gf = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
+        if (g && gf) {
+          const erweitert = modulAnbauen(g, gf, { reihe: t.reihe, spalte: t.spalte });
+          s.onPlan(
+            { ...s.plan, gruppen: s.plan.gruppen.map((x) => (x.id === g.id ? erweitert : x)) },
+            true,
+          );
+        }
+        zieht.current = null;
         return;
       }
       if (t?.art === "griff") {
@@ -1368,7 +1428,20 @@ export function Leinwand(p: LeinwandProps) {
             if (Number.isFinite(meter) && meter > 0) {
               aendereFlaeche(
                 maszEingabe.flaeche,
-                (f) => ({ ...f, punkte: setzeKantenlaenge(f.punkte, maszEingabe.kante, meter) }),
+                (f) => {
+                  /*
+                   * Eingetippt wird die Länge AUF DEM DACH — dieselbe,
+                   * die an der Kante steht. Gespeichert wird der
+                   * Grundriss, also muss die Neigung herausgerechnet
+                   * werden. Ohne das wüchse die Fläche bei jeder
+                   * Eingabe um den Neigungsfaktor.
+                   */
+                  const n = f.punkte.length;
+                  const a = f.punkte[maszEingabe.kante % n]!;
+                  const b = f.punkte[(maszEingabe.kante + 1) % n]!;
+                  const plan = planlaengeFuerDach(a, b, falllinie(f), f.neigung, meter);
+                  return { ...f, punkte: setzeKantenlaenge(f.punkte, maszEingabe.kante, plan) };
+                },
                 true,
               );
             }

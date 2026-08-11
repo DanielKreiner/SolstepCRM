@@ -4,8 +4,23 @@
     {
       "name": "betrieb-dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeArgs": [
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "//": "Der Privatkundenshop liegt im Nachbarverzeichnis SolstepB2B. --prefix schiebt npm dorthin; dev:b2c setzt B2C_PREVIEW=1 und verdrahtet -p 3125, deshalb kein autoPort.",
+      "name": "b2c-vorschau",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/daniel/Documents/SolstepB2B",
+        "run",
+        "dev:b2c"
+      ],
+      "port": 3125,
+      "autoPort": false
     }
   ]
 }

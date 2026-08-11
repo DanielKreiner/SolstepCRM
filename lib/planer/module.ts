@@ -685,3 +685,138 @@ export function insRasterZurueck(g: Modulgruppe, reihe: number, spalte: number):
   delete frei[zelle(reihe, spalte)];
   return { ...g, frei };
 }
+
+/*
+ * ── Modulweise anbauen ─────────────────────────────────────────────
+ *
+ * Statt ganze Reihen zu erweitern: an eine bestehende Belegung EIN
+ * Modul anfügen, dort wo Platz ist. Das ist die Bedienung, die man
+ * beim Kunden braucht — ein Dach ist selten ein sauberes Rechteck, und
+ * die letzte Reihe passt fast nie ganz.
+ *
+ * Die Anbaustellen sind die freien Nachbarplätze aktiver Module. Ein
+ * Platz wird nur angeboten, wenn dort wirklich ein Modul liegen kann:
+ * innerhalb der Fläche, mit Randabstand, ohne Hindernis und ohne
+ * Kollision mit einer anderen Gruppe. Wer ein Modul entfernt, bekommt
+ * an dieser Stelle wieder eine Anbaustelle — dieselbe Prüfung, kein
+ * Sonderfall.
+ */
+
+export interface Anbaustelle {
+  /** Rasterkoordinate; darf ausserhalb des heutigen Rasters liegen. */
+  reihe: number;
+  spalte: number;
+}
+
+/** Die vier Nachbarn einer Zelle. */
+const NACHBARN = [
+  { dr: 1, dc: 0 },
+  { dr: -1, dc: 0 },
+  { dr: 0, dc: 1 },
+  { dr: 0, dc: -1 },
+] as const;
+
+/**
+ * Rasterposition eines Moduls, auch ausserhalb des heutigen Rasters.
+ *
+ * `modulEcken` rechnet mit Indizes ab dem Anker; negative Werte sind
+ * dabei kein Sonderfall, sondern liegen einfach vor dem Anker. Genau
+ * das macht die Prüfung möglich, BEVOR das Raster wächst.
+ */
+function eckenAn(g: Modulgruppe, f: Dachflaeche, reihe: number, spalte: number): Meter[] {
+  return modulEcken(g, f, reihe, spalte);
+}
+
+/**
+ * Wo lässt sich ein Modul anbauen?
+ *
+ * `besetzt` sind die Modulflächen der anderen Gruppen — ohne sie würden
+ * sich zwei Belegungen überlappen.
+ */
+export function anbaustellen(
+  g: Modulgruppe,
+  f: Dachflaeche,
+  besetzt: Meter[][] = [],
+): Anbaustelle[] {
+  const aktiv = aktiveZellen(g);
+  if (aktiv.length === 0) return [];
+
+  const belegt = new Set(aktiv.map((z) => zelle(z.reihe, z.spalte)));
+  const gesehen = new Set<string>();
+  const stellen: Anbaustelle[] = [];
+
+  for (const z of aktiv) {
+    for (const n of NACHBARN) {
+      const reihe = z.reihe + n.dr;
+      const spalte = z.spalte + n.dc;
+      const s = zelle(reihe, spalte);
+      if (belegt.has(s) || gesehen.has(s)) continue;
+      gesehen.add(s);
+
+      const ecken = eckenAn(g, f, reihe, spalte);
+      if (!modulPasst(ecken, f) || stoesstAn(ecken, besetzt)) continue;
+      stellen.push({ reihe, spalte });
+    }
+  }
+
+  return stellen;
+}
+
+/**
+ * Ein einzelnes Modul an einer Anbaustelle setzen.
+ *
+ * Liegt die Stelle ausserhalb des Rasters, wächst das Raster um genau
+ * eine Reihe oder Spalte — und alle dabei entstehenden Nachbarzellen
+ * werden abgeschaltet. Ohne das käme mit einem Klick eine ganze Reihe
+ * dazu, und über der Dachkante hingen Module, die niemand bestellt hat.
+ */
+export function modulAnbauen(
+  g: Modulgruppe,
+  f: Dachflaeche,
+  stelle: Anbaustelle,
+): Modulgruppe {
+  let neu = g;
+  let { reihe, spalte } = stelle;
+
+  if (reihe < 0) {
+    neu = erweitere(neu, f, "unten", 1);
+    reihe = 0;
+  } else if (reihe >= g.reihen) {
+    neu = erweitere(neu, f, "oben", 1);
+    reihe = g.reihen;
+  }
+
+  if (spalte < 0) {
+    neu = erweitere(neu, f, "links", 1);
+    spalte = 0;
+  } else if (spalte >= g.spalten) {
+    neu = erweitere(neu, f, "rechts", 1);
+    spalte = g.spalten;
+  }
+
+  /*
+   * Alles, was durch das Wachsen neu hinzukam, wird abgeschaltet —
+   * ausser der einen gewünschten Zelle. `erweitere` fügt eine ganze
+   * Reihe an; hier soll genau ein Modul entstehen.
+   */
+  const vorher = new Set(aktiveZellen(g).map((z) => zelle(z.reihe, z.spalte)));
+  const versatzR = neu.reihen > g.reihen && stelle.reihe < 0 ? 1 : 0;
+  const versatzC = neu.spalten > g.spalten && stelle.spalte < 0 ? 1 : 0;
+  const vorherVerschoben = new Set(
+    [...vorher].map((s) => {
+      const [r, c] = s.split(":").map(Number) as [number, number];
+      return zelle(r + versatzR, c + versatzC);
+    }),
+  );
+
+  const aus: string[] = [];
+  for (let r = 0; r < neu.reihen; r++) {
+    for (let c = 0; c < neu.spalten; c++) {
+      const s = zelle(r, c);
+      if (r === reihe && c === spalte) continue;
+      if (!vorherVerschoben.has(s)) aus.push(s);
+    }
+  }
+
+  return { ...neu, aus };
+}

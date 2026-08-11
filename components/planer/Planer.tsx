@@ -637,6 +637,7 @@ export function Planer({
               zoom={zoom}
               plan={plan}
               werkzeug={schreibrecht ? werkzeug : "auswahl"}
+              schreibrecht={schreibrecht}
               fang={fang}
               foto={foto}
               onKalibriert={onKalibriert}
