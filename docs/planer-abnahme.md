@@ -1,0 +1,88 @@
+# Planer — Abnahmetests aus BRIEFING-planer-1.md §12
+
+Wo jeder der 25 Abnahmetests geprüft wird, und was davon bewusst nicht
+automatisiert ist. Die Zuordnung ist der Zweck dieser Datei: Ohne sie
+lässt sich bei der Abnahme nicht sagen, ob ein Punkt abgedeckt ist oder
+nur so aussieht.
+
+Ausgeführt wird alles mit `pnpm test:e2e:planer` (Oberfläche) und
+`pnpm vitest run lib/planer` (Rechenkerne).
+
+## Geometrie & Karten
+
+| # | Inhalt | Geprüft in |
+|---|--------|-----------|
+| 1 | Anbieter-/Zoomwechsel lässt Koordinaten unverändert | `e2e/planer-abnahme.spec.ts` — Geometrie wird vor und nach dem Zoom aus der Datenbank verglichen |
+| 2 | Kantenlänge eintippen → exakt | `e2e/planer-zeichnen.spec.ts` |
+| 3 | Walmdach-Assistent, 4 Flächen | `e2e/planer-zeichnen.spec.ts` |
+| 4 | Konkaves L-Dach, kein Modul in der Innenecke | `lib/planer/module.spec.ts` — jede Modulecke gegen das Polygon |
+| 5 | Neigung 45° → Draufsicht 1,246 m | `lib/planer/module.spec.ts` |
+| 6 | Drohnenfoto kalibrieren, Verzerrungswarnung | `e2e/planer-foto.spec.ts` |
+
+## Gruppen & Module
+
+| # | Inhalt | Geprüft in |
+|---|--------|-----------|
+| 7 | Abtrennen, verschieben | `e2e/planer-belegung.spec.ts` |
+| 8 | Gruppe über den Kamin und zurück | `lib/planer/module.spec.ts` — Modulzahl kehrt exakt zurück |
+| 9 | Einzelmodul lösen, frei setzen, zurückholen | `e2e/planer-belegung.spec.ts` (Werkzeug), `e2e/planer-abnahme.spec.ts` (langer Druck) |
+| 10 | Zwei Rasterwinkel auf einer Fläche | `lib/planer/module.spec.ts` |
+| 11 | Querformat wirkt nur auf eine Gruppe | `lib/planer/module.spec.ts` |
+| 12 | Flachdach O/W, Reihenabstand, beide Azimute | `e2e/planer-belegung.spec.ts`, `lib/planer/ertrag.spec.ts` |
+| 13 | Undo über eine Kette | `e2e/planer-zeichnen.spec.ts` |
+
+## Elektrik
+
+| # | Inhalt | Geprüft in |
+|---|--------|-----------|
+| 14 | Alle vier Testvektoren | `lib/planer/elektrik.spec.ts` |
+| 15 | Unzugeordnete Module verhindern „geprüft" | `lib/planer/elektrik.spec.ts` |
+| 16 | Ungleich lange parallele Strings | `lib/planer/elektrik.spec.ts` |
+
+## Ertrag & Wirtschaftlichkeit
+
+| # | Inhalt | Geprüft in |
+|---|--------|-----------|
+| 17 | PVGIS gecacht, Fallback bei Ausfall | `e2e/planer-ertrag.spec.ts` — der Fallback wird mit einer echten PVGIS-Absage geprüft (Punkt im Pazifik) |
+| 18 | Speicher-Toggle konsistent | `e2e/planer-ertrag.spec.ts`, Rechenkette in `lib/planer/wirtschaft.spec.ts` |
+| 19 | Region wechseln, getippter Betrag bleibt | `e2e/planer-vorgaben.spec.ts` |
+
+## PDF & Übergabe
+
+| # | Inhalt | Geprüft in |
+|---|--------|-----------|
+| 20 | PDF mit Belegungsbild, Prüfvermerk | `e2e/planer-pdf.spec.ts`, `e2e/planer-abnahme.spec.ts` |
+| 21 | Übergabe mit Bedarfsliste, Abgleich statt Überschreiben | `e2e/planer-uebergabe.spec.ts` |
+| 22 | Modul ohne Artikelreferenz → Freitext mit Hinweis | `e2e/planer-uebergabe.spec.ts`, `lib/planer/uebergabe.spec.ts` |
+
+## Allgemein
+
+| # | Inhalt | Geprüft in |
+|---|--------|-----------|
+| 23 | iPad-Gesten, 200 Module flüssig | `e2e/planer-abnahme.spec.ts` — **teilweise**, siehe unten |
+| 24 | Monteur: kein Navigationspunkt, Routen gesperrt | `e2e/planer.spec.ts` |
+| 25 | Mandantentrennung auf allen Planer-Daten | `e2e/planer-mandant.spec.ts` |
+
+## Was NICHT automatisiert ist
+
+**Pinch-Zoom und Zwei-Finger-Schwenk (Teil von 23).** Playwright kennt
+keine Pinch-Geste. Synthetische Pointer-Ereignisse und auch
+`Input.dispatchTouchEvent` über das DevTools-Protokoll lösen den Zoom
+nicht aus, weil der Handler mit Pointer-Capture arbeitet — das greift
+nur bei echten Eingaben. Automatisiert geprüft wird deshalb die
+Voraussetzung (`touch-action: none`, ohne das verarbeitet iOS Safari
+die Gesten selbst) und dass Ein-Finger-Eingaben ankommen. Das Verhalten
+der Gesten am Gerät bleibt eine Prüfung von Hand.
+
+**Bildwiederholrate bei 200 Modulen (Teil von 23).** Messbar ist hier
+nur die Antwortzeit: Ein Tipp auf ein Modul muss binnen einer Sekunde
+wirken, geprüft mit einer 40 × 20 m grossen Halle. Ob die Karte dabei
+flüssig läuft, sagt kein Testlauf im Hintergrund verlässlich.
+
+## Bekannte Einschränkung der Testumgebung
+
+Der Entwicklungsserver verliert bei über sechzig Tests am Stück
+gelegentlich einen Test durch Zeitüberschreitung — in jedem Lauf einen
+anderen, jeweils einzeln grün. Die Ursache und der verworfene
+Lösungsversuch (Produktionsbuild als Testserver) stehen als Kommentar
+in `playwright.config.ts`.

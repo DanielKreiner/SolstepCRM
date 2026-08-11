@@ -541,3 +541,141 @@ describe("Einzelmodul frei setzen", () => {
     expect(fangeAufRaster(g, f, weit, 0.2)).toEqual(weit);
   });
 });
+
+/*
+ * ── Abnahmetests 4, 8, 10 und 11 ───────────────────────────────────
+ *
+ * Diese vier stehen im Briefing als Bedienabläufe, sind aber im Kern
+ * Geometriefragen. Als Unit-Test geprüft sagen sie mehr: Ein
+ * Canvas-Klick trifft je nach Kartenausschnitt andere Zellen, die
+ * Funktion dahinter ist eindeutig.
+ */
+
+describe("Konkaves L-Dach — Abnahmetest 4", () => {
+  /*
+   * Ein L, zwölf mal zehn Meter, mit einer Kerbe rechts oben. Der
+   * springende Punkt ist die Innenecke: Ein Rasteralgorithmus, der nur
+   * die Bounding-Box prüft, legt dort Module hin, die ausserhalb des
+   * Dachs liegen — und auf dem Bau steht der Monteur vor der Kante.
+   */
+  const L: Meter[] = [
+    { x: 0, y: 0 },
+    { x: 12, y: 0 },
+    { x: 12, y: 4 },
+    { x: 6, y: 4 },
+    { x: 6, y: 10 },
+    { x: 0, y: 10 },
+  ];
+
+  it("belegt beide Schenkel, aber kein Modul liegt in der Kerbe", () => {
+    const f = dach({ punkte: L, randabstand: 0.2 });
+    const g = autoBelegen(f, "gL", "L-Feld", {
+      typ: STANDARD_MODUL,
+      ausrichtung: "hoch",
+      reihenabstand: 0.02,
+      spaltenabstand: 0.02,
+      winkel: 0,
+      aufstaenderung: null,
+    });
+    expect(g).not.toBeNull();
+    expect(anzahlModule(g!)).toBeGreaterThan(4);
+
+    /*
+     * Jede Ecke jedes aktiven Moduls muss im Polygon liegen. Die Mitte
+     * zu prüfen würde nicht reichen: ein Modul kann mittig drin liegen
+     * und trotzdem über die Innenecke ragen.
+     */
+    for (const z of aktiveZellen(g!)) {
+      for (const ecke of modulEcken(g!, f, z.reihe, z.spalte)) {
+        expect(
+          punktInPolygon(ecke, L),
+          `Ecke (${ecke.x.toFixed(2)}, ${ecke.y.toFixed(2)}) liegt ausserhalb`,
+        ).toBe(true);
+      }
+    }
+
+    // Und in der Kerbe (rechts oben) liegt wirklich nichts.
+    const inDerKerbe = aktiveZellen(g!).filter((z) => {
+      const m = modulMitte(g!, f, z.reihe, z.spalte);
+      return m.x > 6 && m.y > 4;
+    });
+    expect(inDerKerbe).toHaveLength(0);
+  });
+});
+
+describe("Gruppe über ein Hindernis — Abnahmetest 8", () => {
+  /*
+   * Ein Kamin mitten auf dem Dach. Wandert die Gruppe darüber, müssen
+   * die betroffenen Module verschwinden; wandert sie zurück, müssen sie
+   * wiederkommen. Der zweite Teil ist der schwierigere: Wer die Module
+   * beim Verschieben löscht statt sie zu markieren, bekommt sie nie
+   * wieder — und der Planer verliert stillschweigend Leistung.
+   */
+  const kamin = {
+    id: "h1",
+    name: "Kamin",
+    art: "rechteck" as const,
+    punkte: [
+      { x: 4.5, y: 2.5 },
+      { x: 6.0, y: 2.5 },
+      { x: 6.0, y: 4.0 },
+      { x: 4.5, y: 4.0 },
+    ],
+    abstand: 0.3,
+  };
+
+  it("markiert betroffene Module und gibt sie beim Zurückziehen wieder frei", () => {
+    const f = dach({ hindernisse: [kamin] });
+    const frei = nachfuehren(gruppe({ anker: { x: 0.3, y: 0.3 }, spalten: 3, reihen: 2 }), f);
+    const vorher = anzahlModule(frei);
+    expect(vorher).toBe(6);
+
+    // Die Gruppe auf den Kamin schieben.
+    const drueber = nachfuehren({ ...frei, anker: { x: 4.4, y: 2.4 } }, f);
+    expect(anzahlModule(drueber)).toBeLessThan(vorher);
+
+    /*
+     * Zurück an die alte Stelle — und die Module sind wieder da. Der
+     * Vergleich ist bewusst gegen die ANFANGSZAHL, nicht gegen „mehr
+     * als vorhin": Ein Verlust von einem Modul wäre sonst unsichtbar.
+     */
+    const zurueck = nachfuehren({ ...drueber, anker: { x: 0.3, y: 0.3 } }, f);
+    expect(anzahlModule(zurueck)).toBe(vorher);
+  });
+});
+
+describe("Zwei Gruppen auf einer Fläche — Abnahmetests 10 und 11", () => {
+  it("hält unterschiedliche Rasterwinkel auseinander", () => {
+    /*
+     * Ein Dach kann zwei Felder tragen, die verschieden ausgerichtet
+     * sind — etwa um eine Gaube herum. Der Winkel gehört zur Gruppe,
+     * nicht zur Fläche.
+     */
+    const f = dach();
+    const gerade = gruppe({ id: "g1", winkel: 0, anker: { x: 0.3, y: 0.3 } });
+    const schraeg = gruppe({ id: "g2", winkel: 12, anker: { x: 5.5, y: 0.3 } });
+
+    const a = achsen(gerade, f);
+    const b = achsen(schraeg, f);
+
+    // Die Rasterachsen zeigen wirklich in verschiedene Richtungen.
+    const winkelZwischen =
+      (Math.atan2(b.quer.y, b.quer.x) - Math.atan2(a.quer.y, a.quer.x)) * (180 / Math.PI);
+    expect(Math.abs(winkelZwischen)).toBeCloseTo(12, 0);
+
+    // Und beide bleiben belegbar, jede in ihrem eigenen Raster.
+    expect(anzahlModule(nachfuehren(gerade, f))).toBeGreaterThan(0);
+    expect(anzahlModule(nachfuehren(schraeg, f))).toBeGreaterThan(0);
+  });
+
+  it("ändert das Querformat nur die eine Gruppe — Abnahmetest 11", () => {
+    const gerade = gruppe({ id: "g1", ausrichtung: "hoch" });
+    const gedreht: Modulgruppe = { ...gruppe({ id: "g2" }), ausrichtung: "quer" };
+
+    expect(wahreMasse(gerade)).toEqual({ quer: 1.134, laengs: 1.762 });
+    expect(wahreMasse(gedreht)).toEqual({ quer: 1.762, laengs: 1.134 });
+    // Die erste Gruppe ist davon unberührt — sie teilt sich nichts mit
+    // der zweiten ausser der Fläche.
+    expect(gerade.ausrichtung).toBe("hoch");
+  });
+});

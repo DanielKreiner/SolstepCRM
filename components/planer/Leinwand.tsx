@@ -160,6 +160,8 @@ export function Leinwand(p: LeinwandProps) {
 
   const [anzeige, setAnzeige] = useState({ zoom: p.zoom, leiste: { meter: 10, punkte: 0 } });
   const [zeigerMeter, setZeigerMeter] = useState<Meter | null>(null);
+  /** Ein langer Druck hat ein Modul aus dem Raster gelöst. */
+  const [langerDruck, setLangerDruck] = useState(false);
   const [kachelFehler, setKachelFehler] = useState(false);
   const [fangHinweis, setFangHinweis] = useState<string | null>(null);
   /*
@@ -640,6 +642,22 @@ export function Leinwand(p: LeinwandProps) {
     if (!el) return;
 
     const zeiger = new Map<number, { x: number; y: number }>();
+
+    /*
+     * Langer Druck auf ein Modul löst es aus dem Raster (Briefing 4.2,
+     * Abnahmetest 9 und 23).
+     *
+     * Auf dem iPad ist das der einzige brauchbare Weg: Dort gibt es
+     * keine rechte Maustaste und keinen Modifikator, und wer für jedes
+     * einzelne Modul erst oben das Werkzeug wechseln muss, lässt es
+     * beim Kunden bleiben. Am Schreibtisch bleibt das Modul-Werkzeug
+     * der schnellere Weg — beides führt zum selben Zustand.
+     */
+    let druckUhr: ReturnType<typeof setTimeout> | null = null;
+    const druckLoesen = () => {
+      if (druckUhr) clearTimeout(druckUhr);
+      druckUhr = null;
+    };
     let letzterAbstand = 0;
     let letzteMitte = { x: 0, y: 0 };
     let bewegt = 0;
@@ -738,6 +756,23 @@ export function Leinwand(p: LeinwandProps) {
           spalte: t.spalte,
           letzte: bildZuMeter(kamera.current, bp),
         };
+
+        /*
+         * Wer den Finger liegen lässt, will das einzelne Modul, nicht
+         * die Gruppe. Nach 450 ms ohne nennenswerte Bewegung wird
+         * umgeschaltet — die Schwelle unten in `bewegung` bricht ab,
+         * sobald jemand doch schiebt.
+         */
+        const ziel = { gruppe: t.gruppe, reihe: t.reihe, spalte: t.spalte };
+        druckUhr = setTimeout(() => {
+          druckUhr = null;
+          if (zieht.current?.art !== "gruppe") return;
+          zieht.current = { art: "modul", ...ziel };
+          setLangerDruck(true);
+          // Kurz vibrieren, wo es geht: das Umschalten passiert unter
+          // dem Finger und ist sonst nicht zu bemerken.
+          navigator.vibrate?.(12);
+        }, 450);
       } else if (t?.art === "ecke") {
         zieht.current = { art: "ecke", flaeche: t.flaeche, index: t.index };
       } else if (t?.art === "kante") {
@@ -771,6 +806,8 @@ export function Leinwand(p: LeinwandProps) {
       const vorher = zeiger.get(e.pointerId)!;
       zeiger.set(e.pointerId, jetzt);
       bewegt += Math.hypot(jetzt.x - vorher.x, jetzt.y - vorher.y);
+      // Mehr als ein Wackeln heisst: schieben, nicht halten.
+      if (druckUhr && bewegt > 6) druckLoesen();
       const mpp = meterProPixel(k.ursprung.lat, k.zoom);
 
       if (zeiger.size === 2) {
@@ -955,6 +992,8 @@ export function Leinwand(p: LeinwandProps) {
       const bp = ortVon(e);
       const s = stand.current;
       const z = zieht.current;
+      druckLoesen();
+      setLangerDruck(false);
       zeiger.delete(e.pointerId);
       if (zeiger.size < 2) letzterAbstand = 0;
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
@@ -1271,6 +1310,7 @@ export function Leinwand(p: LeinwandProps) {
     el.addEventListener("wheel", rad, { passive: false });
     window.addEventListener("keydown", taste);
     return () => {
+      druckLoesen();
       el.removeEventListener("pointerdown", runter);
       el.removeEventListener("pointermove", bewegung);
       el.removeEventListener("pointerup", hoch);
@@ -1497,6 +1537,19 @@ export function Leinwand(p: LeinwandProps) {
         {fangHinweis ? (
           <p className="rounded-pill border border-pl-mess bg-pl-mess-flaeche px-2.5 py-1 text-[11px] font-semibold text-pl-mess backdrop-blur-md">
             {fangHinweis}
+          </p>
+        ) : null}
+        {/*
+          * Der lange Druck schaltet unter dem Finger um — ohne
+          * Rückmeldung merkt das niemand, und das Modul wandert
+          * scheinbar von selbst.
+          */}
+        {langerDruck ? (
+          <p
+            data-langer-druck
+            className="rounded-pill border border-pl-hinweis bg-pl-chrome px-2.5 py-1 text-[11px] font-semibold text-pl-hinweis backdrop-blur-md"
+          >
+            Modul gelöst — frei ziehen
           </p>
         ) : null}
         {messung.current ? (
