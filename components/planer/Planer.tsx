@@ -13,6 +13,7 @@ import {
 import { FotoLeiste } from "./FotoLeiste";
 import { Ergebnis } from "./Ergebnis";
 import { type KundeKurz, Uebergabe } from "./Uebergabe";
+import { planungAlsBild } from "./bild";
 import { useErtrag } from "./useErtrag";
 import {
   type FoerderRegion,
@@ -21,7 +22,12 @@ import {
   WirtschaftPanel,
   type WirtschaftVorgabe,
 } from "./WirtschaftPanel";
-import { ansichtMerken, fotoKalibrieren, planSpeichern } from "@/app/(app)/planer/actions";
+import {
+  ansichtMerken,
+  fotoKalibrieren,
+  planSpeichern,
+  vorschauSichern,
+} from "@/app/(app)/planer/actions";
 import {
   ANBIETER,
   type AnbieterId,
@@ -200,6 +206,46 @@ export function Planer({
     letzterPlan.current = roh;
     setGemerkt(ok ? "ruhe" : "fehler");
   }, [plan, projekt.id]);
+
+  /*
+   * Beim Wechsel in die Übergabe ein Bild der Planung ablegen.
+   *
+   * Genau dieser Moment, und nicht bei jedem Speichern: Ein Bild zu
+   * erzeugen kostet einen Canvas-Durchlauf über alle Kacheln, und
+   * während des Zeichnens ändert sich ohnehin jede Sekunde etwas. Wer
+   * zur Übergabe geht, hat eine Planung, die sich zeigen lässt.
+   *
+   * Die Karte muss dafür im DOM stehen — deshalb wird das Bild
+   * unmittelbar VOR dem Umschalten gemacht, nicht danach.
+   */
+  const zeichenflaeche = useRef<HTMLDivElement>(null);
+
+  const vorschauMachen = useCallback(async () => {
+    /*
+     * Zuerst das Bild, DANN das Speichern — in dieser Reihenfolge.
+     *
+     * Der Aufruf kommt aus dem Klick auf „Übergabe", und React
+     * schaltet unmittelbar danach die Ansicht um: die Zeichenfläche ist
+     * dann aus dem DOM. `planungAlsBild` liest deshalb synchron, bevor
+     * irgendein `await` die Kontrolle abgibt. Umgekehrt entstand gar
+     * kein Bild mehr, sobald das Speichern davor lag.
+     */
+    const wurzel = zeichenflaeche.current;
+    const bild = wurzel
+      ? await planungAlsBild({
+          kacheln: wurzel.querySelector<HTMLElement>("[data-planer-kacheln]"),
+          canvas: wurzel.querySelector<HTMLCanvasElement>("[data-planer-canvas]"),
+        })
+      : null;
+
+    /*
+     * In der Übergabe wird aus dem GESPEICHERTEN Plan gerechnet —
+     * Bedarfsliste wie PDF. Ohne das trüge ein PDF, das unmittelbar
+     * nach dem Belegen erzeugt wird, eine Anlage mit 0 kWp.
+     */
+    await jetztSichern();
+    if (bild) await vorschauSichern({ id: projekt.id, bild });
+  }, [projekt.id, jetztSichern]);
 
   useEffect(
     () => () => {
@@ -460,7 +506,17 @@ export function Planer({
               type="button"
               disabled={!anklickbar}
               aria-pressed={aktivePhase}
-              onClick={() => setPhase(ph.nr === 3 ? 3 : ph.nr === 4 ? 4 : ph.nr === 5 ? 5 : 1)}
+              onClick={() => {
+                /*
+                 * Das Bild entsteht beim VERLASSEN einer Zeichenphase.
+                 * In Phase 4 und 5 ist die Leinwand nicht im DOM — wer
+                 * erst dort auslöst, bekommt kein Bild, und das
+                 * Kunden-PDF trüge ein leeres Deckblatt.
+                 */
+                const zeichnet = phase === 1 || phase === 3;
+                if (zeichnet && ph.nr >= 4 && schreibrecht) void vorschauMachen();
+                setPhase(ph.nr === 3 ? 3 : ph.nr === 4 ? 4 : ph.nr === 5 ? 5 : 1);
+              }}
               className={[
                 "flex w-16 flex-col items-center gap-1 rounded-[11px] pb-[7px] pt-[9px]",
                 aktivePhase ? "bg-accent-sunk" : "",
@@ -529,9 +585,20 @@ export function Planer({
                 schreibrecht={schreibrecht}
                 onVorOeffnen={jetztSichern}
               />
-              <span className="text-[12px] text-muted">
-                Das Kunden-PDF folgt im nächsten Schritt.
-              </span>
+              {/*
+                * Das PDF entsteht serverseitig aus dem gespeicherten
+                * Plan. Deshalb vorher sichern — sonst trägt das Blatt
+                * beim Kunden andere Zahlen als der Bildschirm.
+                */}
+              <a
+                href={`/api/planer/pdf/${projekt.id}`}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => void jetztSichern()}
+                className="flex h-9 items-center rounded-[10px] border border-line bg-surface px-3.5 text-[13px] font-semibold text-ink transition-colors hover:bg-sunk"
+              >
+                Kunden-PDF öffnen
+              </a>
             </div>
           </div>
         ) : phase === 4 ? (
@@ -562,7 +629,7 @@ export function Planer({
           </div>
         ) : (
         /* ── Zeichenfläche, dunkel ────────────────────────────────── */
-        <div className="relative min-w-0 flex-1 bg-pl-flaeche">
+        <div ref={zeichenflaeche} className="relative min-w-0 flex-1 bg-pl-flaeche">
           {foto || verfuegbar(anbieter) ? (
             <Leinwand
               ursprung={projekt.ursprung}

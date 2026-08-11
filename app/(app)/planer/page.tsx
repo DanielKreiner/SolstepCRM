@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LinkButton } from "@/components/ui/Button";
+import { ProjektKarte } from "./ProjektKarte";
+import { Suche } from "./Suche";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,20 +14,26 @@ export const metadata: Metadata = { title: "Planer" };
  * Projektliste des Planers (Briefing 8.3).
  *
  * Kartenraster statt Tabelle: ein Planungsprojekt erkennt man am Dach,
- * nicht am Namen. Das Vorschaubild entsteht ab Stufe 6 beim Speichern;
- * bis dahin steht dort die Adresse.
+ * nicht am Namen. Das Vorschaubild entsteht beim Wechsel in die
+ * Übergabe — wo es fehlt, stehen die Kennzahlen an seiner Stelle.
  */
 
 interface Zeile {
   id: string;
   name: string;
   adresse: string | null;
-  kwp: number;
+  kwp: number | string | null;
   status: string;
+  vorschau_pfad: string | null;
+  vorgang_id: string | null;
   updated_at: string;
 }
 
-export default async function PlanerPage() {
+export default async function PlanerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const me = await requireMe();
 
   /*
@@ -35,14 +43,57 @@ export default async function PlanerPage() {
    */
   if (me.perms.planer === "none") notFound();
 
+  const { q } = await searchParams;
+  const suche = (q ?? "").trim();
+
   const supabase = await createClient();
-  const { data } = await supabase
+  let abfrage = supabase
     .from("planer_projekt")
-    .select("id, name, adresse, kwp, status, updated_at")
+    .select("id, name, adresse, kwp, status, vorschau_pfad, vorgang_id, updated_at")
     .order("updated_at", { ascending: false });
 
+  /*
+   * Gesucht wird in Name UND Adresse. Wer ein Projekt sucht, hat
+   * entweder den Kundennamen oder die Strasse im Kopf — welches von
+   * beidem, weiss er selbst nicht immer.
+   */
+  if (suche) {
+    const muster = `%${suche.replace(/[%_]/g, "")}%`;
+    abfrage = abfrage.or(`name.ilike.${muster},adresse.ilike.${muster}`);
+  }
+
+  const { data } = await abfrage;
   const projekte = (data as Zeile[] | null) ?? [];
   const darfSchreiben = me.perms.planer === "write";
+
+  /*
+   * Vorschaubilder liegen im privaten Bucket — auf ihnen ist das Haus
+   * eines namentlich bekannten Kunden zu sehen. Der Browser bekommt
+   * befristet signierte Adressen, keine dauerhaften.
+   */
+  const pfade = projekte.map((p) => p.vorschau_pfad).filter((p): p is string => Boolean(p));
+  const bilder = new Map<string, string>();
+  if (pfade.length > 0) {
+    const { data: signiert } = await supabase.storage
+      .from("planer-fotos")
+      .createSignedUrls(pfade, 60 * 60 * 4);
+    for (const s of signiert ?? []) {
+      if (s.path && s.signedUrl) bilder.set(s.path, s.signedUrl);
+    }
+  }
+
+  /* Vorgangsnummern für den Status „übergeben als V-…". */
+  const vorgangIds = projekte.map((p) => p.vorgang_id).filter((v): v is string => Boolean(v));
+  const nummern = new Map<string, string>();
+  if (vorgangIds.length > 0) {
+    const { data: vorgaenge } = await supabase
+      .from("vorgang")
+      .select("id, number")
+      .in("id", vorgangIds);
+    for (const v of (vorgaenge ?? []) as Array<{ id: string; number: string }>) {
+      nummern.set(v.id, v.number);
+    }
+  }
 
   return (
     <div>
@@ -54,15 +105,28 @@ export default async function PlanerPage() {
         }
       />
 
+      {(projekte.length > 0 || suche) && <Suche start={suche} />}
+
       {projekte.length === 0 ? (
         <div className="rounded-card border border-line bg-surface p-8 text-center">
-          <p className="text-[14.5px] font-semibold">Noch keine Planung</p>
-          <p className="mt-1.5 text-[13px] text-muted">
-            Ein Projekt beginnt mit der Adresse. Danach wird das Dach gezeichnet.
+          <p className="text-[14.5px] font-semibold">
+            {suche ? "Nichts gefunden" : "Noch keine Planung"}
           </p>
-          {darfSchreiben ? (
+          <p className="mt-1.5 text-[13px] text-muted">
+            {suche
+              ? "Gesucht wird in Projektname und Adresse."
+              : "Ein Projekt beginnt mit der Adresse. Danach wird das Dach gezeichnet."}
+          </p>
+          {darfSchreiben && !suche ? (
             <div className="mt-4">
               <LinkButton href="/planer/neu">Erstes Projekt anlegen</LinkButton>
+            </div>
+          ) : null}
+          {suche ? (
+            <div className="mt-4">
+              <Link href="/planer" className="text-[13px] text-accent-ink hover:underline">
+                Suche zurücksetzen
+              </Link>
             </div>
           ) : null}
         </div>
@@ -70,25 +134,16 @@ export default async function PlanerPage() {
         <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {projekte.map((p) => (
             <li key={p.id}>
-              <Link
-                href={`/planer/${p.id}`}
-                className="block overflow-hidden rounded-card border border-line bg-surface transition-colors hover:border-accent"
-              >
-                <div className="flex h-28 items-center justify-center bg-sunk">
-                  <span className="num text-[12px] text-muted">
-                    {p.kwp > 0 ? `${p.kwp.toString().replace(".", ",")} kWp` : "noch keine Belegung"}
-                  </span>
-                </div>
-                <div className="p-3.5">
-                  <p className="truncate text-[14px] font-semibold">{p.name}</p>
-                  <p className="mt-0.5 truncate text-[12.5px] text-muted">
-                    {p.adresse ?? "ohne Adresse"}
-                  </p>
-                  <p className="num mt-2 text-[11px] text-muted/80">
-                    {p.status === "uebergeben" ? "übergeben" : "Entwurf"}
-                  </p>
-                </div>
-              </Link>
+              <ProjektKarte
+                id={p.id}
+                name={p.name}
+                adresse={p.adresse}
+                kwp={Number(p.kwp ?? 0)}
+                bild={p.vorschau_pfad ? (bilder.get(p.vorschau_pfad) ?? null) : null}
+                vorgangNummer={p.vorgang_id ? (nummern.get(p.vorgang_id) ?? null) : null}
+                vorgangId={p.vorgang_id}
+                schreibrecht={darfSchreiben}
+              />
             </li>
           ))}
         </ul>

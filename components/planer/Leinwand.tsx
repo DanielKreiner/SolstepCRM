@@ -266,6 +266,13 @@ export function Leinwand(p: LeinwandProps) {
       let b = bilder.current.get(schluessel);
       if (!b) {
         b = new Image();
+        /*
+         * `anonymous` ist die Voraussetzung dafür, dass sich aus der
+         * Karte später ein Bild machen lässt: ohne CORS-Zustimmung gilt
+         * das Canvas als „getaintet" und `toDataURL` wirft. Basemap und
+         * der eigene Kachel-Proxy erlauben es beide.
+         */
+        b.crossOrigin = "anonymous";
         b.decoding = "async";
         b.draggable = false;
         b.style.position = "absolute";
@@ -1302,8 +1309,13 @@ export function Leinwand(p: LeinwandProps) {
         cursor: p.werkzeug === "auswahl" ? "grab" : "crosshair",
       }}
     >
-      <div ref={kachelSchicht} className="absolute inset-0" aria-hidden />
-      <canvas ref={flaeche} className="absolute inset-0 h-full w-full" style={{ pointerEvents: "none" }} />
+      <div ref={kachelSchicht} data-planer-kacheln className="absolute inset-0" aria-hidden />
+      <canvas
+        ref={flaeche}
+        data-planer-canvas
+        className="absolute inset-0 h-full w-full"
+        style={{ pointerEvents: "none" }}
+      />
 
       {/* Maßeingabe an der Kante (Briefing 3.2). */}
       {maszEingabe ? (

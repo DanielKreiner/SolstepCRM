@@ -636,3 +636,104 @@ export async function alsVorgangUebernehmen(
     id: vorgangId,
   };
 }
+
+/* ── Vorschaubild (Briefing 8.3) ─────────────────────────────────── */
+
+/**
+ * Ein Bild der Planung ablegen.
+ *
+ * Es entsteht im Browser aus Kartenkacheln und Geometrie und landet im
+ * privaten Bucket — auf dem Bild ist das Haus eines namentlich
+ * bekannten Kunden zu sehen, das gehört nicht in eine öffentliche URL.
+ *
+ * Der Rückgabewert ist bewusst schlicht: Ein fehlgeschlagenes
+ * Vorschaubild darf nichts blockieren. Die Projektliste zeigt dann
+ * Kennzahlen statt Bild.
+ */
+export async function vorschauSichern(daten: {
+  id: string;
+  bild: string;
+}): Promise<{ ok: boolean }> {
+  const z1 = await zugang();
+  if (!z1.ok) return { ok: false };
+
+  const id = z.string().uuid().safeParse(daten.id);
+  if (!id.success) return { ok: false };
+
+  // Nur JPEG aus dem eigenen Canvas, und nicht grösser als nötig.
+  const treffer = daten.bild.match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+  if (!treffer?.[1] || treffer[1].length > 3_000_000) return { ok: false };
+
+  const roh = Buffer.from(treffer[1], "base64");
+  /*
+   * Die Mandantenkennung MUSS der erste Ordner sein — die
+   * Storage-Policy prüft genau das. Ein Pfad ohne sie wird abgelehnt,
+   * und zwar stillschweigend als gewöhnlicher Fehler.
+   */
+  const pfad = `${z1.me.companyId}/${id.data}/vorschau.jpg`;
+
+  const supabase = await createClient();
+  const { error } = await supabase.storage.from(BUCKET).upload(pfad, roh, {
+    contentType: "image/jpeg",
+    upsert: true,
+  });
+  if (error) return { ok: false };
+
+  await supabase.from("planer_projekt").update({ vorschau_pfad: pfad }).eq("id", id.data);
+  revalidatePath("/planer");
+  return { ok: true };
+}
+
+/* ── Projekt duplizieren (Briefing 8.3) ──────────────────────────── */
+
+/**
+ * Eine Planung als Kopie fortführen.
+ *
+ * Der häufigste Fall im Betrieb: dasselbe Dach, zwei Varianten — einmal
+ * mit Speicher, einmal ohne, oder mit zwei Modultypen. Wer dafür neu
+ * zeichnen muss, macht es nicht und rechnet stattdessen im Kopf.
+ *
+ * Die Kopie beginnt bewusst als Entwurf: Vorgang, Vorschaubild und
+ * Übergabestand bleiben beim Original. Zwei Planungen, die auf denselben
+ * Vorgang zeigen, wären eine Falle — die zweite Übergabe würde die
+ * Bedarfsliste der ersten abgleichen.
+ */
+export async function projektDuplizieren(
+  _prev: PlanerState,
+  formData: FormData,
+): Promise<PlanerState> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const id = z.string().uuid().safeParse(formData.get("id"));
+  if (!id.success) return { error: "Projekt nicht gefunden.", ok: null };
+
+  const supabase = await createClient();
+  const { data: quelle } = await supabase
+    .from("planer_projekt")
+    .select("name, adresse, ursprung_lat, ursprung_lon, anbieter, zoom, plan, kwp")
+    .eq("id", id.data)
+    .maybeSingle();
+  if (!quelle) return { error: "Projekt nicht gefunden.", ok: null };
+
+  const { data: kopie, error } = await supabase
+    .from("planer_projekt")
+    .insert({
+      company_id: z1.me.companyId,
+      name: `${quelle.name as string} (Kopie)`,
+      adresse: quelle.adresse,
+      ursprung_lat: quelle.ursprung_lat,
+      ursprung_lon: quelle.ursprung_lon,
+      anbieter: quelle.anbieter,
+      zoom: quelle.zoom,
+      plan: quelle.plan,
+      kwp: quelle.kwp,
+      erstellt_von: z1.me.id,
+    })
+    .select("id")
+    .single();
+  if (error || !kopie) return { error: `Kopie fehlgeschlagen: ${error?.message}`, ok: null };
+
+  revalidatePath("/planer");
+  return { error: null, ok: "Kopie angelegt.", id: kopie.id as string };
+}
