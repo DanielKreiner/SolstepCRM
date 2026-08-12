@@ -1,4 +1,5 @@
 import { Akzentfarbe } from "@/components/app/Akzentfarbe";
+import { SeitenleisteHuelle } from "@/components/app/SeitenleisteHuelle";
 import { Sidebar } from "@/components/app/Sidebar";
 import { Topbar } from "@/components/app/Topbar";
 import type { Me } from "@/lib/session";
@@ -104,7 +105,7 @@ export async function Shell({
   return (
     <div className="flex h-dvh gap-[10px] overflow-hidden bg-app p-[10px] sm:gap-[14px] sm:p-[14px]">
       <Akzentfarbe akzent={marke.akzentGesetzt ? marke.akzent : null} />
-      <div className="hidden md:flex">
+      <SeitenleisteHuelle>
         <Sidebar
           companyName={me.company.name}
           logoUrl={marke.logoUrl}
@@ -113,7 +114,7 @@ export async function Shell({
           rolle={me.role}
           badges={navBadges}
         />
-      </div>
+      </SeitenleisteHuelle>
 
       <div className="flex min-w-0 flex-1 flex-col gap-[14px]">
         <Topbar
