@@ -63,6 +63,19 @@ Ausgeführt wird alles mit `pnpm test:e2e:planer` (Oberfläche) und
 | 24 | Monteur: kein Navigationspunkt, Routen gesperrt | `e2e/planer.spec.ts` |
 | 25 | Mandantentrennung auf allen Planer-Daten | `e2e/planer-mandant.spec.ts` |
 
+## Zusätzlich: räumliche Ansicht (BRIEFING-planer-3d.md)
+
+Nicht Teil der 25 Punkte, aber mit demselben Anspruch geprüft.
+
+| Inhalt | Geprüft in |
+|--------|-----------|
+| Gebäudemodell aus Dachtyp, Wandhöhe, Überstand | `lib/planer/gebaeude.spec.ts` — Flächensumme gegen die Draufsicht |
+| Sonnenstand | `lib/planer/sonne.spec.ts` — gegen die nachgerechneten Mittagshöhen für Linz |
+| Schattenwurf, Verschattungsgrad, Ertragsfaktor | `lib/planer/verschattung.spec.ts` |
+| Baum senkt den Ertrag und färbt die Module | `e2e/planer-verschattung.spec.ts` — Ertrag aus der Kennzahlenleiste, Färbung an den Bildpunkten der Leinwand |
+| Baum setzen, bemassen, entfernen | `e2e/planer-verschattung.spec.ts` |
+| Sperre je Schritt (Dach, Belegung, Strings) | `e2e/planer-phasen.spec.ts` |
+
 ## Was NICHT automatisiert ist
 
 **Pinch-Zoom und Zwei-Finger-Schwenk (Teil von 23).** Playwright kennt
@@ -73,6 +86,11 @@ nur bei echten Eingaben. Automatisiert geprüft wird deshalb die
 Voraussetzung (`touch-action: none`, ohne das verarbeitet iOS Safari
 die Gesten selbst) und dass Ein-Finger-Eingaben ankommen. Das Verhalten
 der Gesten am Gerät bleibt eine Prüfung von Hand.
+
+**Echter Schattenwurf im Bild.** Die Verschattung wird gerechnet und als
+Färbung gezeigt, nicht als geworfener Schatten im Renderer. Eine
+Lichtquelle würde ein zweites Ergebnis zeigen, das nicht zwingend zur
+Ertragsrechnung passt.
 
 **Bildwiederholrate bei 200 Modulen (Teil von 23).** Messbar ist hier
 nur die Antwortzeit: Ein Tipp auf ein Modul muss binnen einer Sekunde

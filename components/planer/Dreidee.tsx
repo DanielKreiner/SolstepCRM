@@ -39,6 +39,13 @@ export interface DreideeProps {
   kamera: Kamera;
   wandhoehe: number;
   ueberstand: number;
+  /**
+   * Verschattungsgrad je Modul (Schlüssel `gruppe/reihe:spalte`). Bestimmt
+   * nur die Farbe: Ein echter Schattenwurf mit Lichtquelle wäre schöner,
+   * würde aber eine andere Zahl zeigen als die Ertragsrechnung — und
+   * zwei Wahrheiten über denselben Schatten sind eine zu viel.
+   */
+  schatten?: Map<string, { grad: number }>;
 }
 
 /** Weltkoordinaten: x nach Osten, y nach oben, z nach Süden. */
@@ -216,6 +223,59 @@ export function Dreidee(p: DreideeProps) {
       boden(gruppe, s);
 
       /*
+       * Bäume und Nachbargebäude. Sie stehen im Bild, weil sie im Ertrag
+       * stehen: Wer den Abschlag sieht, soll auch sehen, woher er kommt.
+       */
+      for (const o of s.plan.objekte) {
+        if (o.art === "baum" && o.mitte && o.radius) {
+          /*
+           * Der Stamm reicht bis zur Kronenmitte, nicht bis zu einem
+           * Bruchteil der Baumhöhe: Bei einem hohen Baum mit kleiner
+           * Krone blieb sonst eine Lücke, und die Krone schwebte über
+           * dem Grundstück.
+           */
+          const stammHoehe = Math.max(0.5, o.hoehe - o.radius);
+          const stamm = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.15, 0.2, stammHoehe, 6),
+            new THREE.MeshLambertMaterial({ color: 0x6b4f3a }),
+          );
+          stamm.position.set(o.mitte.x, stammHoehe / 2, -o.mitte.y);
+          gruppe.add(stamm);
+
+          const krone = new THREE.Mesh(
+            new THREE.SphereGeometry(o.radius, 12, 10),
+            new THREE.MeshLambertMaterial({ color: 0x3e7a4a }),
+          );
+          // Die Kugelmitte so setzen, dass der Scheitel die Höhe trifft.
+          krone.position.set(o.mitte.x, o.hoehe - o.radius, -o.mitte.y);
+          krone.scale.set(1, 1.25, 1);
+          gruppe.add(krone);
+        } else if (o.art === "gebaeude" && o.punkte && o.punkte.length >= 3) {
+          for (let i = 0; i < o.punkte.length; i++) {
+            const a = o.punkte[i]!;
+            const b = o.punkte[(i + 1) % o.punkte.length]!;
+            gruppe.add(
+              new THREE.Mesh(
+                flaecheGeometrie([
+                  { x: a.x, y: a.y, z: 0 },
+                  { x: b.x, y: b.y, z: 0 },
+                  { x: b.x, y: b.y, z: o.hoehe },
+                  { x: a.x, y: a.y, z: o.hoehe },
+                ]),
+                new THREE.MeshLambertMaterial({ color: 0xb9b2a4, side: THREE.DoubleSide }),
+              ),
+            );
+          }
+          gruppe.add(
+            new THREE.Mesh(
+              flaecheGeometrie(o.punkte.map((q) => ({ x: q.x, y: q.y, z: o.hoehe }))),
+              new THREE.MeshLambertMaterial({ color: 0x8f877d, side: THREE.DoubleSide }),
+            ),
+          );
+        }
+      }
+
+      /*
        * Jede gezeichnete Fläche IST eine Dachfläche — mit Neigung und
        * Traufe. Sie wird deshalb angehoben und geneigt, nicht in ein
        * eigenes Gebäude verwandelt.
@@ -268,11 +328,20 @@ export function Dreidee(p: DreideeProps) {
           for (const z of aktiveZellen(mg)) {
             const flach = modulEcken(mg, f, z.reihe, z.spalte);
             if (flach.length < 3) continue;
+            /*
+             * Verschattete Module heller und grauer — auf dunklem
+             * Modulblau ist Abdunkeln nicht zu sehen. Dieselbe Schwelle
+             * wie in der Draufsicht, damit beide Ansichten dieselben
+             * Module hervorheben.
+             */
+            const grad = s.schatten?.get(`${mg.id}/${z.reihe}:${z.spalte}`)?.grad ?? 0;
+            const farbe = new THREE.Color(0x1b2a4a);
+            if (grad > 0.05) farbe.lerp(new THREE.Color(0x8e93a1), Math.min(0.85, grad * 1.1));
             gruppe.add(
               new THREE.Mesh(
                 // 4 cm über der Dachhaut, sonst flimmern beide gegeneinander.
                 flaecheGeometrie(flach.map((q) => ({ x: q.x, y: q.y, z: hoeheAn(q) + 0.04 }))),
-                new THREE.MeshLambertMaterial({ color: 0x1b2a4a, side: THREE.DoubleSide }),
+                new THREE.MeshLambertMaterial({ color: farbe, side: THREE.DoubleSide }),
               ),
             );
           }
@@ -437,8 +506,15 @@ export function Dreidee(p: DreideeProps) {
   const abbild = JSON.stringify({
     f: p.plan.flaechen,
     g: p.plan.gruppen.map((g) => ({ ...g, frei: undefined })),
+    o: p.plan.objekte,
     w: p.wandhoehe,
     u: p.ueberstand,
+    /*
+     * Die Verschattung gehört in das Abbild: Sie kommt erst nach dem
+     * ersten Aufbau aus der Ertragsrechnung herein. Ohne sie blieben die
+     * Module in der räumlichen Ansicht für immer gleichmässig blau.
+     */
+    v: p.schatten ? [...p.schatten].map(([k, v]) => `${k}:${v.grad.toFixed(2)}`) : null,
   });
   useEffect(() => {
     neuAufbauen.current?.();

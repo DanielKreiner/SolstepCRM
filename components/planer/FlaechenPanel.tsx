@@ -103,6 +103,14 @@ export function FlaechenPanel({
           <Gebaeude plan={plan} onPlan={onPlan} />
         ) : null}
 
+        {plan.objekte.length > 0 || (schreibrecht && dachAenderbar) ? (
+          <Umgebung
+            plan={plan}
+            onPlan={onPlan}
+            aenderbar={schreibrecht && dachAenderbar}
+          />
+        ) : null}
+
         <section className={KARTE}>
           <h3 className="text-[13px] font-bold">Dachflächen ({plan.flaechen.length})</h3>
           {plan.flaechen.length === 0 ? (
@@ -485,6 +493,108 @@ function Gebaeude({ plan, onPlan }: { plan: Plan; onPlan: (p: Plan, schritt: boo
           />
         </Feld>
       </div>
+    </section>
+  );
+}
+
+/* ── Umgebung ──────────────────────────────────────────────────── */
+
+/**
+ * Bäume und Nachbargebäude, die Schatten werfen.
+ *
+ * Gesetzt werden sie auf der Zeichenfläche mit dem Werkzeug „Baum" —
+ * ein Klick, damit der Fluss am Küchentisch nicht bricht. Höhe und
+ * Kronenradius gehören danach hierher: Eine zwanzig Jahre alte Fichte
+ * und ein junger Apfelbaum stehen im Plan an derselben Stelle und
+ * kosten ein Vielfaches voneinander.
+ */
+function Umgebung({
+  plan,
+  onPlan,
+  aenderbar,
+}: {
+  plan: Plan;
+  onPlan: (p: Plan, schritt: boolean) => void;
+  aenderbar: boolean;
+}) {
+  const aendere = (id: string, teil: Partial<Plan["objekte"][number]>) =>
+    onPlan(
+      { ...plan, objekte: plan.objekte.map((o) => (o.id === id ? { ...o, ...teil } : o)) },
+      true,
+    );
+
+  return (
+    <section className={KARTE}>
+      <h3 className="text-[13px] font-bold">Umgebung ({plan.objekte.length})</h3>
+      {plan.objekte.length === 0 ? (
+        <p className="mt-1.5 text-[12.5px] leading-[1.45] text-muted">
+          Noch kein Schattenwerfer. Links das Werkzeug „Baum“ wählen und den Standort antippen —
+          verschattete Module werden danach dunkel gezeichnet.
+        </p>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-2.5">
+          {plan.objekte.map((o) => (
+            <li key={o.id} className="rounded-[10px] bg-sunk p-2.5">
+              <div className="flex items-center gap-2">
+                <input
+                  value={o.name}
+                  disabled={!aenderbar}
+                  onChange={(e) => aendere(o.id, { name: e.target.value })}
+                  aria-label={`Bezeichnung ${o.name}`}
+                  className={`${FELD} flex-1`}
+                />
+                {aenderbar ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onPlan({ ...plan, objekte: plan.objekte.filter((x) => x.id !== o.id) }, true)
+                    }
+                    aria-label={`${o.name} entfernen`}
+                    title="Entfernen"
+                    className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] border border-line text-[14px] text-muted hover:border-s-crit hover:text-s-crit"
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Feld label="Höhe (m)">
+                  <input
+                    type="number"
+                    min={0}
+                    max={60}
+                    step={0.5}
+                    value={o.hoehe}
+                    disabled={!aenderbar}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v) && v >= 0 && v <= 60) aendere(o.id, { hoehe: v });
+                    }}
+                    className={FELD_NUM}
+                  />
+                </Feld>
+                {o.art === "baum" ? (
+                  <Feld label="Krone (m)">
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={20}
+                      step={0.5}
+                      value={o.radius ?? 3}
+                      disabled={!aenderbar}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (Number.isFinite(v) && v >= 0.5 && v <= 20) aendere(o.id, { radius: v });
+                      }}
+                      className={FELD_NUM}
+                    />
+                  </Feld>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

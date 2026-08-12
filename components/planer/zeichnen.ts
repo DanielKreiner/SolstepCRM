@@ -322,6 +322,13 @@ export function zeichneGruppe(
   gewaehlt: boolean,
   /** Modulschlüssel → Stringfarbe. Fehlt einer, bleibt das Modul neutral. */
   stringFarben?: Map<string, string>,
+  /**
+   * Modulschlüssel → Verschattungsgrad (0 bis 1). Wird als Schleier über
+   * das Modul gelegt, nicht als Ersatzfarbe: Die Stringzugehörigkeit
+   * bleibt erkennbar, und beides zugleich ablesbar zu machen ist der
+   * Zweck der Ansicht.
+   */
+  schatten?: Map<string, { grad: number }>,
 ) {
   const aus = new Set(g.aus);
   // Klein gezeichnete Module brauchen keinen Rand — sonst ist das Feld
@@ -348,6 +355,17 @@ export function zeichneGruppe(
         const farbe = stringFarben?.get(`${g.id}/${r}:${c}`);
         ctx.fillStyle = farbe ?? FARBEN.modul;
         ctx.fill();
+        /*
+         * Schleier über verschattete Module. Unter 5 % wird nichts
+         * gezeichnet — eine Rechnung mit Stichzeitpunkten liefert für
+         * fast jedes Modul einen Kleinstwert, und ein Dach voller
+         * kaum sichtbarer Flecken wäre nur Unruhe.
+         */
+        const grad = schatten?.get(`${g.id}/${r}:${c}`)?.grad ?? 0;
+        if (grad > 0.05) {
+          ctx.fillStyle = `rgba(20,26,38,${Math.min(0.72, 0.2 + grad * 0.7)})`;
+          ctx.fill();
+        }
         if (feineLinie) {
           ctx.strokeStyle = FARBEN.modulRand;
           ctx.lineWidth = 0.7;
@@ -394,21 +412,86 @@ export function gruppenRahmen(k: Kamera, g: Modulgruppe, f: Dachflaeche): Rahmen
   };
 }
 
-export type GriffArt = "drehen" | "oben" | "unten" | "links" | "rechts";
+export type GriffArt = "drehen" | "verschieben" | "oben" | "unten" | "links" | "rechts";
 
 /** Wo die Griffe sitzen — ebenfalls für beides: zeichnen und treffen. */
 export function griffe(r: Rahmen): Array<{ art: GriffArt; x: number; y: number }> {
   const mx = (r.links + r.rechts) / 2;
   const my = (r.oben + r.unten) / 2;
   return [
-    // Der Drehgriff sitzt über dem Rahmen, damit er nicht mit dem
-    // Kantengriff zusammenfällt.
-    { art: "drehen", x: mx, y: r.oben - 24 },
+    /*
+     * Verschieben und Drehen sitzen als Symbolpaar über dem Rahmen.
+     *
+     * Verschieben geht auch durch Ziehen in der Fläche — nur sieht man
+     * das nicht. Wer eine Gruppe zum ersten Mal bewegen will, tippt auf
+     * ein Modul und schaltet es aus Versehen ab. Das Symbol macht die
+     * Bewegung auffindbar, ohne die Fläche zu blockieren.
+     */
+    { art: "verschieben", x: mx - 16, y: r.oben - 26 },
+    { art: "drehen", x: mx + 16, y: r.oben - 26 },
     { art: "oben", x: mx, y: r.oben },
     { art: "unten", x: mx, y: r.unten },
     { art: "links", x: r.links, y: my },
     { art: "rechts", x: r.rechts, y: my },
   ];
+}
+
+/** Weisse Scheibe als Untergrund für ein Symbol. */
+function scheibe(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.beginPath();
+  ctx.arc(x, y, 11, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = FARBEN.gruppeRahmen;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+/** Pfeilspitze am Ende einer Strecke. */
+function spitze(ctx: CanvasRenderingContext2D, x: number, y: number, dx: number, dy: number) {
+  const l = 3.4;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x - dx * l - dy * l * 0.8, y - dy * l + dx * l * 0.8);
+  ctx.moveTo(x, y);
+  ctx.lineTo(x - dx * l + dy * l * 0.8, y - dy * l - dx * l * 0.8);
+  ctx.stroke();
+}
+
+/**
+ * Kreuz mit vier Pfeilspitzen — das übliche Zeichen für „verschieben".
+ *
+ * Gezeichnet, nicht als Schriftzeichen gesetzt: Ein Glyph aus einer
+ * Schrift wäre je nach Gerät ein anderer, und auf dem iPad fehlen die
+ * Pfeilzeichen teils ganz.
+ */
+function zeichenVerschieben(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const a = 6;
+  ctx.strokeStyle = FARBEN.akzentDunkel;
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x - a, y);
+  ctx.lineTo(x + a, y);
+  ctx.moveTo(x, y - a);
+  ctx.lineTo(x, y + a);
+  ctx.stroke();
+  spitze(ctx, x + a, y, 1, 0);
+  spitze(ctx, x - a, y, -1, 0);
+  spitze(ctx, x, y + a, 0, 1);
+  spitze(ctx, x, y - a, 0, -1);
+}
+
+/** Kreisbogen mit Pfeilspitze — das Zeichen für „drehen". */
+function zeichenDrehen(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.strokeStyle = FARBEN.akzentDunkel;
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(x, y, 5.5, -Math.PI * 0.85, Math.PI * 0.5);
+  ctx.stroke();
+  // Spitze am Bogenende, tangential nach unten.
+  spitze(ctx, x, y + 5.5, -1, 0.35);
 }
 
 /** Rahmen samt Griffen — erscheint, sobald die Gruppe gewählt ist. */
@@ -428,20 +511,22 @@ function zeichneGruppenRahmen(
   ctx.strokeRect(r.links, r.oben, r.rechts - r.links, r.unten - r.oben);
   ctx.setLineDash([]);
 
-  // Verbindung zum Drehgriff.
+  // Verbindung zum Symbolpaar über dem Rahmen.
   const mx = (r.links + r.rechts) / 2;
   ctx.beginPath();
   ctx.moveTo(mx, r.oben);
-  ctx.lineTo(mx, r.oben - 24);
+  ctx.lineTo(mx, r.oben - 26);
   ctx.stroke();
 
   for (const griff of griffe(r)) {
-    ctx.beginPath();
-    if (griff.art === "drehen") {
-      ctx.arc(griff.x, griff.y, 6, 0, Math.PI * 2);
-    } else {
-      ctx.rect(griff.x - 5, griff.y - 5, 10, 10);
+    if (griff.art === "drehen" || griff.art === "verschieben") {
+      scheibe(ctx, griff.x, griff.y);
+      if (griff.art === "drehen") zeichenDrehen(ctx, griff.x, griff.y);
+      else zeichenVerschieben(ctx, griff.x, griff.y);
+      continue;
     }
+    ctx.beginPath();
+    ctx.rect(griff.x - 5, griff.y - 5, 10, 10);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.strokeStyle = FARBEN.gruppeRahmen;
@@ -544,5 +629,63 @@ export function zeichneAnbaustellen(
     ctx.lineTo(m.x, m.y + r * 0.45);
     ctx.stroke();
     ctx.lineCap = "butt";
+  }
+}
+
+/*
+ * ── Verschattungsobjekte ───────────────────────────────────────────
+ */
+
+/**
+ * Bäume und Nachbargebäude in der Draufsicht.
+ *
+ * Der Kreis ist die Krone, die Zahl daneben die Höhe. Beides muss
+ * dastehen: Ein Kreis ohne Höhe sagt nichts darüber, ob das Ding
+ * Schatten wirft — ein zwei Meter hoher Strauch und eine
+ * zwanzigmeterhohe Fichte sähen gleich aus.
+ */
+export function zeichneObjekte(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  objekte: Array<{
+    id: string;
+    art: "baum" | "gebaeude";
+    hoehe: number;
+    mitte?: Meter | undefined;
+    radius?: number | undefined;
+    punkte?: Meter[] | undefined;
+  }>,
+) {
+  for (const o of objekte) {
+    if (o.art === "baum" && o.mitte && o.radius) {
+      const m = bild(k, o.mitte);
+      const rand = bild(k, { x: o.mitte.x + o.radius, y: o.mitte.y });
+      const r = Math.max(4, Math.abs(rand.x - m.x));
+
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(62, 158, 107, 0.28)";
+      ctx.fill();
+      ctx.strokeStyle = "#3e9e6b";
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      if (r > 12) pille(ctx, m.x, m.y, `${meterText(o.hoehe)} hoch`);
+    } else if (o.art === "gebaeude" && o.punkte && o.punkte.length >= 3) {
+      const ecken = o.punkte.map((q) => bild(k, q));
+      ctx.beginPath();
+      ctx.moveTo(ecken[0]!.x, ecken[0]!.y);
+      for (const q of ecken.slice(1)) ctx.lineTo(q.x, q.y);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(122, 114, 106, 0.35)";
+      ctx.fill();
+      ctx.strokeStyle = "#7a726a";
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      const s2 = schwerpunkt(o.punkte);
+      const m = bild(k, s2);
+      pille(ctx, m.x, m.y, `${meterText(o.hoehe)} hoch`);
+    }
   }
 }

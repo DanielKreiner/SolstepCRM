@@ -176,7 +176,10 @@ test.describe("Planer — Gruppe umformen", () => {
   }
 
   /** Griffposition der gewählten Gruppe, in Seitenkoordinaten. */
-  async function griff(page: Page, welcher: "oben" | "unten" | "links" | "rechts" | "drehen") {
+  async function griff(
+    page: Page,
+    welcher: "oben" | "unten" | "links" | "rechts" | "drehen" | "verschieben",
+  ) {
     const leinwand = page.getByTestId("planer-leinwand");
     const kasten = (await leinwand.boundingBox())!;
     const roh = await leinwand.getAttribute("data-gruppenrahmen");
@@ -188,7 +191,13 @@ test.describe("Planer — Gruppe umformen", () => {
     if (welcher === "unten") return { x: mx, y: kasten.y + u };
     if (welcher === "links") return { x: kasten.x + l, y: my };
     if (welcher === "rechts") return { x: kasten.x + r, y: my };
-    return { x: mx, y: kasten.y + o - 24 };
+    /*
+     * Verschieben und Drehen sitzen als Symbolpaar über dem Rahmen —
+     * dieselben Stellen wie in `griffe()`. Weichen sie voneinander ab,
+     * zieht der Test ins Leere und wäre trotzdem grün.
+     */
+    if (welcher === "verschieben") return { x: mx - 16, y: kasten.y + o - 26 };
+    return { x: mx + 16, y: kasten.y + o - 26 };
   }
 
   test("Am oberen Griff ziehen verkleinert und vergrössert die Gruppe", async ({ page }) => {
@@ -231,6 +240,39 @@ test.describe("Planer — Gruppe umformen", () => {
 
     const winkel = Number((await page.getByLabel("Drehung (°)").inputValue()).replace(",", "."));
     expect(Math.abs(winkel)).toBeGreaterThan(10);
+  });
+
+  test("Am Verschiebe-Symbol ziehen bewegt die Gruppe, ohne ein Modul zu schalten", async ({
+    page,
+  }) => {
+    await belegt(page, "Schiebeweg 12");
+    const vorher = (await kennzahlen(page)).module;
+
+    /*
+     * Ein kurzer Tipp auf das Symbol darf nichts schalten. In der Fläche
+     * entscheidet die Wegstrecke zwischen Tippen (Modul ab) und Ziehen
+     * (Gruppe bewegen) — am Symbol gibt es kein Modul darunter, und ein
+     * verschwundenes Modul wäre hier reiner Schaden.
+     */
+    const symbol = await griff(page, "verschieben");
+    await page.mouse.click(symbol.x, symbol.y);
+    await page.waitForTimeout(600);
+    expect((await kennzahlen(page)).module, "ein Tipp aufs Symbol schaltet nichts").toBe(vorher);
+
+    /*
+     * Und der Zug bewegt wirklich. Gemessen am Rahmen, nicht an der
+     * Modulzahl: Innerhalb des Dachs bleibt die Zahl gleich — genau das
+     * soll sie —, also wäre sie kein Beweis für die Bewegung.
+     */
+    const leinwand = page.getByTestId("planer-leinwand");
+    const rahmenVorher = await leinwand.getAttribute("data-gruppenrahmen");
+    await page.mouse.move(symbol.x, symbol.y);
+    await page.mouse.down();
+    await page.mouse.move(symbol.x + 40, symbol.y + 12, { steps: 10 });
+    await page.mouse.up();
+    await expect
+      .poll(async () => leinwand.getAttribute("data-gruppenrahmen"), { timeout: 10_000 })
+      .not.toBe(rahmenVorher);
   });
 
   test("Modul-Werkzeug und Teilen brauchen eine gewählte Gruppe", async ({ page }) => {

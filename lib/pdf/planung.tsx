@@ -42,6 +42,13 @@ export interface PlanungPdfData {
     spezifisch: number;
     monate: number[];
     quelle: "pvgis" | "geschaetzt";
+    /**
+     * Abschlag durch Bäume oder Nachbargebäude in Prozent. Fehlt, wenn
+     * nichts verschattet. Der Ertrag oben ist schon gemindert — die Zahl
+     * steht dabei, damit niemand doppelt abzieht oder sich fragt, warum
+     * die Anlage weniger liefert als das Nachbardach.
+     */
+    verschattungProzent?: number;
   };
 
   wirtschaft: {
@@ -269,6 +276,12 @@ export function PlanungPdf({ data }: { data: PlanungPdfData }) {
 
         <Zeile k="Ertrag im Jahr" v={`${n(data.ertrag.jahresertragKwh)} kWh`} />
         <Zeile k="Je Kilowatt-Peak" v={`${n(data.ertrag.spezifisch)} kWh/kWp`} />
+        {data.ertrag.verschattungProzent !== undefined ? (
+          <Zeile
+            k="Davon abgezogen: Verschattung"
+            v={`−${data.ertrag.verschattungProzent.toFixed(1).replace(".", ",")} %`}
+          />
+        ) : null}
         <Zeile
           k="Datengrundlage"
           v={

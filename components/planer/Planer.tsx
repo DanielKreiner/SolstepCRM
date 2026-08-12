@@ -87,6 +87,7 @@ const WERKZEUGE: Array<{ id: Werkzeug; glyph: string; label: string; titel: stri
   { id: "auswahl", glyph: "↖", label: "Wählen", titel: "Auswählen und bearbeiten" },
   { id: "flaeche", glyph: "⬠", label: "Fläche", titel: "Dachfläche zeichnen" },
   { id: "hindernis", glyph: "▣", label: "Hindernis", titel: "Hindernis aufziehen (Kamin, Fenster)" },
+  { id: "baum", glyph: "▲", label: "Baum", titel: "Baum setzen — kostet Ertrag durch Verschattung" },
   { id: "modul", glyph: "⬓", label: "Modul", titel: "Einzelnes Modul frei setzen oder zurückholen" },
   { id: "teilen", glyph: "⧉", label: "Teilen", titel: "Teil der Gruppe als eigene Gruppe abtrennen" },
   { id: "string", glyph: "⚡", label: "String", titel: "Module dem gewählten String zuordnen" },
@@ -107,7 +108,7 @@ const WERKZEUGE: Array<{ id: Werkzeug; glyph: string; label: string; titel: stri
  * dorthin steht als Satz auf der Zeichenfläche.
  */
 const WERKZEUGE_JE_PHASE: Record<1 | 2 | 3 | 4 | 5, Werkzeug[]> = {
-  1: ["auswahl", "flaeche", "hindernis", "modul", "teilen", "messen"],
+  1: ["auswahl", "flaeche", "hindernis", "baum", "modul", "teilen", "messen"],
   2: ["auswahl", "modul", "teilen", "messen"],
   3: ["auswahl", "string", "messen"],
   4: ["auswahl"],
@@ -410,7 +411,7 @@ export function Planer({
    * Neigungsregler rechnet er solange aus dem letzten Wert hoch und
    * markiert das mit einer Tilde.
    */
-  const ertrag = useErtrag(plan, projekt.ursprung, vorgabe.verlustProzent);
+  const ertrag = useErtrag(plan, projekt.ursprung, vorgabe.verlustProzent, plan.gebaeude.wandhoehe);
 
   const gewaehlterSpeicher = geraete.speicher.find((sp) => sp.id === plan.technik.speicher);
   const speicherKwh = gewaehlterSpeicher ? Number(gewaehlterSpeicher.nutzbar_kwh) : 0;
@@ -446,6 +447,19 @@ export function Planer({
           : "—",
       label: ertrag.quelle === "geschaetzt" ? "KWH/JAHR ~" : "KWH/JAHR",
     },
+    /*
+     * Der Verschattungsverlust steht neben dem Ertrag, nicht versteckt
+     * darin: Wer einen Baum setzt, soll auf denselben Blick sehen, was
+     * er kostet.
+     */
+    ...(plan.objekte.length > 0
+      ? [
+          {
+            wert: `−${num(Math.round((1 - ertrag.schattenFaktor) * 1000) / 10)} %`,
+            label: "SCHATTEN",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -626,6 +640,7 @@ export function Planer({
               kamera={{ ursprung: projekt.ursprung, zoom, mitte, breite: 1024, hoehe: 1024 }}
               wandhoehe={plan.gebaeude.wandhoehe}
               ueberstand={plan.gebaeude.ueberstand}
+              schatten={ertrag.schattenJeModul}
             />
             <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 text-[11.5px] text-pl-auf-dunkel-2 backdrop-blur-md">
               Ziehen dreht · Umschalt oder rechte Taste schwenkt · Rad zoomt
@@ -725,6 +740,7 @@ export function Planer({
               werkzeug={schreibrecht ? werkzeug : "auswahl"}
               schreibrecht={schreibrecht}
               bearbeitbar={bearbeitbarIn(phase)}
+              schatten={ertrag.schattenJeModul}
               fang={fang}
               foto={foto}
               onKalibriert={onKalibriert}

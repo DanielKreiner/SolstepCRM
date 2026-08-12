@@ -43,8 +43,9 @@ test.describe("Planer — Übernahme aus dem Lager", () => {
      * Nicht auf eine feste Zahl prüfen — der Artikelstamm wächst. Aber
      * „0 Module" ist der Fehlerfall von damals und muss auffallen.
      */
-    const module = Number(bericht.match(/^(\d+) Module/)?.[1] ?? "0");
-    expect(module, "Module aus dem Lager").toBeGreaterThan(0);
+    // Nicht `module` als Name: In Next.js ist das eine gesperrte Variable.
+    const modulzahl = Number(bericht.match(/^(\d+) Module/)?.[1] ?? "0");
+    expect(modulzahl, "Module aus dem Lager").toBeGreaterThan(0);
 
     // Ein Schreibfehler darf nie still bleiben.
     await expect(page.getByText(/Schreiben nach .* fehlgeschlagen/)).toHaveCount(0);
@@ -55,7 +56,7 @@ test.describe("Planer — Übernahme aus dem Lager", () => {
      * Lauf steigt die Zahl zu Recht nicht mehr. Gemessen wird deshalb
      * gegen den Bericht: was er meldet, muss auch dastehen.
      */
-    await expect.poll(async () => anzahl(page, "Module")).toBeGreaterThanOrEqual(module);
+    await expect.poll(async () => anzahl(page, "Module")).toBeGreaterThanOrEqual(modulzahl);
 
     /*
      * Die Lückenliste ist der eigentliche Nutzen: sie sagt, welcher

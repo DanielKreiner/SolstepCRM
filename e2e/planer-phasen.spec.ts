@@ -45,6 +45,28 @@ async function projektMitBelegung(page: Page, name: string) {
   return id;
 }
 
+/**
+ * Die Massangabe an der oberen Dachkante suchen und ihre Bildstelle
+ * zurückgeben.
+ *
+ * Gesucht statt fest gewählt: Wo die Angabe sitzt, hängt vom
+ * Kartenausschnitt ab. Ein fester Punkt könnte danebenliegen — der Test
+ * wäre grün, ohne etwas gezeigt zu haben.
+ */
+async function sucheKante(page: Page): Promise<{ x: number; y: number }> {
+  const kasten = (await page.getByTestId("planer-leinwand").boundingBox())!;
+  const mitte = { x: kasten.x + kasten.width / 2, y: kasten.y + kasten.height / 2 };
+  const feld = page.getByLabel("Kantenlänge in Metern");
+  for (const dy of [-70, -80, -90, -100, -110, -120, -60, -50]) {
+    await page.mouse.click(mitte.x, mitte.y + dy);
+    if (await feld.isVisible().catch(() => false)) {
+      await page.keyboard.press("Escape");
+      return { x: mitte.x, y: mitte.y + dy };
+    }
+  }
+  throw new Error("Massangabe an der Kante nicht gefunden");
+}
+
 /** Die Eckpunkte der ersten Fläche aus dem gespeicherten Plan. */
 async function punkte(id: string): Promise<string> {
   const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();
@@ -78,7 +100,7 @@ test.describe("Planer — Schrittsperren", () => {
 
   test("In der Belegung ist die Kante nicht mehr zu bearbeiten", async ({ page }) => {
     await login(page, DEMO.gf);
-    await projektMitBelegung(page, "Phasen Kante");
+    const id = await projektMitBelegung(page, "Phasen Kante");
 
     /*
      * Geprüft wird über die Massangabe an der Kante: Sie ist ein
@@ -87,37 +109,43 @@ test.describe("Planer — Schrittsperren", () => {
      * kein Beweis — er könnte die Kante schlicht verfehlen, und der
      * Test wäre grün, ohne etwas zu zeigen.
      */
-    const kasten = (await page.getByTestId("planer-leinwand").boundingBox())!;
-    const mitte = { x: kasten.x + kasten.width / 2, y: kasten.y + kasten.height / 2 };
-
-    /*
-     * Wo genau die Massangabe sitzt, hängt vom Kartenausschnitt ab.
-     * Der Test sucht sie deshalb erst und prüft die Sperre dann an
-     * genau dieser Stelle — ein fest gewählter Punkt könnte danebenn
-     * liegen, und der Test wäre grün, ohne etwas gezeigt zu haben.
-     */
-    const feld = page.getByLabel("Kantenlänge in Metern");
-    let obereKante: { x: number; y: number } | null = null;
-    for (const dy of [-70, -80, -90, -100, -110, -120, -60, -50]) {
-      await page.mouse.click(mitte.x, mitte.y + dy);
-      if (await feld.isVisible().catch(() => false)) {
-        obereKante = { x: mitte.x, y: mitte.y + dy };
-        await page.keyboard.press("Escape");
-        break;
-      }
-    }
-    expect(obereKante, "Massangabe an der Kante gefunden").not.toBeNull();
+    const obereKante = await sucheKante(page);
 
     // In Schritt 2 tut derselbe Klick nichts mehr.
     await page.getByRole("button", { name: /^2 Belegung/ }).click();
     await expect(page.getByText(/zurück zu Schritt 1/)).toBeVisible();
-    await page.mouse.click(obereKante!.x, obereKante!.y);
+    await page.mouse.click(obereKante.x, obereKante.y);
     await expect(page.getByLabel("Kantenlänge in Metern")).toHaveCount(0);
 
-    // Und zurück in Schritt 1 geht es wieder.
+    /*
+     * Und auch ein Zug an derselben Kante bewegt nichts. Dass sich das
+     * Eingabefeld nicht öffnet, ist nur die halbe Sperre — verschieben
+     * liesse sich eine Kante auch ohne Feld, und genau das ist der
+     * teure Fehler: eine verrutschte Traufe unter fertiger Belegung.
+     */
+    /*
+     * Erst auf den gespeicherten Umriss warten. Ohne das läse der erste
+     * Griff „null" — der Autosave läuft gedrosselt —, und der Vergleich
+     * schlüge fehl, obwohl sich nichts bewegt hat.
+     */
+    await expect.poll(() => punkte(id), { timeout: 20_000 }).not.toBe("null");
+    const vorher = await punkte(id);
+    await page.mouse.move(obereKante.x, obereKante.y);
+    await page.mouse.down();
+    await page.mouse.move(obereKante.x, obereKante.y - 45, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(2500);
+    expect(await punkte(id), "die Dachkante darf sich nicht bewegt haben").toBe(vorher);
+
+    /*
+     * Und zurück in Schritt 1 geht es wieder. Die Kante wird neu
+     * gesucht: Der Zug oben hat die Karte geschwenkt — genau das darf er
+     * ja —, also sitzt die Massangabe nicht mehr an derselben Bildstelle.
+     */
     await page.getByRole("button", { name: /^1 Dach/ }).click();
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.mouse.click(obereKante!.x, obereKante!.y);
+    const wieder = await sucheKante(page);
+    await page.mouse.click(wieder.x, wieder.y);
     await expect(page.getByLabel("Kantenlänge in Metern")).toBeVisible();
   });
 

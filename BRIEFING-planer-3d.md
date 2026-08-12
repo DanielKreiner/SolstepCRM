@@ -82,15 +82,35 @@ einstellbar und liegen im Plan.
 - Verschattungsgrad je Modul über das Jahr, als Faktor in den Ertrag
 - Anzeige als Färbung der Module
 
+**Erledigt.** Sonnenstand nach Meeus in `lib/planer/sonne.ts`, gegen die
+nachgerechneten Mittagshöhen für Linz geprüft (65,13° / 41,69° / 18,25°).
+Schattenwurf geometrisch als Strahl: Bäume als Zylinder, Nachbargebäude
+als Prisma über dem Grundriss. Der Verschattungsgrad je Modul geht als
+Faktor in den Ertrag und steht als eigene Kennzahl „SCHATTEN" neben dem
+Jahresertrag — nicht versteckt im Ertrag, damit sichtbar bleibt, was ein
+Baum kostet. Verschattete Module werden in der Draufsicht dunkler und in
+der räumlichen Ansicht heller gezeichnet (auf dunklem Modulblau ist
+Abdunkeln nicht zu sehen). Bäume werden mit dem Werkzeug gesetzt und im
+Panel „Umgebung" bemasst.
+
+Nicht gebaut: eine echte Lichtquelle mit Schattenwurf im Renderer. Sie
+würde ein zweites Ergebnis zeigen, das nicht zwingend zur
+Ertragsrechnung passt — zwei Wahrheiten über denselben Schatten.
+
 ### 3D-4 Bedienung angleichen
 
 - ✓ Schritte oben in der Mitte statt links
 - ✓ Werkzeugleiste unten in der Mitte, je Schritt anders belegt
 - ✓ „Duplizieren" für Modulgruppen
 - ✓ Ein Schritt sperrt, was der vorige festgelegt hat
-- **offen:** Verschieben und Drehen als Symbole am Gruppenrahmen. Heute
-  sind es Griffe an den Rahmenkanten; sie funktionieren, sehen aber
-  anders aus als bei Reonic. Reine Darstellungsfrage, kein Verhalten.
+- ✓ Verschieben und Drehen als Symbolpaar über dem Gruppenrahmen. Aus der
+  Darstellungsfrage wurde dabei doch eine Verhaltensfrage: Verschieben
+  ging bisher nur durch Ziehen IN der Fläche, und ein zu kurzer Zug
+  schaltete das Modul darunter ab. Das Symbol hat deshalb seinen eigenen
+  Zug, der nie ein Modul schaltet. Die Kantengriffe bleiben Quadrate —
+  sie ändern die Grösse, und dafür ist das Quadrat das gewohnte Zeichen.
+
+**Erledigt.** Damit ist BRIEFING-planer-3d.md abgearbeitet.
 
 ## 4. Was bleibt
 

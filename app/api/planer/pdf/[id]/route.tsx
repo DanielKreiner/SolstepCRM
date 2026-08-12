@@ -8,6 +8,7 @@ import { bedarfAusPlan, type GeraeteStand } from "@/lib/planer/uebergabe";
 import { pruefe } from "@/lib/planer/elektrik";
 import { rechne, richtpreis } from "@/lib/planer/wirtschaft";
 import { anlagenErtrag, fallbackErtrag, regionAus } from "@/lib/planer/ertrag";
+import { anlagenVerschattung } from "@/lib/planer/verschattung";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -31,7 +32,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const { data: projekt } = await supabase
     .from("planer_projekt")
-    .select("id, name, adresse, ursprung_lat, plan, vorschau_pfad, updated_at")
+    .select("id, name, adresse, ursprung_lat, ursprung_lon, plan, vorschau_pfad, updated_at")
     .eq("id", id)
     .maybeSingle();
   if (!projekt) return NextResponse.json({ fehler: "Projekt nicht gefunden." }, { status: 404 });
@@ -129,7 +130,26 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     );
     return [{ kwp: kwp(g), spezifisch: e.spezifisch, monate: e.monate }];
   });
-  const ertrag = anlagenErtrag(gruppen);
+  const roh = anlagenErtrag(gruppen);
+
+  /*
+   * Verschattung — mit derselben Funktion wie auf dem Bildschirm.
+   *
+   * Ohne das stünde im PDF der ungeminderte Ertrag, während der Planer
+   * daneben den geminderten zeigt. Beim Kunden läge dann die höhere
+   * Zahl auf dem Tisch, und die Anlage könnte sie nie liefern.
+   */
+  const schatten = anlagenVerschattung(
+    plan,
+    { lat, lon: Number(projekt.ursprung_lon) },
+    plan.gebaeude.wandhoehe,
+  );
+  const ertrag = {
+    ...roh,
+    jahresertragKwh: roh.jahresertragKwh * schatten.faktor,
+    spezifischMittel: roh.spezifischMittel * schatten.faktor,
+    monateKwh: roh.monateKwh.map((m) => m * schatten.faktor),
+  };
 
   /* ── Wirtschaftlichkeit ──────────────────────────────────────── */
   const { data: vorgabe } = await supabase
@@ -244,6 +264,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       spezifisch: ertrag.spezifischMittel,
       monate: ertrag.monateKwh,
       quelle: "geschaetzt",
+      /*
+       * Der Abschlag wird ausgewiesen, nicht stillschweigend
+       * eingerechnet: Wer das Blatt liest, soll sehen, dass zwei Bäume
+       * im Süden stehen und was sie kosten.
+       */
+      ...(schatten.faktor < 1
+        ? { verschattungProzent: Math.round((1 - schatten.faktor) * 1000) / 10 }
+        : {}),
     },
     wirtschaft: {
       autarkie: rechnung.autarkie,

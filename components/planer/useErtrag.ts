@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   anlagenErtrag,
   type AnlagenErtrag,
@@ -10,6 +10,10 @@ import {
 } from "@/lib/planer/ertrag";
 import { kwp } from "@/lib/planer/module";
 import type { Plan } from "@/lib/planer/plan";
+import {
+  anlagenVerschattung,
+  type VerschattungErgebnis,
+} from "@/lib/planer/verschattung";
 
 /*
  * Ertrag der geplanten Anlage, laufend nachgeführt (Briefing 6).
@@ -30,6 +34,19 @@ const WARTEZEIT_MS = 800;
 
 export interface ErtragStand {
   anlage: AnlagenErtrag;
+  /**
+   * Ertragsfaktor aus der Verschattung, 1 heisst unverschattet.
+   * Getrennt ausgewiesen, damit im Angebot sichtbar bleibt, wie viel
+   * Ertrag ein Baum kostet — als versteckter Abschlag wäre die Zahl
+   * nicht zu vertreten.
+   */
+  schattenFaktor: number;
+  /**
+   * Verschattung je Modul, Schlüssel wie im Stringmalen (`gruppe/reihe:spalte`).
+   * Damit färbt die Zeichenfläche die betroffenen Module ein — eine
+   * Prozentzahl allein sagt niemandem, WELCHE Module der Baum trifft.
+   */
+  schattenJeModul: Map<string, VerschattungErgebnis>;
   /** Woher die Zahlen kommen; "geschaetzt" heisst PVGIS war nicht erreichbar. */
   quelle: Quelle;
   /** Zwischenwert aus dem letzten Abruf hochgerechnet — mit „~" anzeigen. */
@@ -54,6 +71,8 @@ export function useErtrag(
   plan: Plan,
   ursprung: { lat: number; lon: number },
   verlustProzent: number,
+  /** Höhe der Traufe über dem Gelände — bestimmt, was ein Baum verdeckt. */
+  hoeheUeberGelaende = 3,
 ): ErtragStand {
   /*
    * Die Antworten liegen in einem Ref, nicht im State: sie kommen
@@ -71,6 +90,15 @@ export function useErtrag(
    * Azimut einer Fläche wirklich ändert, wird neu geholt. Ein
    * verschobenes Modul ändert die Ausrichtung nicht.
    */
+  /*
+   * Abbild der Belegung für den Verschattungs-Speicher. Über die
+   * Gruppenzahl allein liesse sich nicht erkennen, dass ein Modul
+   * abgeschaltet wurde.
+   */
+  const abbildDerModule = plan.gruppen
+    .map((g) => `${g.id}:${g.reihen}x${g.spalten}:${g.aus.length}:${g.anker.x.toFixed(2)}`)
+    .join("|");
+
   const ausrichtungen = plan.flaechen
     .map((f) => `${f.id}:${Math.round(f.azimut)}:${Math.round(f.neigung)}`)
     .join("|");
@@ -148,8 +176,42 @@ export function useErtrag(
     return [{ kwp: kwp(g), spezifisch: antwort.spezifisch, monate: antwort.monate }];
   });
 
+  /*
+   * Verschattung. Die Rechnung ist geometrisch und läuft über alle
+   * Module und Stichzeitpunkte — nur dann, wenn es überhaupt Objekte
+   * gibt, sonst wäre es verschwendete Zeit bei jedem Tastendruck.
+   */
+  const schatten = useMemo<{ faktor: number; jeModul: Map<string, VerschattungErgebnis> }>(
+    /*
+     * Gerechnet wird in `anlagenVerschattung` — derselben Funktion, die
+     * das PDF benutzt. Der Hook hält nur das Ergebnis fest, damit die
+     * Rechnung nicht bei jedem Tastendruck erneut über alle Module und
+     * Stichzeitpunkte läuft.
+     */
+    () => anlagenVerschattung(plan, ursprung, hoeheUeberGelaende),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(plan.objekte), abbildDerModule, hoeheUeberGelaende, ursprung.lat, ursprung.lon],
+  );
+
+  const schattenFaktor = schatten.faktor;
+
+  const anlage = gruppen.length > 0 ? anlagenErtrag(gruppen) : LEER;
+
   return {
-    anlage: gruppen.length > 0 ? anlagenErtrag(gruppen) : LEER,
+    /*
+     * Der Schatten wirkt auf den Jahresertrag und die Monatswerte
+     * gleichermassen. Eine Verteilung über die Monate wäre genauer —
+     * Winterschatten wiegt schwerer —, aber die Stichpunkte gewichten
+     * das schon; hier noch einmal zu verteilen würde doppelt zählen.
+     */
+    anlage: {
+      ...anlage,
+      jahresertragKwh: anlage.jahresertragKwh * schattenFaktor,
+      spezifischMittel: anlage.spezifischMittel * schattenFaktor,
+      monateKwh: anlage.monateKwh.map((m) => m * schattenFaktor),
+    },
+    schattenFaktor,
+    schattenJeModul: schatten.jeModul,
     quelle: irgendwasGeschaetzt ? "geschaetzt" : "pvgis",
     vorlaeufig,
     laedt,

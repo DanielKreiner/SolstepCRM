@@ -131,6 +131,27 @@ const gebaeudeSchema = z.object({
 
 export type GebaeudeStand = z.infer<typeof gebaeudeSchema>;
 
+/*
+ * Verschattungsobjekte: Bäume und Nachbargebäude
+ * (BRIEFING-planer-3d.md, Stufe 3D-3).
+ *
+ * Sie gehören zum Plan, weil sie den Ertrag ändern — nicht zur
+ * Darstellung. Ein Baum, der beim nächsten Öffnen verschwunden ist,
+ * hebt den versprochenen Ertrag stillschweigend an.
+ */
+const objektSchema = z.object({
+  id: z.string(),
+  art: z.enum(["baum", "gebaeude"]),
+  name: z.string().default(""),
+  hoehe: z.number().min(0).max(120).default(10),
+  /** Baum: Mittelpunkt der Krone. */
+  mitte: meterSchema.optional(),
+  /** Baum: Kronenradius. */
+  radius: z.number().min(0.2).max(30).optional(),
+  /** Gebäude: Grundriss in der Draufsicht. */
+  punkte: z.array(meterSchema).min(3).optional(),
+});
+
 export const planSchema = z.object({
   version: z.number().default(PLAN_VERSION),
   flaechen: z.array(flaecheSchema).default([]),
@@ -138,6 +159,7 @@ export const planSchema = z.object({
   strings: z.array(strangSchema).default([]),
   technik: technikSchema.default({ wechselrichter: null, speicher: null, modul: null }),
   gebaeude: gebaeudeSchema.default({ typ: "sattel", wandhoehe: 3, ueberstand: 0.3 }),
+  objekte: z.array(objektSchema).default([]),
   wirtschaft: wirtschaftSchema.default({
     verbrauchKwh: null,
     chips: [],
@@ -174,6 +196,7 @@ export type Plan = {
   strings: Strang[];
   technik: Technik;
   gebaeude: GebaeudeStand;
+  objekte: z.infer<typeof objektSchema>[];
   wirtschaft: Wirtschaft;
 };
 
@@ -185,6 +208,7 @@ export function leererPlan(): Plan {
     strings: [],
     technik: { wechselrichter: null, speicher: null, modul: null },
     gebaeude: { typ: "sattel", wandhoehe: 3, ueberstand: 0.3 },
+    objekte: [],
     wirtschaft: {
       verbrauchKwh: null,
       chips: [],

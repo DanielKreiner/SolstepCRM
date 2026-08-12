@@ -59,6 +59,7 @@ import {
   griffe,
   anbauMitte,
   gruppenRahmen,
+  zeichneObjekte,
   zeichneAnbaustellen,
   zeichneAuswahl,
   zeichneGruppe,
@@ -89,6 +90,7 @@ export type Werkzeug =
   /** Zweite Strecke quer dazu — deckt ein verzerrtes Foto auf. */
   | "gegenprobe"
   /** Einzelne Module frei ziehen und zurücksetzen. */
+  | "baum"
   | "modul"
   /** Auswahlrechteck ziehen und daraus eine eigene Gruppe machen. */
   | "teilen"
@@ -143,6 +145,11 @@ export interface LeinwandProps {
    * verrutschte unbemerkt.
    */
   bearbeitbar: { flaechen: boolean; module: boolean; strings: boolean };
+  /**
+   * Verschattungsgrad je Modul aus der Ertragsrechnung. Wird nur
+   * angezeigt, nicht hier berechnet — die Rechnung hängt am Ertrag.
+   */
+  schatten?: Map<string, { grad: number }>;
   onKamera?: (k: { zoom: number; mitte: Meter }) => void;
 }
 
@@ -203,6 +210,13 @@ export function Leinwand(p: LeinwandProps) {
     | { art: "kante"; flaeche: string; index: number; letzte: Meter }
     | { art: "hindernis"; flaeche: string; von: Meter }
     | { art: "gruppe"; gruppe: string; reihe: number; spalte: number; letzte: Meter }
+    /*
+     * Zug am Verschiebe-Symbol. Getrennt von "gruppe": Dort
+     * entscheidet die Wegstrecke zwischen Tippen (Modul schalten) und
+     * Ziehen. Am Symbol gibt es nichts zu schalten — ein kurzer Tipp
+     * darf dort kein Modul abschalten, das gar nicht darunter liegt.
+     */
+    | { art: "schieben"; gruppe: string; letzte: Meter }
     | { art: "drehen"; gruppe: string }
     | { art: "erweitern"; gruppe: string; richtung: "oben" | "unten" | "links" | "rechts"; start: Meter; angewandt: number }
     | { art: "modul"; gruppe: string; reihe: number; spalte: number }
@@ -353,7 +367,22 @@ export function Leinwand(p: LeinwandProps) {
 
     for (const g of stand.current.plan.gruppen) {
       const f = stand.current.plan.flaechen.find((x) => x.id === g.flaeche);
-      if (f) zeichneGruppe(ctx, k, g, f, stand.current.aktiveGruppe === g.id, farben);
+      if (f) {
+        zeichneGruppe(
+          ctx,
+          k,
+          g,
+          f,
+          stand.current.aktiveGruppe === g.id,
+          farben,
+          stand.current.schatten,
+        );
+      }
+    }
+
+    // Bäume und Nachbargebäude über der Belegung: sie stehen davor.
+    if (stand.current.plan.objekte.length > 0) {
+      zeichneObjekte(ctx, k, stand.current.plan.objekte);
     }
 
     if (entwurf.current.length > 0) {
@@ -417,7 +446,7 @@ export function Leinwand(p: LeinwandProps) {
   /* Neuzeichnen, wenn sich Plan, Auswahl oder Werkzeug ändern. */
   useEffect(() => {
     anstossen();
-  }, [p.plan, p.aktiv, p.aktiveGruppe, p.werkzeug, p.foto, anstossen]);
+  }, [p.plan, p.aktiv, p.aktiveGruppe, p.werkzeug, p.foto, p.schatten, anstossen]);
 
   /* ── Grösse, Anbieter, Ursprung ──────────────────────────────── */
 
@@ -770,6 +799,34 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = { art: "messen" };
         return;
       }
+      if (s.werkzeug === "baum") {
+        /*
+         * Ein Klick setzt einen Baum mit Standardmassen — Höhe und
+         * Krone werden danach im Panel angepasst. Zwei Werte beim
+         * Setzen abzufragen würde den Fluss brechen; am Küchentisch
+         * zeigt der Kunde auf die Fichte, und sie soll dort erscheinen.
+         */
+        const m = bildZuMeter(kamera.current, bp);
+        s.onPlan(
+          {
+            ...s.plan,
+            objekte: [
+              ...s.plan.objekte,
+              {
+                id: naechsteId(s.plan.objekte.map((o) => o.id), "o"),
+                art: "baum" as const,
+                name: `Baum ${s.plan.objekte.filter((o) => o.art === "baum").length + 1}`,
+                hoehe: 10,
+                mitte: m,
+                radius: 3,
+              },
+            ],
+          },
+          true,
+        );
+        zieht.current = null;
+        return;
+      }
       if (s.werkzeug === "hindernis" && s.aktiv) {
         zieht.current = { art: "hindernis", flaeche: s.aktiv, von: gefangen(bp, null) };
         return;
@@ -823,13 +880,15 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current =
           t.welcher === "drehen"
             ? { art: "drehen", gruppe: t.gruppe }
-            : {
-                art: "erweitern",
-                gruppe: t.gruppe,
-                richtung: t.welcher,
-                start: bildZuMeter(kamera.current, bp),
-                angewandt: 0,
-              };
+            : t.welcher === "verschieben"
+              ? { art: "schieben", gruppe: t.gruppe, letzte: bildZuMeter(kamera.current, bp) }
+              : {
+                  art: "erweitern",
+                  gruppe: t.gruppe,
+                  richtung: t.welcher,
+                  start: bildZuMeter(kamera.current, bp),
+                  angewandt: 0,
+                };
       } else if (t?.art === "modul" && s.werkzeug === "modul") {
         zieht.current = { art: "modul", gruppe: t.gruppe, reihe: t.reihe, spalte: t.spalte };
       } else if (t?.art === "modul" && !s.bearbeitbar.module) {
@@ -1039,7 +1098,7 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
-      if (z.art === "gruppe") {
+      if (z.art === "gruppe" || z.art === "schieben") {
         const jetztM = bildZuMeter(k, jetzt);
         const um = { x: jetztM.x - z.letzte.x, y: jetztM.y - z.letzte.y };
         z.letzte = jetztM;
@@ -1099,7 +1158,7 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
-      if (z?.art === "drehen" || z?.art === "erweitern") {
+      if (z?.art === "drehen" || z?.art === "erweitern" || z?.art === "schieben") {
         zieht.current = null;
         const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
         const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
@@ -1329,13 +1388,15 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current =
           t.welcher === "drehen"
             ? { art: "drehen", gruppe: t.gruppe }
-            : {
-                art: "erweitern",
-                gruppe: t.gruppe,
-                richtung: t.welcher,
-                start: bildZuMeter(kamera.current, bp),
-                angewandt: 0,
-              };
+            : t.welcher === "verschieben"
+              ? { art: "schieben", gruppe: t.gruppe, letzte: bildZuMeter(kamera.current, bp) }
+              : {
+                  art: "erweitern",
+                  gruppe: t.gruppe,
+                  richtung: t.welcher,
+                  start: bildZuMeter(kamera.current, bp),
+                  angewandt: 0,
+                };
       } else if (t?.art === "modul" && s.werkzeug === "modul") {
         zieht.current = { art: "modul", gruppe: t.gruppe, reihe: t.reihe, spalte: t.spalte };
       } else if (t?.art === "modul" && !s.bearbeitbar.module) {
