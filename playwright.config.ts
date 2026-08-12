@@ -19,6 +19,13 @@ const PORT = 3100;
 
 export default defineConfig({
   testDir: "./e2e",
+  /*
+   * Der Lauf legt Planer-Projekte in derselben Datenbank an, in der
+   * auch gearbeitet wird. Was er anlegt, räumt er hinterher weg —
+   * Startmarke vorher, Löschlauf danach.
+   */
+  globalSetup: "./e2e/lauf-start.ts",
+  globalTeardown: "./e2e/lauf-ende.ts",
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

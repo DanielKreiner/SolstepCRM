@@ -126,6 +126,24 @@ nur die Antwortzeit: Ein Tipp auf ein Modul muss binnen einer Sekunde
 wirken, geprüft mit einer 40 × 20 m grossen Halle. Ob die Karte dabei
 flüssig läuft, sagt kein Testlauf im Hintergrund verlässlich.
 
+## Die Tests laufen gegen die Arbeitsdatenbank
+
+Es gibt kein eigenes Testprojekt bei Supabase; die E2E-Suite legt ihre
+Daten dort an, wo auch gearbeitet wird. Am 13.08.2026 hat sich gezeigt,
+was das heisst: **1965 Planer-Projekte** und 60 „Prüfkunden" aus drei
+Tagen Testläufen standen in den Listen, alle auf zwei erfundenen
+Adressen (Linz Hauptplatz und Lindgraben im Burgenland). Wer den Planer
+öffnete, landete in einem Testprojekt statt bei seinem Kunden.
+
+Seither räumt der Lauf hinter sich auf: `e2e/lauf-start.ts` schreibt
+eine Startmarke, `e2e/lauf-ende.ts` löscht danach alles, was NACH dieser
+Marke entstanden ist — Planer-Projekte und Kunden mit dem Namensanfang
+„Prüfkunde". Was vorher dastand, bleibt.
+
+Das ersetzt kein Staging-Projekt. Solange es keines gibt, gilt: Nach
+einem abgebrochenen Lauf (Strg-C, Absturz) einmal in die Projektliste
+schauen.
+
 ## Bekannte Einschränkung der Testumgebung
 
 Der Entwicklungsserver verliert bei über sechzig Tests am Stück
