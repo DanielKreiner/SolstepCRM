@@ -89,6 +89,10 @@ export function FlaechenPanel({
 
         {schreibrecht ? <Assistent plan={plan} onPlan={onPlan} onAktiv={onAktiv} mitte={mitte} /> : null}
 
+        {schreibrecht && plan.flaechen.length > 0 ? (
+          <Gebaeude plan={plan} onPlan={onPlan} />
+        ) : null}
+
         <section className={KARTE}>
           <h3 className="text-[13px] font-bold">Dachflächen ({plan.flaechen.length})</h3>
           {plan.flaechen.length === 0 ? (
@@ -417,5 +421,60 @@ function Zeile({ label, wert }: { label: string; wert: string }) {
       <dt className="text-muted">{label}</dt>
       <dd className="num tabular-nums">{wert}</dd>
     </div>
+  );
+}
+
+/* ── Gebäude ───────────────────────────────────────────────────── */
+
+/**
+ * Wandhöhe und Dachüberstand für die räumliche Ansicht.
+ *
+ * Sie ändern nichts an der Rechnung — die Belegung, der Ertrag und die
+ * Prüfung kennen nur die Draufsicht und die Neigung. Was sie ändern,
+ * ist das Bild, das der Kunde sieht: Ein Haus mit 3 m Wandhöhe und
+ * einem Dach ohne Überstand sieht aus wie ein Schuhkarton.
+ */
+function Gebaeude({ plan, onPlan }: { plan: Plan; onPlan: (p: Plan, schritt: boolean) => void }) {
+  const g = plan.gebaeude;
+  const setze = (teil: Partial<typeof g>) =>
+    onPlan({ ...plan, gebaeude: { ...g, ...teil } }, true);
+
+  return (
+    <section className={KARTE}>
+      <h3 className="text-[13px] font-bold">Gebäude</h3>
+      <p className="mt-0.5 text-[11.5px] leading-[1.4] text-muted">
+        Nur für die räumliche Ansicht — auf Ertrag und Prüfung ohne Wirkung.
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <Feld label="Wandhöhe (m)">
+          <input
+            type="number"
+            min={0}
+            max={50}
+            step={0.5}
+            value={g.wandhoehe}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v) && v >= 0 && v <= 50) setze({ wandhoehe: v });
+            }}
+            className={FELD}
+          />
+        </Feld>
+        <Feld label="Dachüberstand (m)">
+          <input
+            type="number"
+            min={0}
+            max={3}
+            step={0.05}
+            value={g.ueberstand}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v) && v >= 0 && v <= 3) setze({ ueberstand: v });
+            }}
+            className={FELD}
+          />
+        </Feld>
+      </div>
+    </section>
   );
 }

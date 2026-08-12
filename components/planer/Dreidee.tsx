@@ -104,8 +104,8 @@ export function Dreidee(p: DreideeProps) {
      * Schattenwurf — der kommt erst in Stufe 3D-3 und wäre hier nur
      * Dekoration, die Rechenzeit kostet.
      */
-    szene.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const sonne = new THREE.DirectionalLight(0xffffff, 2.2);
+    szene.add(new THREE.AmbientLight(0xffffff, 1.1));
+    const sonne = new THREE.DirectionalLight(0xffffff, 1.7);
     sonne.position.set(-30, 60, 40);
     szene.add(sonne);
 
@@ -287,56 +287,101 @@ export function Dreidee(p: DreideeProps) {
      * Einzelflächen die Bildrate kosten würden.
      */
     const boden = (ziel3: THREE.Group, s: DreideeProps) => {
-      const seite = 200;
-      const flaeche = new THREE.Mesh(
-        new THREE.PlaneGeometry(seite, seite),
-        new THREE.MeshLambertMaterial({ color: 0x3f4a35 }),
-      );
+      const seite = 160;
+      /*
+       * Unbeleuchtet: In einem Luftbild steckt die Beleuchtung schon
+       * drin. Ein Material, das zusätzlich angestrahlt wird, überstrahlt
+       * das Bild und lässt den Boden aussehen wie eine Milchglasscheibe.
+       */
+      const material = new THREE.MeshBasicMaterial({ color: 0x3f4a35 });
+      const flaeche = new THREE.Mesh(new THREE.PlaneGeometry(seite, seite), material);
       flaeche.rotation.x = -Math.PI / 2;
       flaeche.position.y = -0.02;
       ziel3.add(flaeche);
 
       const leinwand = document.createElement("canvas");
-      leinwand.width = 1024;
-      leinwand.height = 1024;
+      leinwand.width = 2048;
+      leinwand.height = 2048;
       const ctx = leinwand.getContext("2d");
       if (!ctx) return;
 
-      const kacheln = kachelnFuer(s.kamera, 21);
+      /*
+       * Grundfarbe zuerst: Ein frisches Canvas ist TRANSPARENT, und
+       * three rendert Transparenz auf einem undurchsichtigen Material
+       * als Schwarz. Der erste Anlauf hat deshalb einen schwarzen Boden
+       * gezeigt, obwohl die Kacheln geladen und gezeichnet wurden — es
+       * sah aus wie ein Rechenfehler und war keiner.
+       */
+      ctx.fillStyle = "#3f4a35";
+      ctx.fillRect(0, 0, leinwand.width, leinwand.height);
+
+      /*
+       * Die Kachelstufe wird aus der Ebene bestimmt, nicht aus der
+       * Kamera der Draufsicht. Erbte man sie, käme bei weit
+       * herausgezoomter Karte eine Stufe heraus, deren Kacheln fünfzig
+       * Meter breit sind — für eine 160-Meter-Ebene bleiben davon drei
+       * Kacheln, entsprechend grob.
+       */
+      const mppZiel = seite / leinwand.width;
+      const stufe = Math.max(
+        1,
+        Math.min(
+          21,
+          /*
+           * mpp = 156543,03 · cos(lat) / 2^zoom, also
+           * zoom = log2(156543,03 · cos(lat) / mpp). Ohne Abzug — der
+           * erste Anlauf zog hier 8 ab (verwechselt mit der Formel für
+           * Kachelindizes) und landete bei Stufe 12: eine einzige
+           * Kachel, über die ganze Ebene gezogen.
+           */
+          Math.round(
+            Math.log2((156543.03392 * Math.cos((s.ursprung.lat * Math.PI) / 180)) / mppZiel),
+          ),
+        ),
+      );
+      const kacheln = kachelnFuer(
+        {
+          ...s.kamera,
+          zoom: stufe,
+          mitte: { x: 0, y: 0 },
+          breite: seite / meterProPixel(s.ursprung.lat, stufe),
+          hoehe: seite / meterProPixel(s.ursprung.lat, stufe),
+        },
+        21,
+      );
       if (kacheln.length === 0) return;
 
       const textur = new THREE.CanvasTexture(leinwand);
-      (flaeche.material as THREE.MeshLambertMaterial).map = textur;
-      (flaeche.material as THREE.MeshLambertMaterial).color.set(0xffffff);
-
+      textur.colorSpace = THREE.SRGBColorSpace;
+      material.map = textur;
+      material.color.set(0xffffff);
       /*
-       * Kachel → Meter über Weltpixel: Eine Kachel (x, y) auf Stufe z
-       * beginnt bei Weltpixel (x·256, y·256). Der Planursprung liegt
-       * bei `weltPixel(ursprung, z)`. Die Differenz mal Meter je Pixel
-       * ergibt die Lage in der Ebene.
-       *
-       * Der erste Anlauf hat aus `kamera.mitte` gerechnet und lag
-       * daneben — der Boden blieb schwarz. Über die Weltpixel gibt es
-       * keinen Zweifel, weil beide Seiten dieselbe Projektion benutzen.
+       * Ohne dieses Flag bleibt der Boden schwarz: Ein Material, das
+       * ohne Textur übersetzt wurde, bekommt seinen Shader nicht von
+       * selbst neu — die zugewiesene `map` wird stillschweigend
+       * ignoriert. Genau daran ist der erste Anlauf gescheitert, und am
+       * Bild sah es aus wie ein Rechenfehler bei den Kacheln.
        */
+      material.needsUpdate = true;
+
+      const proMeter = leinwand.width / seite;
       for (const t of kacheln) {
         const mppStufe = meterProPixel(s.ursprung.lat, t.z);
         const nullpunkt = weltPixel(s.ursprung, t.z);
         const bild = new Image();
         bild.crossOrigin = "anonymous";
         bild.onload = () => {
+          // Kachelecke in Meter relativ zum Planursprung.
           const xM = (t.x * 256 - nullpunkt.x) * mppStufe;
-          // y wächst nach Süden, Meter nach Norden — daher das Minus.
+          // Kachel-y wächst nach Süden, Meter nach Norden.
           const yM = -(t.y * 256 - nullpunkt.y) * mppStufe;
-          const groesse = 256 * mppStufe;
-
-          const proMeter = leinwand.width / seite;
+          const gross = 256 * mppStufe * proMeter;
           ctx.drawImage(
             bild,
             (xM + seite / 2) * proMeter,
             (seite / 2 - yM) * proMeter,
-            groesse * proMeter,
-            groesse * proMeter,
+            gross,
+            gross,
           );
           textur.needsUpdate = true;
         };

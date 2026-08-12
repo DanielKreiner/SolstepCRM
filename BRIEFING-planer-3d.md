@@ -71,11 +71,9 @@ schwierigste Teil abgesichert, bevor irgendetwas gezeichnet wird.
 - Orbit-Steuerung: Ziehen dreht, Zwei-Finger schwenkt, Rad zoomt
 - Umschalter 2D/3D; im 2D-Zustand bleibt exakt der heutige Canvas
 
-**Offen aus 3D-2:** Der Boden zeigt noch kein Luftbild. Die Kacheln
-werden geladen, landen aber nicht sichtbar in der Textur — die
-Umrechnung von Kachelkoordinate auf Texturposition stimmt noch nicht.
-Bis das steht, ist der Boden einfarbig. Das Gebäude selbst und die
-Module stehen richtig.
+**Erledigt.** Boden mit Luftbild, Gebäude aus den Dachflächen, Module
+darauf, Umlaufsteuerung. Wandhöhe und Dachüberstand sind im Panel
+einstellbar und liegen im Plan.
 
 ### 3D-3 Verschattung
 
