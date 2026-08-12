@@ -5,6 +5,7 @@ import type { Dachflaeche } from "@/lib/planer/flaeche";
 import type { Plan } from "@/lib/planer/plan";
 import { naechsteId } from "@/lib/planer/plan";
 import {
+  achsen,
   aktiveZellen,
   anzahlModule,
   autoBelegen,
@@ -12,6 +13,7 @@ import {
   modulEcken,
   type Modulgruppe,
   nachfuehren,
+  planMasse,
   reihenabstandVorschlag,
   STANDARD_MODUL,
 } from "@/lib/planer/module";
@@ -230,16 +232,56 @@ export function BelegungsPanel({
           ) : null}
 
           {schreibrecht ? (
-            <button
-              type="button"
-              onClick={() => {
-                onPlan({ ...plan, gruppen: plan.gruppen.filter((g) => g.id !== gruppe.id) }, true);
-                onAktiveGruppe(null);
-              }}
-              className="self-start text-[12.5px] text-muted hover:text-s-crit"
-            >
-              Gruppe entfernen
-            </button>
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  /*
+                   * Die Kopie liegt um ihre eigene Breite versetzt
+                   * daneben, nicht deckungsgleich darüber: Sonst sieht
+                   * es aus, als wäre nichts passiert, und beim
+                   * Verschieben nimmt man aus Versehen das Original.
+                   *
+                   * `nachfuehren` prüft danach jede Zelle gegen Fläche
+                   * und Hindernisse — was neben dem Dach landet, fällt
+                   * gleich heraus statt erst beim Aufmass aufzufallen.
+                   */
+                  const f = plan.flaechen.find((x) => x.id === gruppe.flaeche);
+                  const a = f ? achsen(gruppe, f) : null;
+                  const m = f ? planMasse(gruppe, f) : null;
+                  const um =
+                    a && m
+                      ? {
+                          x: a.quer.x * (m.quer + gruppe.spaltenabstand) * gruppe.spalten,
+                          y: a.quer.y * (m.quer + gruppe.spaltenabstand) * gruppe.spalten,
+                        }
+                      : { x: 2, y: 0 };
+
+                  const kopie = {
+                    ...gruppe,
+                    id: naechsteId(plan.gruppen.map((x) => x.id), "g"),
+                    name: `${gruppe.name} Kopie`,
+                    anker: { x: gruppe.anker.x + um.x, y: gruppe.anker.y + um.y },
+                  };
+                  const eingepasst = f ? nachfuehren(kopie, f) : kopie;
+                  onPlan({ ...plan, gruppen: [...plan.gruppen, eingepasst] }, true);
+                  onAktiveGruppe(eingepasst.id);
+                }}
+                className="text-[12.5px] text-accent-ink hover:underline"
+              >
+                Gruppe duplizieren
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onPlan({ ...plan, gruppen: plan.gruppen.filter((g) => g.id !== gruppe.id) }, true);
+                  onAktiveGruppe(null);
+                }}
+                className="text-[12.5px] text-muted hover:text-s-crit"
+              >
+                Gruppe entfernen
+              </button>
+            </div>
           ) : null}
         </div>
       ) : null}

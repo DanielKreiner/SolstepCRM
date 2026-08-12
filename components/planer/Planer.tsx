@@ -536,73 +536,76 @@ export function Planer({
       </header>
 
       <div className="relative flex min-h-0 flex-1">
-        {/* ── Stepper, 76 px ───────────────────────────────────────── */}
+        {/*
+          * ── Schritte, schwebend oben mittig ────────────────────────
+          *
+          * Vorher eine 76 px breite Spalte links. Die Zeichenfläche ist
+          * der Arbeitsgegenstand; alles, was sie einrahmt, nimmt ihr
+          * Platz. Schwebend über der Karte bleibt sie so gross wie
+          * möglich — und der Blick springt nicht zwischen Rand und
+          * Mitte.
+          */}
         <nav
-          className="z-20 hidden w-[var(--pl-stepper-breite)] shrink-0 flex-col items-center gap-1 border-r border-line bg-panel pt-3.5 sm:flex"
+          className="pointer-events-none absolute left-1/2 top-3 z-20 hidden -translate-x-1/2 items-stretch gap-0.5 rounded-[14px] border border-pl-chrome-linie bg-pl-chrome px-1.5 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,.4)] backdrop-blur-md sm:flex"
           aria-label="Planungsphasen"
         >
           {PHASEN.map((ph) => {
-            /*
-             * Dach und Belegung teilen sich das Flächen-Panel; Technik
-             * hat ein eigenes. Was noch nicht gebaut ist, bleibt
-             * unanklickbar — kein Knopf, der ins Leere führt.
-             */
             const anklickbar = ph.fertig;
-            const aktivePhase =
-              ph.nr === 3
-                ? phase === 3
-                : ph.nr === 4
-                  ? phase === 4
-                  : ph.nr === 5
-                    ? phase === 5
-                    : ph.nr <= 2 && phase === 1;
+            const aktivePhase = phase === ph.nr;
             return (
-            <button
-              key={ph.nr}
-              type="button"
-              disabled={!anklickbar}
-              aria-pressed={aktivePhase}
-              onClick={() => {
-                /*
-                 * Das Bild entsteht beim VERLASSEN einer Zeichenphase.
-                 * In Phase 4 und 5 ist die Leinwand nicht im DOM — wer
-                 * erst dort auslöst, bekommt kein Bild, und das
-                 * Kunden-PDF trüge ein leeres Deckblatt.
-                 */
-                const zeichnet = phase === 1 || phase === 3;
-                if (zeichnet && ph.nr >= 4 && schreibrecht) void vorschauMachen();
-                setPhase(ph.nr);
-                /*
-                 * Beim Wechsel auf ein erlaubtes Werkzeug zurückfallen.
-                 * Sonst bliebe „Fläche" aktiv, während die Leiste es
-                 * gar nicht mehr anbietet — der nächste Klick auf die
-                 * Karte legte dann eine Ecke an, die niemand wollte.
-                 */
-                if (!WERKZEUGE_JE_PHASE[ph.nr].includes(werkzeug)) setWerkzeug("auswahl");
-              }}
-              className={[
-                "flex w-16 flex-col items-center gap-1 rounded-[11px] pb-[7px] pt-[9px]",
-                aktivePhase ? "bg-accent-sunk" : "",
-                anklickbar ? "hover:bg-sunk" : "cursor-default",
-              ].join(" ")}
-            >
-              <span
+              <button
+                key={ph.nr}
+                type="button"
+                disabled={!anklickbar}
+                aria-pressed={aktivePhase}
+                onClick={() => {
+                  /*
+                   * Das Bild entsteht beim VERLASSEN einer Zeichenphase.
+                   * In Phase 4 und 5 ist die Leinwand nicht im DOM — wer
+                   * erst dort auslöst, bekommt kein Bild, und das
+                   * Kunden-PDF trüge ein leeres Deckblatt.
+                   */
+                  const zeichnet = phase <= 3;
+                  if (zeichnet && ph.nr >= 4 && schreibrecht) void vorschauMachen();
+                  setPhase(ph.nr);
+                  /*
+                   * Beim Wechsel auf ein erlaubtes Werkzeug zurückfallen.
+                   * Sonst bliebe „Fläche" aktiv, während die Leiste es
+                   * gar nicht mehr anbietet — der nächste Klick auf die
+                   * Karte legte dann eine Ecke an, die niemand wollte.
+                   */
+                  if (!WERKZEUGE_JE_PHASE[ph.nr].includes(werkzeug)) setWerkzeug("auswahl");
+                }}
                 className={[
-                  "num flex h-[26px] w-[26px] items-center justify-center rounded-pill border-[1.5px] text-[12px] font-bold",
+                  "pointer-events-auto flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 transition-colors",
                   aktivePhase
-                    ? "border-accent bg-accent text-white"
-                    : ph.fertig
-                      ? "border-accent/50 bg-surface text-accent-ink"
-                      : "border-line-strong/40 bg-surface text-muted",
+                    ? "bg-accent text-white"
+                    : anklickbar
+                      ? "text-pl-auf-dunkel-2 hover:bg-white/10"
+                      : "cursor-default text-pl-auf-dunkel-4",
                 ].join(" ")}
               >
-                {ph.mark}
-              </span>
-              <span className={`text-[10px] font-semibold ${ph.fertig ? "text-ink" : "text-muted/70"}`}>
-                {ph.label}
-              </span>
-              {!ph.fertig ? <span className="text-[9px] text-muted/50">folgt</span> : null}
-            </button>
+                <span
+                  className={[
+                    "num flex h-[20px] w-[20px] items-center justify-center rounded-pill text-[11px] font-bold",
+                    aktivePhase
+                      ? "bg-white/25 text-white"
+                      : anklickbar
+                        ? "bg-white/10"
+                        : "bg-white/5",
+                  ].join(" ")}
+                >
+                  {ph.mark}
+                </span>
+                {/*
+                  * Die Beschriftung erst ab genügend Breite. Sonst
+                  * läuft die Leiste unter das Panel, und der letzte
+                  * Schritt ist nicht mehr zu treffen — die Nummer
+                  * allein genügt dort, die Reihenfolge kennt man nach
+                  * dem zweiten Projekt.
+                  */}
+                <span className="hidden text-[12px] font-semibold xl:inline">{ph.label}</span>
+              </button>
             );
           })}
         </nav>
@@ -738,10 +741,17 @@ export function Planer({
             <NichtEingerichtet stand={staende.find((s) => s.id === anbieter)} />
           )}
 
-          {/* Werkzeugpalette, schwebend links */}
+          {/*
+            * Werkzeuge, schwebend unten mittig.
+            *
+            * Vorher senkrecht am linken Rand. Unten in der Mitte liegen
+            * sie dort, wo die Hand beim Zeichnen ohnehin ist — am iPad
+            * verdeckt eine linke Spalte genau den Daumenbereich, mit dem
+            * man die Karte hält.
+            */}
           {schreibrecht ? (
             <div
-              className="absolute left-3 top-3.5 z-10 flex flex-col gap-1.5 rounded-[14px] border border-pl-chrome-linie bg-pl-chrome p-2 backdrop-blur-md"
+              className="absolute bottom-3.5 left-1/2 z-10 flex -translate-x-1/2 items-stretch gap-1 rounded-[14px] border border-pl-chrome-linie bg-pl-chrome p-1.5 shadow-[0_8px_30px_rgba(0,0,0,.4)] backdrop-blur-md"
               role="group"
               aria-label="Werkzeug"
             >
@@ -787,7 +797,7 @@ export function Planer({
                 );
               })}
 
-              <span className="mx-1 my-0.5 h-px bg-pl-chrome-linie" />
+              <span className="my-1 w-px bg-pl-chrome-linie" />
 
               <button
                 type="button"
@@ -818,7 +828,7 @@ export function Planer({
             * auf dieselbe Kante.
             */}
           {schreibrecht && (phase === 2 || phase === 3) ? (
-            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 text-[11.5px] text-pl-auf-dunkel-2 backdrop-blur-md">
+            <div className="pointer-events-none absolute left-1/2 top-[58px] z-10 -translate-x-1/2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 text-[11.5px] text-pl-auf-dunkel-2 backdrop-blur-md">
               {phase === 2
                 ? "Das Dach steht — zum Ändern zurück zu Schritt 1"
                 : "Belegung steht — zum Ändern zurück zu Schritt 2"}
@@ -826,7 +836,7 @@ export function Planer({
           ) : null}
 
           {/* Kennzahlen, schwebend unten mittig */}
-          <div className="pointer-events-none absolute bottom-3.5 left-1/2 z-10 flex -translate-x-1/2 items-stretch rounded-[14px] border border-pl-chrome-linie bg-pl-chrome px-1.5 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,.4)] backdrop-blur-md">
+          <div className="pointer-events-none absolute bottom-[74px] left-1/2 z-10 flex -translate-x-1/2 items-stretch rounded-[14px] border border-pl-chrome-linie bg-pl-chrome px-1.5 py-2 shadow-[0_8px_30px_rgba(0,0,0,.4)] backdrop-blur-md">
             {kennzahlen.map((k) => (
               <div
                 key={k.label}

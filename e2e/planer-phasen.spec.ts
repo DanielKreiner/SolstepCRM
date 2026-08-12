@@ -148,4 +148,38 @@ test.describe("Planer — Schrittsperren", () => {
 
     expect(await zahl(), "kein Modul darf sich geändert haben").toBe(vorher);
   });
+
+  test("Eine Modulgruppe lässt sich duplizieren", async ({ page }) => {
+    await login(page, DEMO.gf);
+    const id = await projektMitBelegung(page, "Phasen Kopie");
+
+    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
+
+    /*
+     * Nicht auf „Feld 1" klicken: Nach dem Belegen ist die Gruppe schon
+     * gewählt, und der Klick würde sie abwählen — dann verschwinden ihre
+     * Aktionen. Genau daran ist der erste Anlauf dieses Tests
+     * gescheitert.
+     */
+    const gruppen = async () => {
+      const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();
+      return (data!.plan as { gruppen: unknown[] }).gruppen.length;
+    };
+    await expect.poll(gruppen, { timeout: 20_000 }).toBe(1);
+
+    await page.getByRole("button", { name: "Gruppe duplizieren" }).click();
+    await expect(page.getByRole("button", { name: /Kopie/ })).toBeVisible();
+    await expect.poll(gruppen, { timeout: 20_000 }).toBe(2);
+
+    /*
+     * Die Kopie muss Module tragen. Sie liegt um ihre eigene Breite
+     * versetzt — landet sie neben dem Dach, wirft `nachfuehren` alles
+     * heraus, und eine leere Gruppe wäre nutzlos.
+     */
+    const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();
+    const plan = data!.plan as { gruppen: Array<{ name: string; reihen: number; spalten: number }> };
+    const kopie = plan.gruppen.find((g) => g.name.includes("Kopie"))!;
+    expect(kopie.reihen * kopie.spalten).toBeGreaterThan(0);
+  });
 });

@@ -84,10 +84,13 @@ einstellbar und liegen im Plan.
 
 ### 3D-4 Bedienung angleichen
 
-- Schritte oben in der Mitte statt links
-- Werkzeugleiste unten in der Mitte, je Schritt anders belegt
-- Verschieben/Drehen als Symbole am Gruppenrahmen
-- „Duplizieren" für Modulgruppen
+- ✓ Schritte oben in der Mitte statt links
+- ✓ Werkzeugleiste unten in der Mitte, je Schritt anders belegt
+- ✓ „Duplizieren" für Modulgruppen
+- ✓ Ein Schritt sperrt, was der vorige festgelegt hat
+- **offen:** Verschieben und Drehen als Symbole am Gruppenrahmen. Heute
+  sind es Griffe an den Rahmenkanten; sie funktionieren, sehen aber
+  anders aus als bei Reonic. Reine Darstellungsfrage, kein Verhalten.
 
 ## 4. Was bleibt
 
