@@ -363,7 +363,10 @@ test.describe("Planer — Übergabe als Vorgang", () => {
       await page.goto(`/planer/${projekt!.id}`);
       await page.getByRole("button", { name: /^5 Übergabe/ }).click();
 
-      await expect(page.getByRole("heading", { name: "Übergabe" })).toBeVisible();
+      // Die Überschrift ist die Frage des Schritts.
+      await expect(
+        page.getByRole("heading", { name: /Fertig — was soll damit passieren/ }),
+      ).toBeVisible();
       await expect(page.getByRole("button", { name: "Als Vorgang übernehmen" })).toHaveCount(0);
     } finally {
       await db

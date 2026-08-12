@@ -4,6 +4,7 @@ import { useId } from "react";
 import type { Plan, Wirtschaft } from "@/lib/planer/plan";
 import { richtpreis, VERBRAUCH_CHIPS, verbrauchAusChips } from "@/lib/planer/wirtschaft";
 import { num } from "@/lib/format";
+import { Frage } from "./Bausteine";
 
 /*
  * Die Eingaben der Wirtschaftlichkeit (Briefing 7).
@@ -87,14 +88,21 @@ export function WirtschaftPanel({
   const foerderRegion = regionen.find((r) => r.region === w.region);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3.5">
+      <Frage
+        text="Wie rechnet sich das?"
+        hinweis="Alles ist vorbelegt. Überschreib, was der Kunde sagt — ein getippter Wert bleibt stehen."
+      />
+
       {/* ── Jahresverbrauch ─────────────────────────────────────── */}
-      <section>
+      <section className="rounded-[14px] border border-line bg-surface p-3.5">
         <div className="flex items-baseline">
-          <label htmlFor={`${kennung}-verbrauch`} className="text-[12px] font-semibold text-muted">
+          <label htmlFor={`${kennung}-verbrauch`} className="text-[13px] font-semibold text-muted">
             Jahresverbrauch
           </label>
-          <span className="num ml-auto text-[13px] font-bold">{num(verbrauch)} kWh</span>
+          <span className="num ml-auto text-[19px] font-extrabold tabular-nums">
+            {num(verbrauch)} kWh
+          </span>
         </div>
         <input
           id={`${kennung}-verbrauch`}
@@ -134,7 +142,7 @@ export function WirtschaftPanel({
                   setze({ chips, verbrauchKwh: verbrauchAusChips(chips) || null });
                 }}
                 className={[
-                  "rounded-pill border-[1.5px] px-3 py-2 text-[12px] font-semibold transition-colors",
+                  "flex h-[44px] items-center rounded-pill border-[1.5px] px-3.5 text-[13px] font-semibold transition-colors",
                   an
                     ? "border-accent bg-accent-sunk text-accent-ink"
                     : "border-line bg-surface text-muted hover:border-line-strong",
@@ -148,7 +156,7 @@ export function WirtschaftPanel({
       </section>
 
       {/* ── Preise ──────────────────────────────────────────────── */}
-      <section className="grid grid-cols-2 gap-2.5">
+      <section className="grid grid-cols-2 gap-2.5 rounded-[14px] border border-line bg-surface p-3.5">
         <Geldfeld
           label="Strompreis"
           titel="Was heute pro Kilowattstunde aus dem Netz zu zahlen ist."
@@ -194,7 +202,7 @@ export function WirtschaftPanel({
        * nicht unbemerkt stehen bleibt.
        */}
       {w.anlagenpreis !== null && vorschlag > 0 && Math.abs(w.anlagenpreis - vorschlag) > 1 ? (
-        <p className="-mt-2 text-[11.5px] leading-[1.45] text-muted">
+        <p className="-mt-2 text-[12.5px] leading-[1.45] text-muted">
           Richtpreis für {num(Math.round(anlageKwp * 100) / 100)} kWp
           {w.mitSpeicher && speicherKwh > 0 ? ` mit ${num(Math.round(speicherKwh * 10) / 10)} kWh Speicher` : ""}:{" "}
           <button
@@ -211,8 +219,8 @@ export function WirtschaftPanel({
 
       {/* ── Region ──────────────────────────────────────────────── */}
       {regionen.length > 0 ? (
-        <section>
-          <div className="text-[12px] font-semibold text-muted">Region</div>
+        <section className="rounded-[14px] border border-line bg-surface p-3.5">
+          <div className="text-[13px] font-semibold text-muted">Region</div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {regionen.map((r) => {
               const an = w.region === r.region;
@@ -224,7 +232,7 @@ export function WirtschaftPanel({
                   aria-pressed={an}
                   onClick={() => setze({ region: an ? null : r.region })}
                   className={[
-                    "rounded-[10px] border-[1.5px] px-3 py-2 text-[12.5px] font-semibold transition-colors",
+                    "flex h-[44px] items-center rounded-[12px] border-[1.5px] px-3.5 text-[13px] font-semibold transition-colors",
                     an
                       ? "border-accent bg-accent-sunk text-accent-ink"
                       : "border-line bg-surface text-muted hover:border-line-strong",
@@ -241,7 +249,7 @@ export function WirtschaftPanel({
            * man den alten Wert für den neuen Fördersatz.
            */}
           {foerderRegion && w.foerderung !== null && w.foerderung !== foerderRegion.betrag ? (
-            <p className="mt-2 text-[11.5px] leading-[1.45] text-muted">
+            <p className="mt-2 text-[12.5px] leading-[1.45] text-muted">
               Für {foerderRegion.region} hinterlegt:{" "}
               <button
                 type="button"
@@ -255,11 +263,11 @@ export function WirtschaftPanel({
             </p>
           ) : null}
           {foerderRegion?.hinweis ? (
-            <p className="mt-1.5 text-[11.5px] leading-[1.45] text-muted">{foerderRegion.hinweis}</p>
+            <p className="mt-1.5 text-[12.5px] leading-[1.45] text-muted">{foerderRegion.hinweis}</p>
           ) : null}
         </section>
       ) : (
-        <p className="text-[11.5px] leading-[1.45] text-muted">
+        <p className="text-[12.5px] leading-[1.45] text-muted">
           Es sind noch keine Fördersätze hinterlegt. Sie werden in den Einstellungen gepflegt —
           bewusst von Hand, weil eine veraltete Zahl sonst im Angebot landet.
         </p>
@@ -288,13 +296,13 @@ function Geldfeld({
   const kennung = useId();
   return (
     <div>
-      <label htmlFor={kennung} className="mb-1 flex items-center gap-1 text-[12px] font-semibold text-muted">
+      <label htmlFor={kennung} className="mb-1.5 flex items-center gap-1 text-[12.5px] font-semibold text-muted">
         {label}
         <span title={titel} className="cursor-help text-muted/70">
           ⓘ
         </span>
       </label>
-      <div className="flex h-10 items-center rounded-[10px] border border-line bg-surface px-2.5">
+      <div className="flex h-[52px] items-center rounded-[14px] border border-line bg-surface px-3.5">
         <input
           id={kennung}
           type="number"
@@ -307,9 +315,9 @@ function Geldfeld({
             const n = Number(e.target.value);
             if (Number.isFinite(n) && n >= 0) onWert(n);
           }}
-          className="num w-full border-none bg-transparent text-[13.5px] outline-none"
+          className="num w-full border-none bg-transparent text-[16px] font-bold outline-none"
         />
-        <span className="whitespace-nowrap text-[11px] text-muted">{einheit}</span>
+        <span className="whitespace-nowrap text-[12.5px] font-semibold text-muted">{einheit}</span>
       </div>
     </div>
   );

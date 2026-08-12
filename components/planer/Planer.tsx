@@ -676,114 +676,16 @@ export function Planer({
       </header>
 
       <div className="relative flex min-h-0 flex-1">
-
-        {/* ── Räumliche Ansicht ────────────────────────────────────── */}
-        {raeumlich && phase !== 4 && phase !== 5 ? (
-          <div className="relative min-w-0 flex-1 bg-pl-flaeche">
-            <Dreidee
-              plan={plan}
-              ursprung={projekt.ursprung}
-              anbieter={anbieter}
-              /*
-                * Nur für die Kachelauswahl: Breite und Höhe geben den
-                * Ausschnitt vor, aus dem die Bodentextur entsteht. Ein
-                * fester Wert reicht — die räumliche Ansicht hat ihre
-                * eigene Kamera.
-                */
-              kamera={{ ursprung: projekt.ursprung, zoom, mitte, breite: 1024, hoehe: 1024 }}
-              wandhoehe={plan.gebaeude.wandhoehe}
-              ueberstand={plan.gebaeude.ueberstand}
-              schatten={ertrag.schattenJeModul}
-            />
-            <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 text-[11.5px] text-pl-auf-dunkel-2 backdrop-blur-md">
-              Ziehen dreht · Umschalt oder rechte Taste schwenkt · Rad zoomt
-            </p>
-          </div>
-        ) : phase === 5 ? (
-          <div className="min-w-0 flex-1 overflow-auto bg-app px-5 py-5">
-            <h2 className="text-[18px] font-extrabold tracking-[-0.01em]">Übergabe</h2>
-            <p className="mt-1 max-w-xl text-[13px] leading-[1.55] text-muted">
-              Aus der Planung wird ein Vorgang: mit Kunde, Adresse, Anlagengrösse und einer
-              Bedarfsliste, die schon steht. Was der Planer nicht sicher zuordnen kann, wird als
-              Freitext übergeben und im Material ergänzt — geraten wird nichts.
-            </p>
-
-            <dl className="mt-4 grid max-w-xl gap-2.5 sm:grid-cols-2">
-              {[
-                ["Anlage", `${leistung.toFixed(2).replace(".", ",")} kWp`],
-                ["Module", String(modulzahl)],
-                [
-                  "Speicher",
-                  speicherKwh > 0 && plan.wirtschaft.mitSpeicher
-                    ? `${num(speicherKwh)} kWh`
-                    : "keiner",
-                ],
-                [
-                  "Ertrag",
-                  ertrag.anlage.jahresertragKwh > 0
-                    ? `${num(Math.round(ertrag.anlage.jahresertragKwh))} kWh/Jahr`
-                    : "—",
-                ],
-              ].map(([k, v]) => (
-                <div key={k} className="rounded-card border border-line bg-surface px-4 py-3">
-                  <dt className="text-[12px] text-muted">{k}</dt>
-                  <dd className="num mt-0.5 text-[15px] font-bold">{v}</dd>
-                </div>
-              ))}
-            </dl>
-
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Uebergabe
-                projektId={projekt.id}
-                kunden={kunden}
-                schreibrecht={schreibrecht}
-                onVorOeffnen={jetztSichern}
-              />
-              {/*
-                * Das PDF entsteht serverseitig aus dem gespeicherten
-                * Plan. Deshalb vorher sichern — sonst trägt das Blatt
-                * beim Kunden andere Zahlen als der Bildschirm.
-                */}
-              <a
-                href={`/api/planer/pdf/${projekt.id}`}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => void jetztSichern()}
-                className="flex h-9 items-center rounded-[10px] border border-line bg-surface px-3.5 text-[13px] font-semibold text-ink transition-colors hover:bg-sunk"
-              >
-                Kunden-PDF öffnen
-              </a>
-            </div>
-          </div>
-        ) : phase === 4 ? (
-          /*
-           * In Phase 4 tritt die Karte ganz zurück. Hier wird nicht mehr
-           * geplant, sondern gezeigt — und zwar hell, weil der Kunde
-           * mitschaut und die dunkle Zeichenfläche in einem Wohnzimmer
-           * am Tablet unangenehm blendet.
-           */
-          <div className="min-w-0 flex-1 bg-app">
-            <Ergebnis
-              ertragKwh={ertrag.anlage.jahresertragKwh}
-              verbrauchKwh={wirtschaftWerte.verbrauchKwh}
-              speicherKwh={speicherKwh}
-              strompreis={wirtschaftWerte.strompreis}
-              verguetung={wirtschaftWerte.verguetung}
-              anlagenpreis={wirtschaftWerte.anlagenpreis}
-              foerderung={wirtschaftWerte.foerderung}
-              steigerung={vorgabe.steigerung}
-              mitSpeicher={plan.wirtschaft.mitSpeicher}
-              onMitSpeicher={(an) =>
-                onPlan({ ...plan, wirtschaft: { ...plan.wirtschaft, mitSpeicher: an } }, true)
-              }
-              geschaetzt={ertrag.quelle === "geschaetzt"}
-              vorlaeufig={ertrag.vorlaeufig}
-              speicherVerfuegbar={speicherKwh > 0}
-            />
-          </div>
-        ) : (
-        /* ── Zeichenfläche, dunkel ────────────────────────────────── */
-        <div ref={zeichenflaeche} className="relative min-w-0 flex-1 bg-pl-flaeche">
+        {/*
+          * Ein Rahmen um den ARBEITSBEREICH — Karte, Ergebnis oder
+          * Übergabe —, damit die Schrittleiste in jedem Schritt an
+          * derselben Stelle steht.
+          *
+          * Vorher hing sie in der Zeichenfläche. Die gibt es in Schritt
+          * 4 und 5 nicht: Dort verschwand die Leiste komplett, und der
+          * einzige Weg zurück war der Browser-Zurück-Knopf.
+          */}
+        <div className="relative flex min-w-0 flex-1">
           {/*
             * ── Schritte, schwebend oben mittig ────────────────────────
             *
@@ -869,6 +771,126 @@ export function Planer({
             );
           })}
           </nav>
+
+        {/* ── Räumliche Ansicht ────────────────────────────────────── */}
+        {raeumlich && phase !== 4 && phase !== 5 ? (
+          <div className="relative min-w-0 flex-1 bg-pl-flaeche">
+            <Dreidee
+              plan={plan}
+              ursprung={projekt.ursprung}
+              anbieter={anbieter}
+              /*
+                * Nur für die Kachelauswahl: Breite und Höhe geben den
+                * Ausschnitt vor, aus dem die Bodentextur entsteht. Ein
+                * fester Wert reicht — die räumliche Ansicht hat ihre
+                * eigene Kamera.
+                */
+              kamera={{ ursprung: projekt.ursprung, zoom, mitte, breite: 1024, hoehe: 1024 }}
+              wandhoehe={plan.gebaeude.wandhoehe}
+              ueberstand={plan.gebaeude.ueberstand}
+              schatten={ertrag.schattenJeModul}
+            />
+            <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 text-[11.5px] text-pl-auf-dunkel-2 backdrop-blur-md">
+              Ziehen dreht · Umschalt oder rechte Taste schwenkt · Rad zoomt
+            </p>
+          </div>
+        ) : phase === 5 ? (
+          /*
+           * Schritt 5 in derselben Sprache wie die anderen: eine Frage,
+           * darunter die beiden Wege, die es hier gibt — Vorgang oder
+           * PDF. Der Stand steht dazwischen, damit vor dem Knopfdruck
+           * sichtbar ist, was übergeben wird.
+           */
+          <div className="min-w-0 flex-1 overflow-auto bg-app px-5 pb-6 pt-[68px]">
+            <div className="mx-auto flex max-w-xl flex-col gap-4">
+              <div>
+                <h2 className="text-[24px] font-extrabold tracking-[-0.015em]">
+                  Fertig — was soll damit passieren?
+                </h2>
+                <p className="mt-1.5 text-[14px] leading-[1.5] text-muted">
+                  Aus der Planung wird ein Vorgang: mit Kunde, Adresse, Anlagengrösse und einer
+                  Bedarfsliste, die schon steht. Was der Planer nicht sicher zuordnen kann, wird
+                  als Freitext übergeben und im Material ergänzt — geraten wird nichts.
+                </p>
+              </div>
+
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                {[
+                  ["Anlage", `${leistung.toFixed(2).replace(".", ",")} kWp`],
+                  ["Module", String(modulzahl)],
+                  [
+                    "Speicher",
+                    speicherKwh > 0 && plan.wirtschaft.mitSpeicher
+                      ? `${num(speicherKwh)} kWh`
+                      : "keiner",
+                  ],
+                  [
+                    "Ertrag",
+                    ertrag.anlage.jahresertragKwh > 0
+                      ? `${num(Math.round(ertrag.anlage.jahresertragKwh))} kWh/Jahr`
+                      : "—",
+                  ],
+                ].map(([k, v]) => (
+                  <div key={k} className="rounded-[14px] border border-line bg-surface px-4 py-3">
+                    <div className="text-[12.5px] text-muted">{k}</div>
+                    <div className="num mt-0.5 text-[19px] font-bold tabular-nums">{v}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                <Uebergabe
+                  projektId={projekt.id}
+                  kunden={kunden}
+                  schreibrecht={schreibrecht}
+                  onVorOeffnen={jetztSichern}
+                />
+                {/*
+                  * Das PDF entsteht serverseitig aus dem gespeicherten
+                  * Plan. Deshalb vorher sichern — sonst trägt das Blatt
+                  * beim Kunden andere Zahlen als der Bildschirm.
+                  */}
+                <a
+                  href={`/api/planer/pdf/${projekt.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => void jetztSichern()}
+                  className="flex h-[52px] items-center justify-center rounded-[14px] border border-line bg-surface px-4 text-[15px] font-bold text-ink transition-colors hover:border-accent"
+                >
+                  Kunden-PDF öffnen
+                </a>
+              </div>
+            </div>
+          </div>
+        ) : phase === 4 ? (
+          /*
+           * In Phase 4 tritt die Karte ganz zurück. Hier wird nicht mehr
+           * geplant, sondern gezeigt — und zwar hell, weil der Kunde
+           * mitschaut und die dunkle Zeichenfläche in einem Wohnzimmer
+           * am Tablet unangenehm blendet.
+           */
+          <div className="min-w-0 flex-1 bg-app">
+            <Ergebnis
+              ertragKwh={ertrag.anlage.jahresertragKwh}
+              verbrauchKwh={wirtschaftWerte.verbrauchKwh}
+              speicherKwh={speicherKwh}
+              strompreis={wirtschaftWerte.strompreis}
+              verguetung={wirtschaftWerte.verguetung}
+              anlagenpreis={wirtschaftWerte.anlagenpreis}
+              foerderung={wirtschaftWerte.foerderung}
+              steigerung={vorgabe.steigerung}
+              mitSpeicher={plan.wirtschaft.mitSpeicher}
+              onMitSpeicher={(an) =>
+                onPlan({ ...plan, wirtschaft: { ...plan.wirtschaft, mitSpeicher: an } }, true)
+              }
+              geschaetzt={ertrag.quelle === "geschaetzt"}
+              vorlaeufig={ertrag.vorlaeufig}
+              speicherVerfuegbar={speicherKwh > 0}
+            />
+          </div>
+        ) : (
+        /* ── Zeichenfläche, dunkel ────────────────────────────────── */
+        <div ref={zeichenflaeche} className="relative min-w-0 flex-1 bg-pl-flaeche">
           {foto || verfuegbar(anbieter) ? (
             <Leinwand
               ursprung={projekt.ursprung}
@@ -1036,6 +1058,8 @@ export function Planer({
         )}
 
         {/* ── Panel, 344 px ───────────────────────────────────────── */}
+        </div>
+
         {panelOffen && phase !== 5 ? (
           /*
            * EIN Panel, ein Schritt, eine Frage.

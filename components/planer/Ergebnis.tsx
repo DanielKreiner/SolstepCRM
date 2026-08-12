@@ -47,7 +47,7 @@ export function Ergebnis(p: Props) {
   if (p.ertragKwh <= 0) {
     return (
       <div className="flex h-full items-center justify-center p-8">
-        <p className="max-w-sm text-center text-[13.5px] leading-[1.55] text-muted">
+        <p className="max-w-sm text-center text-[15px] leading-[1.55] text-muted">
           Noch keine Module belegt. Sobald auf dem Dach Module liegen, steht hier, was die Anlage
           bringt.
         </p>
@@ -58,9 +58,18 @@ export function Ergebnis(p: Props) {
   const tilde = p.vorlaeufig ? "~" : "";
 
   return (
-    <div className="h-full overflow-auto px-5 py-4">
+    /*
+     * Oben 60 px Platz: Dort schwebt die Schrittleiste über dem Inhalt.
+     * Ohne den Abstand lag sie auf der Überschrift.
+     */
+    <div className="h-full overflow-auto px-5 pb-4 pt-[60px]">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-[18px] font-extrabold tracking-[-0.01em]">
+        {/*
+          * Diese Seite liest der KUNDE mit — deshalb grösser als der
+          * Rest der Anwendung. 24 px Überschrift, 40 px für die beiden
+          * Zahlen, um die es geht.
+          */}
+        <h2 className="text-[24px] font-extrabold tracking-[-0.015em]">
           Was die Anlage für dich rechnet
         </h2>
         {p.geschaetzt ? (
@@ -92,7 +101,7 @@ export function Ergebnis(p: Props) {
 
           <div className="grid gap-3.5 sm:grid-cols-2">
             <div className="rounded-card bg-pl-flaeche px-5 py-4 text-pl-auf-dunkel">
-              <div className="text-[12px] font-semibold text-pl-auf-dunkel-2">
+              <div className="text-[13px] font-semibold text-pl-auf-dunkel-2">
                 Amortisation{" "}
                 <span title="Ab dann hat die Anlage ihren Preis wieder eingespielt." className="cursor-help">
                   ⓘ
@@ -100,7 +109,7 @@ export function Ergebnis(p: Props) {
               </div>
               <div
                 data-kennzahl="amortisation"
-                className="num mt-1 whitespace-nowrap text-[30px] font-bold leading-none tracking-[-0.02em] text-accent"
+                className="num mt-1.5 whitespace-nowrap text-[32px] font-bold leading-none tracking-[-0.02em] text-accent"
               >
                 {r.amortisationJahre === null
                   ? "—"
@@ -109,7 +118,7 @@ export function Ergebnis(p: Props) {
             </div>
 
             <div className="rounded-card border border-line bg-surface px-5 py-4">
-              <div className="text-[12px] font-semibold text-muted">
+              <div className="text-[13px] font-semibold text-muted">
                 Ersparnis im 1. Jahr{" "}
                 <span title="Gesparter Netzstrom plus Einspeisevergütung." className="cursor-help text-muted/70">
                   ⓘ
@@ -117,7 +126,7 @@ export function Ergebnis(p: Props) {
               </div>
               <div
                 data-kennzahl="ersparnis"
-                className="num mt-1 whitespace-nowrap text-[30px] font-bold leading-none tracking-[-0.02em]"
+                className="num mt-1.5 whitespace-nowrap text-[32px] font-bold leading-none tracking-[-0.02em]"
               >
                 {tilde}
                 {num(Math.round(r.ersparnisJahr1))} €
@@ -129,7 +138,7 @@ export function Ergebnis(p: Props) {
 
       <Kurve ergebnis={r} steigerung={p.steigerung} />
 
-      <p className="mt-3 text-[11.5px] leading-[1.5] text-muted">
+      <p className="mt-3 text-[12.5px] leading-[1.5] text-muted">
         Richtwerte, unverbindlich. Das Modell rechnet mit Jahreswerten, nicht mit Lastprofilen —
         für ein Erstgespräch genau richtig, für die Netzanmeldung nicht.
       </p>
@@ -152,7 +161,7 @@ function Umschalter({
       onClick={onClick}
       aria-pressed={an}
       className={[
-        "rounded-[8px] px-3.5 py-2 text-[12.5px] font-semibold transition-colors",
+        "flex h-[44px] items-center rounded-[10px] px-4 text-[13.5px] font-semibold transition-colors",
         an ? "bg-surface text-ink shadow-soft" : "text-muted hover:text-ink",
       ].join(" ")}
     >
@@ -196,7 +205,7 @@ function Donut({ autarkie }: { autarkie: number }) {
           Autarkie
         </text>
       </svg>
-      <div className="mt-2 flex gap-3 text-[11.5px] text-muted">
+      <div className="mt-2 flex gap-3 text-[12.5px] text-muted">
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-[3px] bg-accent" />
           Eigener Strom
@@ -206,7 +215,7 @@ function Donut({ autarkie }: { autarkie: number }) {
           Netzbezug
         </span>
       </div>
-      <p className="mt-2 text-center text-[11px] text-muted">
+      <p className="mt-2 text-center text-[12px] text-muted">
         Anteil des Verbrauchs vom eigenen Dach
       </p>
     </div>
@@ -235,17 +244,17 @@ function Jahresbilanz({
 
   return (
     <div className="rounded-card border border-line bg-surface px-4.5 py-4">
-      <div className="mb-3 text-[13px] font-bold">Jahresbilanz</div>
+      <div className="mb-3 text-[14px] font-bold">Jahresbilanz</div>
       {balken.map((b) => (
         <div key={b.label} className="mb-2 flex items-center gap-2.5 last:mb-0">
-          <div className="w-[104px] shrink-0 text-[12px] text-muted">{b.label}</div>
+          <div className="w-[110px] shrink-0 text-[13px] text-muted">{b.label}</div>
           <div className="h-[15px] flex-1 overflow-hidden rounded-[6px] bg-sunk">
             <div
               className="h-full rounded-[6px] transition-[width] duration-500"
               style={{ width: `${(b.wert / groesster) * 100}%`, background: b.farbe }}
             />
           </div>
-          <div className="num w-[92px] shrink-0 text-right text-[12px] font-semibold">
+          <div className="num w-[96px] shrink-0 text-right text-[13px] font-semibold">
             {tilde}
             {num(Math.round(b.wert))} kWh
           </div>

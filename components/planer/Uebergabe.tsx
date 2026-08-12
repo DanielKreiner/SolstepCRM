@@ -82,7 +82,7 @@ export function Uebergabe({
       <button
         type="button"
         onClick={() => setOffen(true)}
-        className="flex h-9 items-center rounded-[10px] bg-accent px-3.5 text-[13px] font-bold text-white transition-colors hover:bg-accent-to"
+        className="flex h-[52px] w-full items-center justify-center rounded-[14px] bg-accent px-4 text-[15px] font-bold text-white transition-colors hover:bg-accent-to"
       >
         Als Vorgang übernehmen
       </button>
@@ -91,7 +91,7 @@ export function Uebergabe({
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6">
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-card bg-panel shadow-soft sm:rounded-card">
             <div className="flex items-center gap-3 border-b border-line px-5 py-3.5">
-              <h2 className="text-[15px] font-extrabold">
+              <h2 className="text-[18px] font-extrabold">
                 {vorschau?.vorgangNummer
                   ? `Abgleich mit ${vorschau.vorgangNummer}`
                   : "Als Vorgang übernehmen"}
@@ -189,13 +189,13 @@ export function Uebergabe({
                         ) : null}
 
                         {suche.trim().length >= 2 && !kundeId ? (
-                          <p className="mt-1.5 text-[11.5px] text-muted">
+                          <p className="mt-1.5 text-[12.5px] text-muted">
                             Kein bestehender Kunde gewählt — {"\u201E"}{suche.trim()}{"\u201C"} wird neu angelegt.
                           </p>
                         ) : null}
                       </div>
 
-                      <div className="rounded-[10px] bg-sunk px-3 py-2.5 text-[12.5px] leading-[1.5] text-muted">
+                      <div className="rounded-[10px] bg-sunk px-3 py-2.5 text-[13px] leading-[1.5] text-muted">
                         Der Vorgang bekommt {num(Math.round(vorschau.kwp * 100) / 100)} kWp
                         {vorschau.speicherKwh > 0
                           ? ` und ${num(vorschau.speicherKwh)} kWh Speicher`
@@ -205,7 +205,7 @@ export function Uebergabe({
                       </div>
                     </>
                   ) : (
-                    <div className="rounded-[10px] bg-sunk px-3 py-2.5 text-[12.5px] leading-[1.5] text-muted">
+                    <div className="rounded-[10px] bg-sunk px-3 py-2.5 text-[13px] leading-[1.5] text-muted">
                       Diese Planung hängt schon an {vorschau.vorgangNummer}. Übernommen wird nur,
                       was hier angehakt ist — von Hand ergänzte Positionen bleiben unberührt.
                     </div>
@@ -213,9 +213,9 @@ export function Uebergabe({
 
                   {/* ── Bedarfsliste ─────────────────────────────── */}
                   <div>
-                    <div className="text-[12.5px] font-semibold">Bedarfsliste</div>
+                    <div className="text-[13px] font-semibold">Bedarfsliste</div>
                     {vorschau.positionen.length === 0 ? (
-                      <p className="mt-1.5 text-[12.5px] text-muted">
+                      <p className="mt-1.5 text-[13px] text-muted">
                         Aus dieser Planung ergibt sich noch kein Material — es liegen keine Module
                         auf dem Dach.
                       </p>
@@ -241,7 +241,7 @@ export function Uebergabe({
                               />
                               <div className="min-w-0 flex-1">
                                 <div className="text-[13px] font-semibold">{p.bezeichnung}</div>
-                                <div className="flex flex-wrap gap-x-2 text-[11.5px] text-muted">
+                                <div className="flex flex-wrap gap-x-2 text-[12.5px] text-muted">
                                   <Marke art={p.art} />
                                   {p.art === "geaendert" ? (
                                     <span className="num">
@@ -255,7 +255,7 @@ export function Uebergabe({
                                   ) : null}
                                 </div>
                               </div>
-                              <div className="num shrink-0 text-[12.5px] font-semibold">
+                              <div className="num shrink-0 text-[13px] font-semibold">
                                 {num(p.menge)} Stk
                               </div>
                             </li>
@@ -266,10 +266,10 @@ export function Uebergabe({
                   </div>
 
                   {stand.error ? (
-                    <p className="text-[12.5px] font-semibold text-s-crit">{stand.error}</p>
+                    <p className="text-[13px] font-semibold text-s-crit">{stand.error}</p>
                   ) : null}
                   {stand.ok ? (
-                    <p className="text-[12.5px] font-semibold text-s-done">
+                    <p className="text-[13px] font-semibold text-s-done">
                       {stand.ok}{" "}
                       {stand.id ? (
                         <Link href={`/vorgaenge/${stand.id}`} className="text-accent-ink hover:underline">
@@ -294,7 +294,7 @@ export function Uebergabe({
                     <button
                       type="button"
                       onClick={() => setOffen(false)}
-                      className="text-[12.5px] text-muted hover:text-ink"
+                      className="text-[13px] text-muted hover:text-ink"
                     >
                       abbrechen
                     </button>

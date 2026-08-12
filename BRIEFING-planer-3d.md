@@ -153,6 +153,18 @@ grosser Knopf.** Alles, was ein Betrieb selten braucht, liegt hinter
 - Kennzahlen links statt unten; die Werkzeugleiste hat den unteren Rand
   für sich
 
+Schritt 4 und 5 sind in derselben Sprache nachgezogen: „Wie rechnet
+sich das?" mit 52-px-Feldern und grossen Chips, „Fertig — was soll
+damit passieren?" mit vier Kennzahlen und zwei Knöpfen. Die
+Ergebnisseite ist die einzige Fläche, die der KUNDE mitliest — dort
+stehen Überschrift und Kennzahlen bewusst grösser als im Rest der
+Anwendung.
+
+Dabei fiel auf, dass die Schrittleiste in Schritt 4 und 5 ganz
+verschwunden war: Sie hing in der Zeichenfläche, die es dort nicht
+gibt. Der einzige Weg zurück war der Browser-Zurück-Knopf. Sie sitzt
+jetzt in einem Rahmen um den ganzen Arbeitsbereich.
+
 Dabei gefundene Fehler, alle behoben und mit Tests belegt: weggetippte
 Module kamen nach jeder Bewegung zurück; frei gezogene Module liessen
 sich neben das Dach legen; das Luftbild war beim Heranzoomen verzerrt
