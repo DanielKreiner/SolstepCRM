@@ -112,12 +112,32 @@ const wirtschaftSchema = z.object({
   mitSpeicher: z.boolean().default(false),
 });
 
+/*
+ * Gebäudeparameter für die räumliche Ansicht
+ * (BRIEFING-planer-3d.md, Stufe 3D-2).
+ *
+ * Sie gehören zum Plan und nicht in den Bildschirmzustand: Die
+ * Wandhöhe eines Hauses ändert sich nicht dadurch, dass jemand den
+ * Browser schliesst, und beim nächsten Öffnen soll dasselbe Gebäude
+ * dastehen.
+ */
+const gebaeudeSchema = z.object({
+  typ: z.enum(["flach", "pult", "sattel", "walm"]).default("sattel"),
+  /** Höhe der Aussenwand bis zur Traufe, in Metern. */
+  wandhoehe: z.number().min(0).max(50).default(3),
+  /** Wie weit das Dach über die Wand ragt, in Metern. */
+  ueberstand: z.number().min(0).max(3).default(0.3),
+});
+
+export type GebaeudeStand = z.infer<typeof gebaeudeSchema>;
+
 export const planSchema = z.object({
   version: z.number().default(PLAN_VERSION),
   flaechen: z.array(flaecheSchema).default([]),
   gruppen: z.array(gruppeSchema).default([]),
   strings: z.array(strangSchema).default([]),
   technik: technikSchema.default({ wechselrichter: null, speicher: null, modul: null }),
+  gebaeude: gebaeudeSchema.default({ typ: "sattel", wandhoehe: 3, ueberstand: 0.3 }),
   wirtschaft: wirtschaftSchema.default({
     verbrauchKwh: null,
     chips: [],
@@ -153,6 +173,7 @@ export type Plan = {
   gruppen: Modulgruppe[];
   strings: Strang[];
   technik: Technik;
+  gebaeude: GebaeudeStand;
   wirtschaft: Wirtschaft;
 };
 
@@ -163,6 +184,7 @@ export function leererPlan(): Plan {
     gruppen: [],
     strings: [],
     technik: { wechselrichter: null, speicher: null, modul: null },
+    gebaeude: { typ: "sattel", wandhoehe: 3, ueberstand: 0.3 },
     wirtschaft: {
       verbrauchKwh: null,
       chips: [],

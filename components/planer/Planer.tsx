@@ -11,6 +11,7 @@ import {
   TechnikPanel,
 } from "./TechnikPanel";
 import { FotoLeiste } from "./FotoLeiste";
+import { Dreidee } from "./Dreidee";
 import { Ergebnis } from "./Ergebnis";
 import { type KundeKurz, Uebergabe } from "./Uebergabe";
 import { planungAlsBild } from "./bild";
@@ -125,6 +126,12 @@ export function Planer({
   const [gemerkt, setGemerkt] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
   const [mitte, setMitte] = useState<Meter>({ x: 0, y: 0 });
   const [panelOffen, setPanelOffen] = useState(true);
+  /*
+   * Räumliche Ansicht. Gezeichnet wird weiter in der Draufsicht — hier
+   * wird geschaut. Beim Kunden am Tisch ist das der Moment, in dem aus
+   * einem Grundriss ein Haus wird.
+   */
+  const [raeumlich, setRaeumlich] = useState(false);
   const [foto, setFoto] = useState<FotoQuelle | null>(projekt.foto);
 
   /*
@@ -476,6 +483,18 @@ export function Planer({
           <span className="hidden text-[12px] text-muted lg:inline">
             {gemerkt === "speichert" ? "sichert" : gemerkt === "fehler" ? "nicht gesichert" : "gesichert"}
           </span>
+
+          <button
+            type="button"
+            onClick={() => setRaeumlich((v) => !v)}
+            aria-pressed={raeumlich}
+            className={[
+              "num ml-2 flex h-8 shrink-0 items-center rounded-[9px] px-2.5 text-[12px] font-bold transition-colors",
+              raeumlich ? "bg-accent text-white" : "bg-sunk text-muted hover:text-ink",
+            ].join(" ")}
+          >
+            {raeumlich ? "3D" : "2D"}
+          </button>
         </div>
       </header>
 
@@ -544,8 +563,28 @@ export function Planer({
           })}
         </nav>
 
-        {/* ── Übergabe (Phase 5) ───────────────────────────────────── */}
-        {phase === 5 ? (
+        {/* ── Räumliche Ansicht ────────────────────────────────────── */}
+        {raeumlich && phase !== 4 && phase !== 5 ? (
+          <div className="relative min-w-0 flex-1 bg-pl-flaeche">
+            <Dreidee
+              plan={plan}
+              ursprung={projekt.ursprung}
+              anbieter={anbieter}
+              /*
+                * Nur für die Kachelauswahl: Breite und Höhe geben den
+                * Ausschnitt vor, aus dem die Bodentextur entsteht. Ein
+                * fester Wert reicht — die räumliche Ansicht hat ihre
+                * eigene Kamera.
+                */
+              kamera={{ ursprung: projekt.ursprung, zoom, mitte, breite: 1024, hoehe: 1024 }}
+              wandhoehe={plan.gebaeude.wandhoehe}
+              ueberstand={plan.gebaeude.ueberstand}
+            />
+            <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 text-[11.5px] text-pl-auf-dunkel-2 backdrop-blur-md">
+              Ziehen dreht · Umschalt oder rechte Taste schwenkt · Rad zoomt
+            </p>
+          </div>
+        ) : phase === 5 ? (
           <div className="min-w-0 flex-1 overflow-auto bg-app px-5 py-5">
             <h2 className="text-[18px] font-extrabold tracking-[-0.01em]">Übergabe</h2>
             <p className="mt-1 max-w-xl text-[13px] leading-[1.55] text-muted">

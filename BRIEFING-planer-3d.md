@@ -71,6 +71,12 @@ schwierigste Teil abgesichert, bevor irgendetwas gezeichnet wird.
 - Orbit-Steuerung: Ziehen dreht, Zwei-Finger schwenkt, Rad zoomt
 - Umschalter 2D/3D; im 2D-Zustand bleibt exakt der heutige Canvas
 
+**Offen aus 3D-2:** Der Boden zeigt noch kein Luftbild. Die Kacheln
+werden geladen, landen aber nicht sichtbar in der Textur — die
+Umrechnung von Kachelkoordinate auf Texturposition stimmt noch nicht.
+Bis das steht, ist der Boden einfarbig. Das Gebäude selbst und die
+Module stehen richtig.
+
 ### 3D-3 Verschattung
 
 - Sonnenstand aus Datum, Uhrzeit und Standort
