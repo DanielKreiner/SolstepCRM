@@ -133,6 +133,16 @@ export interface LeinwandProps {
   onWerkzeug: (w: Werkzeug) => void;
   /** Ohne Schreibrecht keine Anbaustellen — sie liessen sich nicht nutzen. */
   schreibrecht: boolean;
+  /**
+   * Was in diesem Schritt angefasst werden darf.
+   *
+   * Die Werkzeugleiste zeigt schon nur die passenden Werkzeuge — das
+   * allein genügt aber nicht: Ecken, Kanten und Gruppen lassen sich
+   * auch mit dem Auswahlwerkzeug ziehen. Ohne diese Sperre verschöbe
+   * man in der Belegung weiterhin Dachkanten, und die fertige Planung
+   * verrutschte unbemerkt.
+   */
+  bearbeitbar: { flaechen: boolean; module: boolean; strings: boolean };
   onKamera?: (k: { zoom: number; mitte: Meter }) => void;
 }
 
@@ -366,7 +376,13 @@ export function Leinwand(p: LeinwandProps) {
      * Gruppe verschoben hat, ohne dass es dafür einen Sonderfall
      * braucht.
      */
-    if (gewaehlt && gf && stand.current.werkzeug === "auswahl" && stand.current.schreibrecht) {
+    if (
+      gewaehlt &&
+      gf &&
+      stand.current.werkzeug === "auswahl" &&
+      stand.current.schreibrecht &&
+      stand.current.bearbeitbar.module
+    ) {
       stellen.current = anbaustellen(gewaehlt, gf, fremdeModule(stand.current.plan, gewaehlt));
       zeichneAnbaustellen(ctx, k, gewaehlt, gf, stellen.current);
     } else {
@@ -455,7 +471,9 @@ export function Leinwand(p: LeinwandProps) {
      * Module zu färben — die Module waren danach weg.
      */
     const gewaehlt =
-      s.werkzeug === "auswahl" ? s.plan.gruppen.find((g) => g.id === s.aktiveGruppe) : undefined;
+      s.werkzeug === "auswahl" && s.bearbeitbar.module
+        ? s.plan.gruppen.find((g) => g.id === s.aktiveGruppe)
+        : undefined;
     if (gewaehlt) {
       const gf = s.plan.flaechen.find((x) => x.id === gewaehlt.flaeche);
 
@@ -501,7 +519,13 @@ export function Leinwand(p: LeinwandProps) {
       }
     }
 
-    if (aktive) {
+    /*
+     * Ecken, Massangaben und Kanten nur im Dach-Schritt. Später sind
+     * sie zwar noch zu sehen, aber nicht mehr zu greifen — sonst
+     * verschöbe ein Fehlgriff beim Belegen die Dachkante, und die
+     * fertige Planung wäre still verrutscht.
+     */
+    if (aktive && s.bearbeitbar.flaechen) {
       for (let i = 0; i < aktive.punkte.length; i++) {
         const b = meterZuBild(k, aktive.punkte[i]!);
         if (Math.hypot(b.x - bp.x, b.y - bp.y) <= GRIFF) {
@@ -511,6 +535,7 @@ export function Leinwand(p: LeinwandProps) {
     }
 
     // Pillen zuerst: sie liegen auf der Kante und sollen sie überstimmen.
+    if (s.bearbeitbar.flaechen)
     for (const f of s.plan.flaechen) {
       for (const kante of kanten(f.punkte)) {
         const m = kantenMitte(k, kante.a, kante.b);
@@ -523,6 +548,7 @@ export function Leinwand(p: LeinwandProps) {
       }
     }
 
+    if (s.bearbeitbar.flaechen)
     for (const f of s.plan.flaechen) {
       for (const kante of kanten(f.punkte)) {
         const nah = meterZuBild(k, naechsterAufStrecke(bildZuMeter(k, bp), kante.a, kante.b));
@@ -806,6 +832,9 @@ export function Leinwand(p: LeinwandProps) {
               };
       } else if (t?.art === "modul" && s.werkzeug === "modul") {
         zieht.current = { art: "modul", gruppe: t.gruppe, reihe: t.reihe, spalte: t.spalte };
+      } else if (t?.art === "modul" && !s.bearbeitbar.module) {
+        // In einem späteren Schritt ist das Modul nur noch anzusehen.
+        zieht.current = { art: "schwenk" };
       } else if (t?.art === "modul") {
         // Tippen schaltet das Modul, Ziehen verschiebt die Gruppe —
         // entschieden wird erst beim Loslassen, an der Wegstrecke.
@@ -1309,6 +1338,9 @@ export function Leinwand(p: LeinwandProps) {
               };
       } else if (t?.art === "modul" && s.werkzeug === "modul") {
         zieht.current = { art: "modul", gruppe: t.gruppe, reihe: t.reihe, spalte: t.spalte };
+      } else if (t?.art === "modul" && !s.bearbeitbar.module) {
+        // In einem späteren Schritt ist das Modul nur noch anzusehen.
+        zieht.current = { art: "schwenk" };
       } else if (t?.art === "modul") {
         // Tippen schaltet das Modul, Ziehen verschiebt die Gruppe —
         // entschieden wird erst beim Loslassen, an der Wegstrecke.

@@ -46,6 +46,13 @@ export interface PanelProps {
   onAktiveGruppe: (id: string | null) => void;
   /** Für den Reihenabstands-Vorschlag beim Flachdach. */
   breitengrad: number;
+  /**
+   * Ob das Dach in diesem Schritt noch zu ändern ist. In der Belegung
+   * wird es nur noch angezeigt — sonst stünde die Sperre auf der
+   * Zeichenfläche, während daneben dieselben Werte weiter editierbar
+   * wären.
+   */
+  dachAenderbar: boolean;
 }
 
 export function FlaechenPanel({
@@ -60,6 +67,7 @@ export function FlaechenPanel({
   aktiveGruppe,
   onAktiveGruppe,
   breitengrad,
+  dachAenderbar,
 }: PanelProps) {
   const flaeche = plan.flaechen.find((f) => f.id === aktiv) ?? null;
 
@@ -87,9 +95,11 @@ export function FlaechenPanel({
       <div className="flex flex-1 flex-col gap-3 overflow-auto px-4 pb-4">
         {foto}
 
-        {schreibrecht ? <Assistent plan={plan} onPlan={onPlan} onAktiv={onAktiv} mitte={mitte} /> : null}
+        {schreibrecht && dachAenderbar ? (
+          <Assistent plan={plan} onPlan={onPlan} onAktiv={onAktiv} mitte={mitte} />
+        ) : null}
 
-        {schreibrecht && plan.flaechen.length > 0 ? (
+        {schreibrecht && dachAenderbar && plan.flaechen.length > 0 ? (
           <Gebaeude plan={plan} onPlan={onPlan} />
         ) : null}
 

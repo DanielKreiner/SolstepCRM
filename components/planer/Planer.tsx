@@ -93,6 +93,43 @@ const WERKZEUGE: Array<{ id: Werkzeug; glyph: string; label: string; titel: stri
   { id: "messen", glyph: "↔", label: "Messen", titel: "Strecke messen" },
 ];
 
+/*
+ * Welcher Schritt womit arbeitet.
+ *
+ * Ein späterer Schritt fasst nicht mehr an, was ein früherer festgelegt
+ * hat: Wer in der Belegung steht, verschiebt keine Dachkante mehr, und
+ * wer Strings malt, verschiebt keine Module. Das ist keine
+ * Bevormundung, sondern verhindert den teuersten Fehler in diesem
+ * Ablauf — eine verrutschte Dachkante, nachdem die Belegung steht, und
+ * niemand merkt es, weil die Module ja noch daliegen.
+ *
+ * Wer doch etwas ändern will, geht einen Schritt zurück. Der Weg
+ * dorthin steht als Satz auf der Zeichenfläche.
+ */
+const WERKZEUGE_JE_PHASE: Record<1 | 2 | 3 | 4 | 5, Werkzeug[]> = {
+  1: ["auswahl", "flaeche", "hindernis", "modul", "teilen", "messen"],
+  2: ["auswahl", "modul", "teilen", "messen"],
+  3: ["auswahl", "string", "messen"],
+  4: ["auswahl"],
+  5: ["auswahl"],
+};
+
+/**
+ * Was in diesem Schritt bearbeitet werden darf.
+ *
+ * Dach und Belegung teilen sich das Panel — beides entsteht im ersten
+ * Durchgang, und eine harte Trennung zwischen Schritt 1 und 2 wäre
+ * künstlich. Gesperrt wird deshalb nach vorn: Ab der Belegung bleibt
+ * das Dach, wie es ist; ab der Technik bleibt die Belegung.
+ */
+function bearbeitbarIn(phase: 1 | 2 | 3 | 4 | 5) {
+  return {
+    flaechen: phase === 1,
+    module: phase <= 2,
+    strings: phase === 3,
+  };
+}
+
 export function Planer({
   projekt,
   staende,
@@ -121,7 +158,7 @@ export function Planer({
    * rechnet. In Phase 4 tritt die Karte ganz zurück — dort wird nicht
    * mehr geplant, sondern gezeigt, und der Kunde schaut mit.
    */
-  const [phase, setPhase] = useState<1 | 3 | 4 | 5>(1);
+  const [phase, setPhase] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [fang, setFang] = useState<FangOptionen>(FANG_STANDARD);
   const [gemerkt, setGemerkt] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
   const [mitte, setMitte] = useState<Meter>({ x: 0, y: 0 });
@@ -534,7 +571,14 @@ export function Planer({
                  */
                 const zeichnet = phase === 1 || phase === 3;
                 if (zeichnet && ph.nr >= 4 && schreibrecht) void vorschauMachen();
-                setPhase(ph.nr === 3 ? 3 : ph.nr === 4 ? 4 : ph.nr === 5 ? 5 : 1);
+                setPhase(ph.nr);
+                /*
+                 * Beim Wechsel auf ein erlaubtes Werkzeug zurückfallen.
+                 * Sonst bliebe „Fläche" aktiv, während die Leiste es
+                 * gar nicht mehr anbietet — der nächste Klick auf die
+                 * Karte legte dann eine Ecke an, die niemand wollte.
+                 */
+                if (!WERKZEUGE_JE_PHASE[ph.nr].includes(werkzeug)) setWerkzeug("auswahl");
               }}
               className={[
                 "flex w-16 flex-col items-center gap-1 rounded-[11px] pb-[7px] pt-[9px]",
@@ -677,6 +721,7 @@ export function Planer({
               plan={plan}
               werkzeug={schreibrecht ? werkzeug : "auswahl"}
               schreibrecht={schreibrecht}
+              bearbeitbar={bearbeitbarIn(phase)}
               fang={fang}
               foto={foto}
               onKalibriert={onKalibriert}
@@ -700,7 +745,7 @@ export function Planer({
               role="group"
               aria-label="Werkzeug"
             >
-              {WERKZEUGE.map((w) => {
+              {WERKZEUGE.filter((w) => WERKZEUGE_JE_PHASE[phase].includes(w.id)).map((w) => {
                 /*
                  * Modul und Teilen setzen eine gewählte Gruppe voraus —
                  * ohne sie wüsste das Werkzeug nicht, woran es arbeitet.
@@ -764,6 +809,19 @@ export function Planer({
                 <span className="text-[16px] leading-none">⊹</span>
                 <span className="text-[8px] font-semibold tracking-[0.02em]">Fang</span>
               </button>
+            </div>
+          ) : null}
+
+          {/*
+            * Was der Schritt sperrt, muss dastehen — sonst hält man
+            * eine bewusste Sperre für einen Fehler und klickt dreimal
+            * auf dieselbe Kante.
+            */}
+          {schreibrecht && (phase === 2 || phase === 3) ? (
+            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 text-[11.5px] text-pl-auf-dunkel-2 backdrop-blur-md">
+              {phase === 2
+                ? "Das Dach steht — zum Ändern zurück zu Schritt 1"
+                : "Belegung steht — zum Ändern zurück zu Schritt 2"}
             </div>
           ) : null}
 
@@ -866,6 +924,7 @@ export function Planer({
                 aktiveGruppe={aktiveGruppe}
                 onAktiveGruppe={setAktiveGruppe}
                 breitengrad={projekt.ursprung.lat}
+                dachAenderbar={phase === 1}
                 onSchliessen={() => setPanelOffen(false)}
                 foto={
                   schreibrecht ? (
