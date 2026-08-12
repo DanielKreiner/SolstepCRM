@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { belegen, dachSetzen } from "./planer-helfer";
 
 /*
  * Planer — Rechenvorgaben und Fördersätze (Briefing 7).
@@ -86,6 +87,13 @@ test.describe("Planer — Vorgaben", () => {
     await page.getByRole("button", { name: /Vorgabeweg 1/ }).click();
     await page.getByRole("button", { name: "Projekt anlegen" }).click();
     await page.waitForURL(/\/planer\/[0-9a-f-]{36}$/);
+    /*
+     * Der Ertragsschritt setzt Module voraus — ohne sie wäre die Zahl
+     * dort erfunden. Also erst ein Dach und eine Belegung.
+     */
+    await dachSetzen(page, "Pultdach", "14", "9");
+    await page.getByRole("button", { name: /^Fläche 1/ }).click();
+    await belegen(page);
     await page.getByRole("button", { name: /^4 Ertrag/ }).click();
 
     await expect(page.getByLabel("Strompreis")).toHaveValue("0.42");
@@ -116,12 +124,9 @@ test.describe("Planer — Vorgaben", () => {
     await page.waitForURL(/\/planer\/[0-9a-f-]{36}$/);
     await page.getByRole("button", { name: "Näher heran" }).click();
     await page.getByRole("button", { name: "Näher heran" }).click();
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByLabel("Länge (m)").fill("12");
-    await page.getByLabel("Tiefe (m)").fill("8");
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Satteldach", "12", "8");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
     // kWp aus der Kennzahlenleiste ablesen und gegenrechnen.
@@ -157,6 +162,13 @@ test.describe("Planer — Vorgaben", () => {
     await page.getByRole("button", { name: /Förderweg 3/ }).click();
     await page.getByRole("button", { name: "Projekt anlegen" }).click();
     await page.waitForURL(/\/planer\/[0-9a-f-]{36}$/);
+    /*
+     * Der Ertragsschritt setzt Module voraus — ohne sie wäre die Zahl
+     * dort erfunden. Also erst ein Dach und eine Belegung.
+     */
+    await dachSetzen(page, "Pultdach", "14", "9");
+    await page.getByRole("button", { name: /^Fläche 1/ }).click();
+    await belegen(page);
     await page.getByRole("button", { name: /^4 Ertrag/ }).click();
 
     // Vor der Wahl steht keine Förderung an.
@@ -195,6 +207,13 @@ test.describe("Planer — Vorgaben", () => {
     await page.getByRole("button", { name: /Wechselweg 4/ }).click();
     await page.getByRole("button", { name: "Projekt anlegen" }).click();
     await page.waitForURL(/\/planer\/[0-9a-f-]{36}$/);
+    /*
+     * Der Ertragsschritt setzt Module voraus — ohne sie wäre die Zahl
+     * dort erfunden. Also erst ein Dach und eine Belegung.
+     */
+    await dachSetzen(page, "Pultdach", "14", "9");
+    await page.getByRole("button", { name: /^Fläche 1/ }).click();
+    await belegen(page);
     await page.getByRole("button", { name: /^4 Ertrag/ }).click();
 
     await page.getByRole("button", { name: "Prüfregion A" }).click();

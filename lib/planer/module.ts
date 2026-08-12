@@ -70,8 +70,23 @@ export interface Modulgruppe {
   reihen: number;
   /** Nur beim Flachdach (Briefing 4.4). */
   aufstaenderung: Aufstaenderung | null;
-  /** Abgeschaltete Zellen, als "reihe:spalte". */
+  /**
+   * Zellen, in die geometrisch kein Modul passt: über den Rand, in
+   * einem Hindernis oder auf einer fremden Gruppe. Wird bei jeder
+   * Bewegung neu bestimmt und darf deshalb NICHT die Entscheidungen des
+   * Planers enthalten.
+   */
   aus: string[];
+  /**
+   * Zellen, die jemand von Hand weggetippt hat.
+   *
+   * Getrennt von `aus`, und das ist keine Feinheit: `nachfuehren`
+   * überschreibt `aus` komplett. Solange beides in einem Feld lag, kamen
+   * weggetippte Module zurück, sobald die Gruppe verschoben oder gedreht
+   * wurde — die Belegung sah nach jedem Zug anders aus, als der Planer
+   * sie hinterlassen hatte.
+   */
+  entfernt: string[];
   /** Aus dem Raster gezogene Module: "reihe:spalte" → Mittelpunkt. */
   frei: Record<string, Meter>;
 }
@@ -266,19 +281,24 @@ export function stoesstAn(ecken: Meter[], andere: Meter[][]): boolean {
  * ── Zählen ─────────────────────────────────────────────────────────
  */
 
+/** Alle Zellen, die kein Modul tragen — beide Gründe zusammen. */
+export function leereZellen(g: Modulgruppe): Set<string> {
+  return new Set([...g.aus, ...(g.entfernt ?? [])]);
+}
+
 export function aktiveZellen(g: Modulgruppe): Array<{ reihe: number; spalte: number }> {
-  const aus = new Set(g.aus);
+  const leer = leereZellen(g);
   const raus: Array<{ reihe: number; spalte: number }> = [];
   for (let r = 0; r < g.reihen; r++) {
     for (let c = 0; c < g.spalten; c++) {
-      if (!aus.has(zelle(r, c))) raus.push({ reihe: r, spalte: c });
+      if (!leer.has(zelle(r, c))) raus.push({ reihe: r, spalte: c });
     }
   }
   return raus;
 }
 
 export function anzahlModule(g: Modulgruppe): number {
-  return g.reihen * g.spalten - g.aus.length;
+  return g.reihen * g.spalten - leereZellen(g).size;
 }
 
 export function kwp(g: Modulgruppe): number {
@@ -372,6 +392,7 @@ export function autoBelegen(
     reihen: 0,
     aufstaenderung: opt.aufstaenderung,
     aus: [],
+    entfernt: [],
     frei: {},
   };
 
@@ -586,6 +607,14 @@ export function erweitere(
   };
 
   const aus = g.aus.map(verschiebeSchluessel).filter((s): s is string => s !== null);
+  /*
+   * Die weggetippten Zellen wandern mit: Beim Anbauen einer Reihe oben
+   * verschieben sich alle Nummern um eins. Bliebe die Liste stehen,
+   * verschöbe sich die Lücke im Feld um eine Reihe.
+   */
+  const entfernt = (g.entfernt ?? [])
+    .map(verschiebeSchluessel)
+    .filter((s): s is string => s !== null);
   const frei: Record<string, Meter> = {};
   for (const [s, p] of Object.entries(g.frei)) {
     const neu = verschiebeSchluessel(s);
@@ -598,6 +627,7 @@ export function erweitere(
     reihen: laengsRichtung ? neueZahl : g.reihen,
     spalten: laengsRichtung ? g.spalten : neueZahl,
     aus,
+    entfernt,
     frei,
   };
 }
@@ -640,7 +670,9 @@ export function teileGruppe(
   };
 
   const altAus = new Set(g.aus);
+  const altEntfernt = new Set(g.entfernt ?? []);
   const neuAus: string[] = [];
+  const neuEntfernt: string[] = [];
   const neuFrei: Record<string, Meter> = {};
   const abgegeben: string[] = [];
 
@@ -650,6 +682,7 @@ export function teileGruppe(
       const neu = zelle(r - r0, c - c0);
       abgegeben.push(alt);
       if (altAus.has(alt)) neuAus.push(neu);
+      if (altEntfernt.has(alt)) neuEntfernt.push(neu);
       const frei = g.frei[alt];
       if (frei) neuFrei[neu] = frei;
     }
@@ -658,7 +691,13 @@ export function teileGruppe(
   return {
     alt: {
       ...g,
-      aus: [...new Set([...g.aus, ...abgegeben])],
+      /*
+       * Was die neue Gruppe übernimmt, ist für die alte weg — das ist
+       * kein Platzproblem, sondern eine Entscheidung, gehört also in
+       * `entfernt`. In `aus` würde `nachfuehren` es zurückholen, und
+       * beide Gruppen zeigten dieselben Module.
+       */
+      entfernt: [...new Set([...(g.entfernt ?? []), ...abgegeben])],
       frei: Object.fromEntries(Object.entries(g.frei).filter(([s]) => !abgegeben.includes(s))),
     },
     neu: {
@@ -818,5 +857,12 @@ export function modulAnbauen(
     }
   }
 
-  return { ...neu, aus };
+  /*
+   * Die Zielzelle wird auch aus `entfernt` genommen: Wer dort ein Modul
+   * anbaut, will es dort haben — auch wenn er es vorher weggetippt hat.
+   * Ohne das blieb die Lücke bestehen, das Pluszeichen verschwand, und
+   * es sah aus, als hätte der Klick nichts bewirkt.
+   */
+  const ziel = zelle(reihe, spalte);
+  return { ...neu, aus, entfernt: (neu.entfernt ?? []).filter((s) => s !== ziel) };
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { num } from "@/lib/format";
+import { Frage } from "./Bausteine";
+import { modulname } from "./ModulSchritt";
 import {
   type ModulElektrik,
   pruefe,
@@ -25,10 +27,15 @@ import { modulSchluessel, naechsteId, type Plan, strangFarbe } from "@/lib/plane
  * wissen, ob die Auslegung hält — nicht erst nach dem Scrollen.
  */
 
+/*
+ * Dieselben Masse wie in den neuen Schritten: 52 px hoch, Radius 14,
+ * 15-px-Schrift. Vorher waren es 44 px und 14 px — am iPad traf man mit
+ * dem Daumen zwischen zwei Felder.
+ */
 const FELD =
-  "h-11 w-full rounded-[10px] border border-line bg-surface px-3 text-[14px] text-ink " +
+  "h-[52px] w-full rounded-[14px] border border-line bg-surface px-3.5 text-[15px] text-ink " +
   "outline-none transition-colors focus:border-accent disabled:opacity-60";
-const KARTE = "rounded-[12px] border border-line bg-surface p-3.5";
+const KARTE = "rounded-[14px] border border-line bg-surface p-3.5";
 
 export interface GeraetModul {
   id: string;
@@ -150,7 +157,16 @@ export function TechnikPanel({
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3.5">
+      <Frage
+        text={gewaehlterWr ? "Technik" : "Welcher Wechselrichter?"}
+        hinweis={
+          gewaehlterWr
+            ? undefined
+            : "Danach werden die Module auf die Eingänge verteilt — der Planer prüft Spannung und Strom."
+        }
+      />
+
       {/* ── Befunde ──────────────────────────────────────────────── */}
       {ergebnis ? (
         <section
@@ -195,17 +211,24 @@ export function TechnikPanel({
           )}
         </section>
       ) : (
-        <p className="rounded-[12px] border border-dashed border-line-strong/40 p-3.5 text-[12.5px] leading-[1.5] text-muted">
-          Für die Prüfung fehlen noch {!gewaehltesModul ? "das Modul" : ""}
-          {!gewaehltesModul && !gewaehlterWr ? " und " : ""}
-          {!gewaehlterWr ? "der Wechselrichter" : ""}. Beides kommt aus den Stammdaten unter
-          Einstellungen.
+        <p className="rounded-[12px] border border-dashed border-line-strong/40 p-3.5 text-[13px] leading-[1.5] text-muted">
+          {/*
+            * Einzahl und Mehrzahl auseinanderhalten: „Für die Prüfung
+            * fehlen noch der Wechselrichter" stand vorher da, wenn nur
+            * eines fehlte.
+            */}
+          {!gewaehltesModul && !gewaehlterWr
+            ? "Für die Prüfung fehlen noch das Modul und der Wechselrichter."
+            : !gewaehltesModul
+              ? "Für die Prüfung fehlt noch das Modul."
+              : "Für die Prüfung fehlt noch der Wechselrichter."}{" "}
+          Beides kommt aus den Stammdaten unter Einstellungen.
         </p>
       )}
 
       {/* ── Geräte ───────────────────────────────────────────────── */}
       <section className={`${KARTE} flex flex-col gap-2.5`}>
-        <h3 className="text-[13px] font-bold">Geräte</h3>
+        <h3 className="text-[14px] font-bold">Geräte</h3>
 
         <Feld label="Modul">
           <select
@@ -218,7 +241,7 @@ export function TechnikPanel({
             <option value="">— wählen —</option>
             {module.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.hersteller} {m.bezeichnung} · {num(m.wp)} Wp
+                {modulname(m)} · {num(m.wp)} Wp
               </option>
             ))}
           </select>
@@ -284,7 +307,7 @@ export function TechnikPanel({
       {/* ── Strings ──────────────────────────────────────────────── */}
       <section className={`${KARTE} flex flex-col gap-2.5`}>
         <div className="flex items-baseline justify-between">
-          <h3 className="text-[13px] font-bold">Strings ({plan.strings.length})</h3>
+          <h3 className="text-[14px] font-bold">Strings ({plan.strings.length})</h3>
           <span className="num text-[11.5px] tabular-nums text-muted">
             {alleModule.length - ohneString} von {alleModule.length} Modulen
           </span>

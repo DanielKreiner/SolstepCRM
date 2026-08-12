@@ -63,6 +63,14 @@ const gruppeSchema = z.object({
     .nullable()
     .default(null),
   aus: z.array(z.string()).default([]),
+  /*
+   * Von Hand weggetippte Zellen. Alte Pläne haben das Feld nicht — die
+   * Vorgabe greift beim Lesen, und ihre bisherigen Lücken stecken in
+   * `aus`. Die kommen beim nächsten Verschieben zurück; das ist der
+   * Preis dafür, dass sich beide Gründe rückwirkend nicht trennen
+   * lassen.
+   */
+  entfernt: z.array(z.string()).default([]),
   frei: z.record(z.string(), meterSchema).default({}),
 });
 

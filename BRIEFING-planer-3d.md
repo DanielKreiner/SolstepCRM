@@ -127,3 +127,34 @@ davon profitiert (Walmdach ohne vier Einzelzeichnungen). Danach 3D-2,
 das den sichtbaren Sprung bringt. 3D-3 ist die aufwendigste Stufe und
 hat den geringsten Nutzen für ein Erstgespräch — sie kommt zuletzt.
 3D-4 lässt sich jederzeit dazwischenschieben.
+
+## 6. Umbau der Oberfläche (12.08.2026)
+
+Nach dem ersten Durchgang mit echten Händen: „völlig kompliziert",
+„icons falsch", „das links updatet nicht mal wenn ich wohinklicke". Die
+Rechnerei blieb unberührt, die Bedienung wurde neu gebaut.
+
+Leitsatz: **Ein Schritt stellt eine Frage, und die Antwort ist ein
+grosser Knopf.** Alles, was ein Betrieb selten braucht, liegt hinter
+„Mehr einstellen" und ist beim Öffnen nicht zu sehen.
+
+- `components/planer/Bausteine.tsx` — Frage, Knopf (52 px), Wahlkarte,
+  Zahlfeld, Stand, Mehr, Listenzeile
+- `components/planer/Zeichen.tsx` — gezeichnete Icons statt
+  Sonderzeichen aus der Schrift (⬠ ▣ ⬓ zeigten je nach Gerät Kästchen)
+- `components/planer/DachSchritt.tsx` — Schritt 1
+- `components/planer/ModulSchritt.tsx` — Schritt 2, **Modulwahl vor der
+  Belegung**: Die Modulmasse bestimmen das Raster
+- Schrittsperren nach vorn UND zurück: Schritt 2 braucht eine Fläche,
+  Schritt 3 Module. Der Grund steht am gesperrten Knopf
+- Vollbild über die ganze Seite, Esc beendet
+- Karte passt sich beim Öffnen auf das Dach ein — aber nicht, während
+  jemand zeichnet
+- Kennzahlen links statt unten; die Werkzeugleiste hat den unteren Rand
+  für sich
+
+Dabei gefundene Fehler, alle behoben und mit Tests belegt: weggetippte
+Module kamen nach jeder Bewegung zurück; frei gezogene Module liessen
+sich neben das Dach legen; das Luftbild war beim Heranzoomen verzerrt
+(CSS-Reset staucht Kacheln, die breiter sind als das Fenster); ein Klick
+auf die schon gewählte Zeile wählte sie ab, sodass das Panel leer wirkte.

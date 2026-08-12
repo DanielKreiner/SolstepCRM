@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { belegen, dachSetzen } from "./planer-helfer";
 
 /*
  * Planer, Stufe 4 — Technik: Geräte wählen, Strings bilden, prüfen
@@ -77,13 +78,9 @@ async function projektMitBelegung(page: Page, name: string) {
   await page.getByRole("button", { name: "Näher heran" }).click();
   await page.getByRole("button", { name: "Näher heran" }).click();
 
-  await page.getByRole("button", { name: /Standardform setzen/ }).click();
-  await page.getByLabel("Form").selectOption("pult");
-  await page.getByLabel("Länge (m)").fill("14");
-  await page.getByLabel("Tiefe (m)").fill("9");
-  await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+  await dachSetzen(page, "Pultdach", "14", "9");
   await page.getByRole("button", { name: /^Fläche 1/ }).click();
-  await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+  await belegen(page);
   // Auf die Gruppe warten, nicht auf „Belegung" — das Wort steht auch
   // an der Phasenleiste und wäre mehrdeutig.
   await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
@@ -105,7 +102,11 @@ async function stringModule(page: Page): Promise<number> {
 /** In die Technik-Phase wechseln und die Geräte wählen. */
 async function technikWaehlen(page: Page) {
   await page.getByRole("button", { name: /^3 Technik/ }).click();
-  await expect(page.getByRole("heading", { name: "Technik" })).toBeVisible();
+  /*
+   * Die Überschrift ist die Frage des Schritts: Ohne gewählten
+   * Wechselrichter „Welcher Wechselrichter?", danach „Technik".
+   */
+  await expect(page.getByRole("heading", { name: /Technik|Wechselrichter/ })).toBeVisible();
   /*
    * Namentlich wählen, nicht über den Index: in den Stammdaten stehen
    * auch Geräte aus früheren Läufen, und ein Index träfe irgendeines.
@@ -130,7 +131,11 @@ test.describe("Planer — Technik", () => {
     await projektMitBelegung(page, "Technikweg 1");
     await page.getByRole("button", { name: /^3 Technik/ }).click();
 
-    await expect(page.getByText(/Für die Prüfung fehlen noch/)).toBeVisible();
+    /*
+     * Einzahl oder Mehrzahl, je nachdem was fehlt — die Meldung sagt es
+     * in beiden Fällen.
+     */
+    await expect(page.getByText(/Für die Prüfung fehl(t|en) noch/)).toBeVisible();
     // Ohne String ist das Werkzeug gesperrt.
     await expect(page.getByRole("button", { name: /Module dem gewählten String/ })).toBeDisabled();
   });

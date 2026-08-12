@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   bildZuMeter,
   kachelnFuer,
+  zoomFuerAufloesung,
   type Kamera,
   massstab,
   type Meter,
@@ -34,7 +35,7 @@ import {
   type Plan,
   strangFarbe,
 } from "@/lib/planer/plan";
-import { anbieter as anbieterZu, type AnbieterId, kachelUrl } from "@/lib/planer/anbieter";
+import { anbieter as anbieterZu, type AnbieterId, hoechsterZoom, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
   anbaustellen,
@@ -44,20 +45,23 @@ import {
   insRasterZurueck,
   modulEcken,
   modulMitte,
+  modulPasst,
   nachfuehren,
   planMasse,
   achsen as rasterAchsen,
   setzeFrei,
+  stoesstAn,
   teileGruppe,
   zelle as zellSchluessel,
 } from "@/lib/planer/module";
 import {
-  kantenMitte,
+  masszahlOrt,
   meterText,
   zeichneEntwurf,
   zeichneFlaeche,
   griffe,
   anbauMitte,
+  blockEcken,
   gruppenRahmen,
   zeichneObjekte,
   zeichneAnbaustellen,
@@ -146,6 +150,17 @@ export interface LeinwandProps {
    */
   bearbeitbar: { flaechen: boolean; module: boolean; strings: boolean };
   /**
+   * Zähler: Wird er hochgezählt, rückt die Karte so, dass alle
+   * Dachflächen ins Bild passen.
+   *
+   * Als Zähler und nicht als Befehl, weil die Kamera in einem Ref liegt
+   * — ein Zustandswert liesse sich nicht zweimal hintereinander
+   * auslösen. Ohne dieses Einpassen lag ein frisch gesetztes Haus als
+   * fingernagelgrosser Fleck auf einer Karte über den halben Ort; man
+   * musste erst suchen, wo die eigene Planung liegt.
+   */
+  zeigeAlles?: number;
+  /**
    * Verschattungsgrad je Modul aus der Ertragsrechnung. Wird nur
    * angezeigt, nicht hier berechnet — die Rechnung hängt am Ertrag.
    */
@@ -185,8 +200,6 @@ export function Leinwand(p: LeinwandProps) {
 
   const [anzeige, setAnzeige] = useState({ zoom: p.zoom, leiste: { meter: 10, punkte: 0 } });
   const [zeigerMeter, setZeigerMeter] = useState<Meter | null>(null);
-  /** Ein langer Druck hat ein Modul aus dem Raster gelöst. */
-  const [langerDruck, setLangerDruck] = useState(false);
   const [kachelFehler, setKachelFehler] = useState(false);
   const [fangHinweis, setFangHinweis] = useState<string | null>(null);
   /*
@@ -312,6 +325,20 @@ export function Leinwand(p: LeinwandProps) {
         b.style.position = "absolute";
         b.style.left = "0";
         b.style.top = "0";
+        /*
+         * `max-width: none` ist hier kein Schmuck, sondern der Kern.
+         *
+         * Die CSS-Grundeinstellung setzt für jedes Bild
+         * `max-width: 100%`. Solange eine Kachel kleiner ist als die
+         * Zeichenfläche, fällt das nicht auf. Zoomt man aber so weit
+         * heran, dass eine Kachel breiter wird als das Fenster — bei
+         * einem Dach ab etwa fünf Metern Bildbreite —, wird ihre BREITE
+         * auf die Fensterbreite gestaucht, ihre Höhe nicht: Das Luftbild
+         * war verzerrt, und rechts oder links blieb ein schwarzer
+         * Streifen ohne Kachel.
+         */
+        b.style.maxWidth = "none";
+        b.style.maxHeight = "none";
         b.style.transformOrigin = "0 0";
         b.style.opacity = "0";
         b.style.transition = "opacity 140ms linear";
@@ -352,7 +379,12 @@ export function Leinwand(p: LeinwandProps) {
     ctx.clearRect(0, 0, k.breite, k.hoehe);
 
     zeichneUrsprung(ctx, k);
-    const sicht = { kamera: k, aktiv: stand.current.aktiv, betont: null };
+    const sicht = {
+      kamera: k,
+      aktiv: stand.current.aktiv,
+      betont: null,
+      gruppeAktiv: stand.current.aktiveGruppe !== null,
+    };
     for (const f of stand.current.plan.flaechen) zeichneFlaeche(ctx, sicht, f);
 
     // Module über die Flächen — sie liegen ja auch darauf.
@@ -399,23 +431,30 @@ export function Leinwand(p: LeinwandProps) {
       : null;
 
     /*
-     * Anbaustellen der gewählten Gruppe: dort, wo das nächste Modul
-     * liegen würde. Sie werden bei jedem Zeichnen neu bestimmt — dann
-     * stimmen sie auch, nachdem jemand ein Modul entfernt oder die
-     * Gruppe verschoben hat, ohne dass es dafür einen Sonderfall
-     * braucht.
+     * Anbaustellen: dort, wo das nächste Modul liegen würde.
+     *
+     * Für ALLE Felder, nicht nur für das gewählte. Vorher verschwanden
+     * die Pluszeichen, sobald man irgendwohin tippte und damit die
+     * Auswahl verlor — sie waren „nur manchmal da". Wenn ein Modul
+     * hinpasst, gehört das Zeichen hin, ohne dass man vorher etwas
+     * auswählen muss.
+     *
+     * Sie werden bei jedem Zeichnen neu bestimmt; damit stimmen sie auch
+     * nach dem Entfernen eines Moduls oder dem Verschieben einer Gruppe.
      */
+    stellen.current = [];
     if (
-      gewaehlt &&
-      gf &&
       stand.current.werkzeug === "auswahl" &&
       stand.current.schreibrecht &&
       stand.current.bearbeitbar.module
     ) {
-      stellen.current = anbaustellen(gewaehlt, gf, fremdeModule(stand.current.plan, gewaehlt));
-      zeichneAnbaustellen(ctx, k, gewaehlt, gf, stellen.current);
-    } else {
-      stellen.current = [];
+      for (const g of stand.current.plan.gruppen) {
+        const f = stand.current.plan.flaechen.find((x) => x.id === g.flaeche);
+        if (!f) continue;
+        const eigene = anbaustellen(g, f, fremdeModule(stand.current.plan, g));
+        for (const st of eigene) stellen.current.push({ gruppe: g.id, ...st });
+        zeichneAnbaustellen(ctx, k, g, f, eigene);
+      }
     }
 
     const rahmen = gewaehlt && gf ? gruppenRahmen(k, gewaehlt, gf) : null;
@@ -428,7 +467,7 @@ export function Leinwand(p: LeinwandProps) {
 
   const zeigerRef = useRef<Meter | null>(null);
   /** Anbaustellen aus dem letzten Zeichnen — Grundlage für den Treffer. */
-  const stellen = useRef<Array<{ reihe: number; spalte: number }>>([]);
+  const stellen = useRef<Array<{ gruppe: string; reihe: number; spalte: number }>>([]);
 
   const anstossen = useCallback(() => {
     if (neuZeichnen.current) return;
@@ -482,6 +521,39 @@ export function Leinwand(p: LeinwandProps) {
     anstossen();
   }, [p.zoom, anstossen]);
 
+  /* Alle Dachflächen ins Bild rücken. */
+  useEffect(() => {
+    if (!p.zeigeAlles) return;
+    const k = kamera.current;
+    const punkte = stand.current.plan.flaechen.flatMap((f) => f.punkte);
+    if (punkte.length === 0 || k.breite === 0 || k.hoehe === 0) return;
+
+    const xs = punkte.map((q) => q.x);
+    const ys = punkte.map((q) => q.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    /*
+     * Ein Drittel Luft rundherum: Das Dach soll nicht am Bildrand
+     * kleben, und die Kantenmasse liegen aussen davor.
+     */
+    const breiteM = Math.max(8, (maxX - minX) * 1.45);
+    const hoeheM = Math.max(8, (maxY - minY) * 1.45);
+    const mpp = Math.max(breiteM / k.breite, hoeheM / k.hoehe);
+    const roh = zoomFuerAufloesung(k.ursprung.lat, mpp);
+    /*
+     * Nicht weiter heran, als das Luftbild hergibt: Ein kleines Dach
+     * würde sonst formatfüllend gezeigt — und zwar als Farbbrei.
+     */
+    const obergrenze = Math.min(ZOOM_GRENZEN.max, hoechsterZoom(stand.current.anbieter));
+    k.zoom = Math.max(ZOOM_GRENZEN.min, Math.min(obergrenze, roh));
+    k.mitte = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    anstossen();
+    stand.current.onKamera?.({ zoom: k.zoom, mitte: k.mitte });
+  }, [p.zeigeAlles, anstossen]);
+
   /* ── Treffer ─────────────────────────────────────────────────── */
 
   const treffer = useCallback((bp: { x: number; y: number }) => {
@@ -499,31 +571,33 @@ export function Leinwand(p: LeinwandProps) {
      * die Zuordnung, und ein Zug am Griff schrumpfte die Gruppe, statt
      * Module zu färben — die Module waren danach weg.
      */
+    /*
+     * Pluszeichen zuerst: Sie liegen ausserhalb der Felder und damit
+     * genau dort, wo sonst „nichts" wäre — der Klick würde sonst als
+     * Schwenk verpuffen. Sie stammen aus dem letzten Zeichnen und sind
+     * damit immer auf dem Stand des Bildes; gültig sind sie für JEDES
+     * Feld, nicht nur für das gewählte.
+     */
+    for (const stelle of stellen.current) {
+      const g = s.plan.gruppen.find((x) => x.id === stelle.gruppe);
+      const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
+      if (!g || !f) continue;
+      const m = anbauMitte(k, g, f, stelle);
+      if (Math.hypot(m.x - bp.x, m.y - bp.y) <= GRIFF + 2) {
+        return { art: "anbau" as const, gruppe: g.id, reihe: stelle.reihe, spalte: stelle.spalte };
+      }
+    }
+
     const gewaehlt =
       s.werkzeug === "auswahl" && s.bearbeitbar.module
         ? s.plan.gruppen.find((g) => g.id === s.aktiveGruppe)
         : undefined;
     if (gewaehlt) {
       const gf = s.plan.flaechen.find((x) => x.id === gewaehlt.flaeche);
-
-      /*
-       * Anbaustellen zuerst: Sie liegen ausserhalb der Gruppe und damit
-       * genau dort, wo sonst „nichts" wäre — der Klick würde sonst als
-       * Schwenk verpuffen. Sie stammen aus dem letzten Zeichnen, sind
-       * also immer auf dem Stand des Bildes.
-       */
-      if (gf) {
-        for (const stelle of stellen.current) {
-          const m = anbauMitte(k, gewaehlt, gf, stelle);
-          if (Math.hypot(m.x - bp.x, m.y - bp.y) <= GRIFF + 2) {
-            return { art: "anbau" as const, gruppe: gewaehlt.id, ...stelle };
-          }
-        }
-      }
-
       const rahmen = gf ? gruppenRahmen(k, gewaehlt, gf) : null;
-      if (rahmen) {
-        for (const griff of griffe(rahmen)) {
+      if (rahmen && gf) {
+        // Dieselben Stellen wie beim Zeichnen — mit den gedrehten Ecken.
+        for (const griff of griffe(rahmen, blockEcken(k, gewaehlt, gf))) {
           if (Math.hypot(griff.x - bp.x, griff.y - bp.y) <= GRIFF) {
             return { art: "griff" as const, gruppe: gewaehlt.id, welcher: griff.art };
           }
@@ -563,16 +637,21 @@ export function Leinwand(p: LeinwandProps) {
       }
     }
 
-    // Pillen zuerst: sie liegen auf der Kante und sollen sie überstimmen.
-    if (s.bearbeitbar.flaechen)
-    for (const f of s.plan.flaechen) {
-      for (const kante of kanten(f.punkte)) {
-        const m = kantenMitte(k, kante.a, kante.b);
+    /*
+     * Massangaben zuerst: Sie liegen vor der Kante und sollen sie
+     * überstimmen. Getroffen wird nur, was auch zu sehen ist — die
+     * gewählte Fläche, und nur solange keine Modulgruppe bearbeitet
+     * wird. Sonst öffnete ein Klick neben dem Feld eine Eingabe, deren
+     * Pille gar nicht auf dem Bild steht.
+     */
+    if (s.bearbeitbar.flaechen && aktive && !s.aktiveGruppe) {
+      for (const kante of kanten(aktive.punkte)) {
+        const m = masszahlOrt(k, aktive.punkte, kante.a, kante.b);
         const p1 = meterZuBild(k, kante.a);
         const p2 = meterZuBild(k, kante.b);
         if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 46) continue;
         if (Math.abs(m.x - bp.x) <= 34 && Math.abs(m.y - bp.y) <= 11) {
-          return { art: "masz" as const, flaeche: f.id, index: kante.i };
+          return { art: "masz" as const, flaeche: aktive.id, index: kante.i };
         }
       }
     }
@@ -749,11 +828,6 @@ export function Leinwand(p: LeinwandProps) {
      * beim Kunden bleiben. Am Schreibtisch bleibt das Modul-Werkzeug
      * der schnellere Weg — beides führt zum selben Zustand.
      */
-    let druckUhr: ReturnType<typeof setTimeout> | null = null;
-    const druckLoesen = () => {
-      if (druckUhr) clearTimeout(druckUhr);
-      druckUhr = null;
-    };
     let letzterAbstand = 0;
     let letzteMitte = { x: 0, y: 0 };
     let bewegt = 0;
@@ -895,8 +969,17 @@ export function Leinwand(p: LeinwandProps) {
         // In einem späteren Schritt ist das Modul nur noch anzusehen.
         zieht.current = { art: "schwenk" };
       } else if (t?.art === "modul") {
-        // Tippen schaltet das Modul, Ziehen verschiebt die Gruppe —
-        // entschieden wird erst beim Loslassen, an der Wegstrecke.
+        /*
+         * Tippen schaltet das Modul, Ziehen verschiebt die Gruppe —
+         * entschieden wird erst beim Loslassen, an der Wegstrecke.
+         *
+         * Kein langer Druck mehr: Der löste nach 450 ms ohne Bewegung
+         * ein einzelnes Modul aus dem Raster. Mit der Maus passiert das
+         * ständig aus Versehen — man setzt an, überlegt kurz, zieht
+         * dann —, und danach lag ein Modul irgendwo neben dem Feld.
+         * Wer ein Modul freistellen will, nimmt das Modul-Werkzeug;
+         * dort ist es eine Entscheidung und kein Zufall.
+         */
         zieht.current = {
           art: "gruppe",
           gruppe: t.gruppe,
@@ -904,23 +987,6 @@ export function Leinwand(p: LeinwandProps) {
           spalte: t.spalte,
           letzte: bildZuMeter(kamera.current, bp),
         };
-
-        /*
-         * Wer den Finger liegen lässt, will das einzelne Modul, nicht
-         * die Gruppe. Nach 450 ms ohne nennenswerte Bewegung wird
-         * umgeschaltet — die Schwelle unten in `bewegung` bricht ab,
-         * sobald jemand doch schiebt.
-         */
-        const ziel = { gruppe: t.gruppe, reihe: t.reihe, spalte: t.spalte };
-        druckUhr = setTimeout(() => {
-          druckUhr = null;
-          if (zieht.current?.art !== "gruppe") return;
-          zieht.current = { art: "modul", ...ziel };
-          setLangerDruck(true);
-          // Kurz vibrieren, wo es geht: das Umschalten passiert unter
-          // dem Finger und ist sonst nicht zu bemerken.
-          navigator.vibrate?.(12);
-        }, 450);
       } else if (t?.art === "ecke") {
         zieht.current = { art: "ecke", flaeche: t.flaeche, index: t.index };
       } else if (t?.art === "kante") {
@@ -955,7 +1021,6 @@ export function Leinwand(p: LeinwandProps) {
       zeiger.set(e.pointerId, jetzt);
       bewegt += Math.hypot(jetzt.x - vorher.x, jetzt.y - vorher.y);
       // Mehr als ein Wackeln heisst: schieben, nicht halten.
-      if (druckUhr && bewegt > 6) druckLoesen();
       const mpp = meterProPixel(k.ursprung.lat, k.zoom);
 
       if (zeiger.size === 2) {
@@ -1140,8 +1205,6 @@ export function Leinwand(p: LeinwandProps) {
       const bp = ortVon(e);
       const s = stand.current;
       const z = zieht.current;
-      druckLoesen();
-      setLangerDruck(false);
       zeiger.delete(e.pointerId);
       if (zeiger.size < 2) letzterAbstand = 0;
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
@@ -1181,6 +1244,7 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = null;
         const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
         if (!g) return;
+        const gf = s.plan.flaechen.find((x) => x.id === g.flaeche) ?? null;
         if (bewegt <= 6) {
           // Tippen im Modul-Werkzeug holt es ins Raster zurück.
           s.onPlan(
@@ -1193,6 +1257,38 @@ export function Leinwand(p: LeinwandProps) {
             true,
           );
           return;
+        }
+
+        /*
+         * Abgelegt: Das Modul muss auf dem Dach liegen. Ohne diese
+         * Prüfung liess sich ein freigestelltes Modul überallhin ziehen
+         * — auch neben das Haus. Auf dem Bild lagen dann Module im
+         * Nachbargarten, und die Stückliste zählte sie mit.
+         *
+         * Passt es nicht, geht es dorthin zurück, wo es im Raster
+         * hingehört; passt auch das nicht, bleibt die Zelle leer.
+         */
+        if (gf) {
+          const ecken = modulEcken(g, gf, z.reihe, z.spalte);
+          const fremde = fremdeModule(s.plan, g);
+          if (!modulPasst(ecken, gf) || stoesstAn(ecken, fremde)) {
+            const zurueck = insRasterZurueck(g, z.reihe, z.spalte);
+            const imRaster = modulEcken(zurueck, gf, z.reihe, z.spalte);
+            const gehtDoch = modulPasst(imRaster, gf) && !stoesstAn(imRaster, fremde);
+            const wieder = gehtDoch
+              ? zurueck
+              : { ...zurueck, aus: [...new Set([...zurueck.aus, zellSchluessel(z.reihe, z.spalte)])] };
+            setMeldung(
+              gehtDoch
+                ? "Dort ist kein Platz — das Modul ist zurück im Raster."
+                : "Dort ist kein Platz, und im Raster auch nicht.",
+            );
+            s.onPlan(
+              { ...s.plan, gruppen: s.plan.gruppen.map((x) => (x.id === g.id ? wieder : x)) },
+              true,
+            );
+            return;
+          }
         }
         s.onPlan(s.plan, true);
         return;
@@ -1260,12 +1356,22 @@ export function Leinwand(p: LeinwandProps) {
            * wiederfindet (Briefing 4.2).
            */
           const schluessel = zellSchluessel(z.reihe, z.spalte);
-          const aus = g.aus.includes(schluessel)
-            ? g.aus.filter((x) => x !== schluessel)
-            : [...g.aus, schluessel];
+          /*
+           * In `entfernt`, nicht in `aus`: `aus` gehört der Geometrie
+           * und wird bei jeder Bewegung neu bestimmt. Weggetippte
+           * Module kamen deshalb zurück, sobald jemand die Gruppe
+           * verschob oder drehte.
+           */
+          const bisher = g.entfernt ?? [];
+          const entfernt = bisher.includes(schluessel)
+            ? bisher.filter((x) => x !== schluessel)
+            : [...bisher, schluessel];
           s.onAktiveGruppe(g.id);
           s.onPlan(
-            { ...s.plan, gruppen: s.plan.gruppen.map((x) => (x.id === g.id ? { ...x, aus } : x)) },
+            {
+              ...s.plan,
+              gruppen: s.plan.gruppen.map((x) => (x.id === g.id ? { ...x, entfernt } : x)),
+            },
             true,
           );
           return;
@@ -1344,7 +1450,7 @@ export function Leinwand(p: LeinwandProps) {
       if (t?.art === "masz") {
         const f = s.plan.flaechen.find((x) => x.id === t.flaeche)!;
         const kante = kanten(f.punkte)[t.index]!;
-        const m = kantenMitte(kamera.current, kante.a, kante.b);
+        const m = masszahlOrt(kamera.current, f.punkte, kante.a, kante.b);
         s.onAktiv(f.id);
         setMaszEingabe({
           flaeche: f.id,
@@ -1463,7 +1569,6 @@ export function Leinwand(p: LeinwandProps) {
     el.addEventListener("wheel", rad, { passive: false });
     window.addEventListener("keydown", taste);
     return () => {
-      druckLoesen();
       el.removeEventListener("pointerdown", runter);
       el.removeEventListener("pointermove", bewegung);
       el.removeEventListener("pointerup", hoch);
@@ -1641,49 +1746,55 @@ export function Leinwand(p: LeinwandProps) {
           Pille am Rand. Beim Zeichnen schaut der Nutzer auf die Mitte
           der Fläche, nicht auf die Randleisten.
         */
-        <div className="pointer-events-none absolute left-1/2 top-[38%] z-10 w-[min(420px,80%)] -translate-x-1/2 -translate-y-1/2 text-center">
-          <p
-            className="text-[19px] font-bold text-pl-auf-dunkel"
-            style={{ textShadow: "0 2px 12px rgba(0,0,0,.6)" }}
-          >
+        /*
+         * Als schmale Leiste am oberen Rand, nicht als grosser Text in
+         * der Bildmitte.
+         *
+         * Vorher stand er in 19 px weiss mitten auf dem Luftbild: über
+         * einem hellen Dach war er unlesbar, über einer dunklen Strasse
+         * überdeckte er genau das, worauf man gerade zeichnet. Ein
+         * Hinweis, der die Arbeitsfläche verdeckt, ist keiner.
+         *
+         * Die Leiste sitzt unter der Schrittanzeige (oben Mitte) und
+         * trägt denselben dunklen Grund wie die übrigen Bedienleisten.
+         */
+        <div className="pointer-events-none absolute left-1/2 top-[58px] z-10 flex max-w-[min(520px,88%)] -translate-x-1/2 items-baseline gap-2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 backdrop-blur-md">
+          <span className="shrink-0 text-[12px] font-bold text-pl-auf-dunkel">
             {p.werkzeug === "flaeche"
-              ? "Zeichne die Dachfläche"
+              ? "Dachfläche zeichnen"
               : p.werkzeug === "hindernis"
                 ? "Hindernis aufziehen"
                 : p.werkzeug === "modul"
-                  ? "Einzelnes Modul versetzen"
+                  ? "Modul versetzen"
                   : p.werkzeug === "string"
-                  ? "Module dem String zuordnen"
-                  : p.werkzeug === "teilen"
-                    ? "Gruppe teilen"
-                    : p.werkzeug === "messen"
-                      ? "Strecke messen"
-                  : p.werkzeug === "kalibrieren"
-                    ? "Foto kalibrieren"
-                    : "Gegenprobe"}
-          </p>
-          <p
-            className="mt-1.5 text-[13px] text-pl-auf-dunkel-2"
-            style={{ textShadow: "0 2px 12px rgba(0,0,0,.6)" }}
-          >
+                    ? "String zuordnen"
+                    : p.werkzeug === "teilen"
+                      ? "Gruppe teilen"
+                      : p.werkzeug === "messen"
+                        ? "Strecke messen"
+                        : p.werkzeug === "kalibrieren"
+                          ? "Foto kalibrieren"
+                          : "Gegenprobe"}
+          </span>
+          <span className="truncate text-[11.5px] text-pl-auf-dunkel-2">
             {p.werkzeug === "flaeche"
               ? entwurfLaenge >= 3
-                ? "Auf den ersten Punkt tippen oder Enter — schliesst die Fläche. Esc bricht ab."
-                : "Ecken antippen. Ab drei Punkten lässt sich die Fläche schliessen."
+                ? "Ersten Punkt antippen oder Enter schliesst die Fläche · Esc bricht ab"
+                : "Ecken antippen · ab drei Punkten schliessbar"
               : p.werkzeug === "hindernis"
-                ? "Rechteck über Kamin, Fenster oder Gaube ziehen."
+                ? "Rechteck über Kamin, Fenster oder Gaube ziehen"
                 : p.werkzeug === "modul"
-                  ? "Ein Modul aus dem Raster ziehen — Antippen setzt es zurück."
+                  ? "Modul aus dem Raster ziehen · Antippen setzt es zurück"
                   : p.werkzeug === "string"
-                  ? "Über die Module fahren. Nochmal darüber nimmt sie wieder heraus."
-                  : p.werkzeug === "teilen"
-                    ? "Rechteck über einen Teil der gewählten Gruppe ziehen."
-                    : p.werkzeug === "messen"
-                      ? "Strecke ziehen. Esc beendet das Messen."
-                      : p.werkzeug === "kalibrieren"
-                        ? "Eine Strecke ziehen, deren wahre Länge du kennst — Firstlänge, Garagentor, Auto."
-                        : "Zweite Strecke QUER zur ersten ziehen. Weicht sie ab, ist das Foto schräg aufgenommen."}
-          </p>
+                    ? "Über die Module fahren · nochmal nimmt sie heraus"
+                    : p.werkzeug === "teilen"
+                      ? "Rechteck über einen Teil der Gruppe ziehen"
+                      : p.werkzeug === "messen"
+                        ? "Strecke ziehen · Esc beendet"
+                        : p.werkzeug === "kalibrieren"
+                          ? "Strecke mit bekannter Länge ziehen — First, Garagentor, Auto"
+                          : "Zweite Strecke QUER zur ersten ziehen"}
+          </span>
         </div>
       ) : null}
 
@@ -1703,19 +1814,6 @@ export function Leinwand(p: LeinwandProps) {
         {fangHinweis ? (
           <p className="rounded-pill border border-pl-mess bg-pl-mess-flaeche px-2.5 py-1 text-[11px] font-semibold text-pl-mess backdrop-blur-md">
             {fangHinweis}
-          </p>
-        ) : null}
-        {/*
-          * Der lange Druck schaltet unter dem Finger um — ohne
-          * Rückmeldung merkt das niemand, und das Modul wandert
-          * scheinbar von selbst.
-          */}
-        {langerDruck ? (
-          <p
-            data-langer-druck
-            className="rounded-pill border border-pl-hinweis bg-pl-chrome px-2.5 py-1 text-[11px] font-semibold text-pl-hinweis backdrop-blur-md"
-          >
-            Modul gelöst — frei ziehen
           </p>
         ) : null}
         {messung.current ? (

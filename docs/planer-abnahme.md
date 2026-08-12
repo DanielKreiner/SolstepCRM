@@ -25,7 +25,7 @@ Ausgeführt wird alles mit `pnpm test:e2e:planer` (Oberfläche) und
 |---|--------|-----------|
 | 7 | Abtrennen, verschieben | `e2e/planer-belegung.spec.ts` |
 | 8 | Gruppe über den Kamin und zurück | `lib/planer/module.spec.ts` — Modulzahl kehrt exakt zurück |
-| 9 | Einzelmodul lösen, frei setzen, zurückholen | `e2e/planer-belegung.spec.ts` (Werkzeug), `e2e/planer-abnahme.spec.ts` (langer Druck) |
+| 9 | Einzelmodul lösen, frei setzen, zurückholen | `e2e/planer-belegung.spec.ts` (Werkzeug „Modul"), `e2e/planer-abnahme.spec.ts` (abgelegt neben dem Dach → zurück ins Raster) |
 | 10 | Zwei Rasterwinkel auf einer Fläche | `lib/planer/module.spec.ts` |
 | 11 | Querformat wirkt nur auf eine Gruppe | `lib/planer/module.spec.ts` |
 | 12 | Flachdach O/W, Reihenabstand, beide Azimute | `e2e/planer-belegung.spec.ts`, `lib/planer/ertrag.spec.ts` |
@@ -62,6 +62,35 @@ Ausgeführt wird alles mit `pnpm test:e2e:planer` (Oberfläche) und
 | 23 | iPad-Gesten, 200 Module flüssig | `e2e/planer-abnahme.spec.ts` — **teilweise**, siehe unten |
 | 24 | Monteur: kein Navigationspunkt, Routen gesperrt | `e2e/planer.spec.ts` |
 | 25 | Mandantentrennung auf allen Planer-Daten | `e2e/planer-mandant.spec.ts` |
+
+## Bedienung: was der Umbau vom 12.08.2026 geändert hat
+
+Die Oberfläche wurde neu gebaut — ein Schritt, eine Frage, grosse
+Knöpfe. Für die Abnahme heisst das:
+
+| Vorher | Jetzt |
+|--------|-------|
+| „Standardform setzen" + Auswahlliste | „Dachform setzen" + Karten je Dachform |
+| „Fläche automatisch belegen" in Schritt 1 | Schritt 2 „Dach voll belegen", nach der Modulwahl |
+| Modulwahl in Schritt 3 (nach der Belegung) | Modulwahl in Schritt 2, VOR der Belegung — die Modulmasse bestimmen das Raster |
+| Alle Schritte jederzeit anklickbar | Ein Schritt setzt voraus, was der vorige liefert; der Grund steht am Knopf |
+| Langer Druck löst ein Modul | Nur noch das Werkzeug „Modul" — der lange Druck löste ständig aus Versehen aus |
+| Randabstand, Traufe, Gebäudemasse, Foto sichtbar | hinter „Mehr einstellen" |
+
+Zwei Fehler, die dabei gefunden und behoben wurden, sind eigene Tests
+wert und haben welche bekommen:
+
+- **Weggetippte Module kamen zurück**, sobald die Gruppe bewegt wurde.
+  `aus` (kein Platz) und `entfernt` (weggetippt) liegen jetzt getrennt —
+  `lib/planer/module.spec.ts`.
+- **Frei gezogene Module liessen sich neben das Dach legen** und zählten
+  in der Stückliste mit — `e2e/planer-abnahme.spec.ts`.
+- **Das Luftbild war ab etwa fünf Metern Bildbreite verzerrt**: Die
+  CSS-Grundeinstellung `img { max-width: 100% }` staucht eine Kachel,
+  die breiter ist als das Fenster — die Höhe blieb, die Breite nicht.
+  Von Hand nachzuprüfen (ein Test darauf wäre ein Test auf einen
+  CSS-Reset, nicht auf das Verhalten): weit heranzoomen, das Bild muss
+  scharf und unverzerrt bleiben.
 
 ## Zusätzlich: räumliche Ansicht (BRIEFING-planer-3d.md)
 

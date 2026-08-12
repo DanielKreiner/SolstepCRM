@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { belegen, dachSetzen } from "./planer-helfer";
 
 /*
  * Planer — Kunden-PDF (Briefing 8.1).
@@ -67,10 +68,9 @@ test.describe("Planer — Kunden-PDF", () => {
     const id = page.url().split("/").pop()!;
 
     await page.getByRole("button", { name: "Näher heran" }).click();
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Satteldach");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
     await page.getByRole("button", { name: /^3 Technik/ }).click();

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { dachSetzen, mehrOeffnen } from "./planer-helfer";
 
 /*
  * Planer — räumliche Ansicht (BRIEFING-planer-3d.md).
@@ -42,18 +43,17 @@ test.describe("Planer — räumliche Ansicht", () => {
     await page.waitForURL(/\/planer\/[0-9a-f-]{36}$/);
     const id = page.url().split("/").pop()!;
 
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByLabel("Länge (m)").fill("12");
-    await page.getByLabel("Tiefe (m)").fill("8");
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Satteldach", "12", "8");
     await expect(page.getByRole("button", { name: /^Fläche 1/ })).toBeVisible();
 
     /*
      * Die Gebäudewerte gehören zum Plan, nicht zum Bildschirm: Beim
      * nächsten Öffnen soll dasselbe Haus dastehen.
      */
-    await page.getByLabel("Wandhöhe (m)").fill("6");
-    await page.getByLabel("Dachüberstand (m)").fill("0.6");
+    // Gebäudemasse liegen hinter „Mehr einstellen".
+    await mehrOeffnen(page);
+    await page.getByLabel("Wandhöhe", { exact: true }).fill("6");
+    await page.getByLabel("Überstand", { exact: true }).fill("0.6");
 
     await expect
       .poll(

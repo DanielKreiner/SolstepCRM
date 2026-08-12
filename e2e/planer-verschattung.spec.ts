@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { belegen, dachSetzen } from "./planer-helfer";
 
 /*
  * Planer — Verschattung (BRIEFING-planer-3d.md, Stufe 3D-3).
@@ -39,13 +40,9 @@ test.describe("Planer — Verschattung", () => {
     const id = page.url().split("/").pop()!;
 
     await page.getByRole("button", { name: "Näher heran" }).click();
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByLabel("Form").selectOption("pult");
-    await page.getByLabel("Länge (m)").fill("14");
-    await page.getByLabel("Tiefe (m)").fill("9");
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Pultdach", "14", "9");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
     /** Jahresertrag aus der Kennzahlenleiste. */
@@ -182,10 +179,9 @@ test.describe("Planer — Verschattung", () => {
     const id = page.url().split("/").pop()!;
 
     await page.getByRole("button", { name: "Näher heran" }).click();
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Satteldach");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
     const gespeichert = () =>
@@ -241,8 +237,7 @@ test.describe("Planer — Verschattung", () => {
     await page.getByRole("button", { name: "Projekt anlegen" }).click();
     await page.waitForURL(/\/planer\/[0-9a-f-]{36}$/);
 
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Satteldach");
 
     // Baum mit dem Werkzeug setzen.
     await page.getByRole("button", { name: /Baum setzen/ }).click();
@@ -277,9 +272,9 @@ test.describe("Planer — Verschattung", () => {
      * gab: Jeder Baum blieb bei 10 m Höhe und 3 m Krone — eine alte
      * Fichte und ein Zierapfel kosteten dasselbe.
      */
-    await expect(page.getByRole("heading", { name: "Umgebung (1)" })).toBeVisible();
-    await page.getByLabel("Höhe (m)", { exact: true }).fill("18");
-    await page.getByLabel("Krone (m)", { exact: true }).fill("5");
+    await page.getByRole("button", { name: "Schattenwerfer (1)", exact: true }).click();
+    await page.getByLabel("Höhe", { exact: true }).fill("18");
+    await page.getByLabel("Krone", { exact: true }).fill("5");
     await expect
       .poll(
         async () => {
@@ -304,7 +299,7 @@ test.describe("Planer — Verschattung", () => {
     // Und wieder weg: Ein gesetzter Baum muss auch zurücknehmbar sein.
     await page.getByRole("button", { name: "3D", exact: true }).click();
     // Genau dieser Baum, nicht „Gruppe entfernen" daneben.
-    await page.getByRole("button", { name: "Baum 1 entfernen", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Umgebung (0)" })).toBeVisible();
+    await page.getByRole("button", { name: "Entfernen: Baum 1", exact: true }).click();
+    await expect(page.getByRole("button", { name: /Schattenwerfer/ })).toHaveCount(0);
   });
 });

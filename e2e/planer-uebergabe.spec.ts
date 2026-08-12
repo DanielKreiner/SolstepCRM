@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { belegen, dachSetzen } from "./planer-helfer";
 
 /*
  * Planer — Übergabe als Vorgang (Briefing 8.2).
@@ -100,12 +101,9 @@ async function projektMitTechnik(page: Page, name: string, wrId: string, modulId
 
   await page.getByRole("button", { name: "Näher heran" }).click();
   await page.getByRole("button", { name: "Näher heran" }).click();
-  await page.getByRole("button", { name: /Standardform setzen/ }).click();
-  await page.getByLabel("Länge (m)").fill("12");
-  await page.getByLabel("Tiefe (m)").fill("8");
-  await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+  await dachSetzen(page, "Satteldach", "12", "8");
   await page.getByRole("button", { name: /^Fläche 1/ }).click();
-  await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+  await belegen(page);
   await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
   await page.getByRole("button", { name: /^3 Technik/ }).click();
@@ -304,6 +302,51 @@ test.describe("Planer — Übergabe als Vorgang", () => {
         ursprung_lon: LINZ.lon,
         anbieter: "basemap",
         zoom: 20,
+        /*
+         * Mit fertiger Planung angelegt: Der Übergabeschritt setzt eine
+         * Belegung voraus — ohne sie käme man gar nicht erst dorthin,
+         * und der Test prüfte die Sperre statt des Leserechts.
+         */
+        plan: {
+          version: 1,
+          flaechen: [
+            {
+              id: "f1",
+              name: "Fläche 1",
+              punkte: [
+                { x: -7, y: -4.5 },
+                { x: 7, y: -4.5 },
+                { x: 7, y: 4.5 },
+                { x: -7, y: 4.5 },
+              ],
+              neigung: 30,
+              azimut: 180,
+              traufe: 0,
+              randabstand: 0.3,
+              hindernisse: [],
+            },
+          ],
+          gruppen: [
+            {
+              id: "g1",
+              name: "Feld 1",
+              flaeche: "f1",
+              typ: { breite: 1.134, hoehe: 1.762, wp: 440, bezeichnung: "Modul" },
+              ausrichtung: "hoch",
+              reihenabstand: 0.02,
+              spaltenabstand: 0.02,
+              winkel: 0,
+              anker: { x: -6.5, y: -4 },
+              spalten: 4,
+              reihen: 2,
+              aufstaenderung: null,
+              aus: [],
+              entfernt: [],
+              frei: {},
+            },
+          ],
+          strings: [],
+        },
       })
       .select("id")
       .single();

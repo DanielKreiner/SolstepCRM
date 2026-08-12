@@ -3,7 +3,20 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type FotoQuelle, Leinwand, type Werkzeug } from "./Leinwand";
-import { FlaechenPanel } from "./FlaechenPanel";
+import { DachSchritt } from "./DachSchritt";
+import { ModulSchritt } from "./ModulSchritt";
+import {
+  ZeichenBaum,
+  ZeichenFlaeche,
+  ZeichenHindernis,
+  ZeichenMessen,
+  ZeichenModul,
+  ZeichenString,
+  ZeichenTeilen,
+  ZeichenVollbild,
+  ZeichenVollbildAus,
+  ZeichenZeiger,
+} from "./Zeichen";
 import {
   type GeraetModul,
   type GeraetSpeicher,
@@ -34,6 +47,7 @@ import {
   type AnbieterId,
   type AnbieterStand,
   anbieter as anbieterZu,
+  hoechsterZoom,
 } from "@/lib/planer/anbieter";
 import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
@@ -76,22 +90,67 @@ export interface PlanerProjekt {
 }
 
 const PHASEN = [
-  { nr: 1 as const, mark: "1", label: "Dach", fertig: true },
-  { nr: 2 as const, mark: "2", label: "Belegung", fertig: true },
-  { nr: 3 as const, mark: "3", label: "Technik", fertig: true },
-  { nr: 4 as const, mark: "4", label: "Ertrag", fertig: true },
-  { nr: 5 as const, mark: "5", label: "Übergabe", fertig: true },
+  { nr: 1 as const, mark: "1", label: "Dach" },
+  { nr: 2 as const, mark: "2", label: "Belegung" },
+  { nr: 3 as const, mark: "3", label: "Technik" },
+  { nr: 4 as const, mark: "4", label: "Ertrag" },
+  { nr: 5 as const, mark: "5", label: "Übergabe" },
 ];
 
-const WERKZEUGE: Array<{ id: Werkzeug; glyph: string; label: string; titel: string }> = [
-  { id: "auswahl", glyph: "↖", label: "Wählen", titel: "Auswählen und bearbeiten" },
-  { id: "flaeche", glyph: "⬠", label: "Fläche", titel: "Dachfläche zeichnen" },
-  { id: "hindernis", glyph: "▣", label: "Hindernis", titel: "Hindernis aufziehen (Kamin, Fenster)" },
-  { id: "baum", glyph: "▲", label: "Baum", titel: "Baum setzen — kostet Ertrag durch Verschattung" },
-  { id: "modul", glyph: "⬓", label: "Modul", titel: "Einzelnes Modul frei setzen oder zurückholen" },
-  { id: "teilen", glyph: "⧉", label: "Teilen", titel: "Teil der Gruppe als eigene Gruppe abtrennen" },
-  { id: "string", glyph: "⚡", label: "String", titel: "Module dem gewählten String zuordnen" },
-  { id: "messen", glyph: "↔", label: "Messen", titel: "Strecke messen" },
+/**
+ * Warum ein Schritt noch nicht erreichbar ist — leer heisst: erreichbar.
+ *
+ * Ein Schritt setzt voraus, was der vorige liefert. Ohne diese Sperre
+ * liess sich mit leerer Karte auf „Technik" springen: Dort stand dann
+ * eine Auslegung über null Module, der Ertrag zeigte einen Strich, und
+ * die Übergabe hätte einen Vorgang ohne Anlage angelegt. Der Ablauf
+ * sah aus wie fünf gleichwertige Reiter statt wie ein Weg.
+ */
+function warumGesperrt(nr: 1 | 2 | 3 | 4 | 5, plan: Plan): string | null {
+  const hatFlaeche = plan.flaechen.length > 0;
+  const modulzahlGesamt = plan.gruppen.reduce((s, g) => s + anzahlModule(g), 0);
+  if (nr === 1) return null;
+  if (!hatFlaeche) return "Zuerst eine Dachfläche zeichnen";
+  if (nr === 2) return null;
+  if (modulzahlGesamt === 0) return "Zuerst Module auf das Dach legen";
+  /*
+   * Der Ertrag hängt an Modulen, Neigung und Ausrichtung — nicht am
+   * Wechselrichter. Er ist deshalb schon vor der Technik zu sehen; das
+   * ist auch die Zahl, nach der beim Kunden als Erstes gefragt wird.
+   * Die Übergabe braucht dagegen die vollständige Anlage, sonst ginge
+   * eine Stückliste ohne Wechselrichter in den Vorgang.
+   */
+  /*
+   * Ab hier reichen Module. Auch die Übergabe verlangt KEINEN
+   * Wechselrichter: Ein Angebot ohne abgeschlossene Elektroprüfung ist
+   * ein normaler Zwischenstand — das PDF vermerkt ihn, statt den Weg zu
+   * versperren.
+   */
+  return null;
+}
+
+/*
+ * Die Werkzeuge mit gezeichnetem Zeichen.
+ *
+ * Vorher standen hier Sonderzeichen aus der Schrift (⬠ ▣ ⬓ ⧉). Auf dem
+ * Mac ergaben sie ein ungefähres Bild, unter Windows und am iPad
+ * Kästchen oder etwas ganz anderes. Ein Werkzeug, dessen Zeichen man
+ * nicht erkennt, ist keines.
+ */
+const WERKZEUGE: Array<{
+  id: Werkzeug;
+  zeichen: (p: { groesse?: number }) => React.ReactElement;
+  label: string;
+  titel: string;
+}> = [
+  { id: "auswahl", zeichen: ZeichenZeiger, label: "Wählen", titel: "Auswählen und bearbeiten" },
+  { id: "flaeche", zeichen: ZeichenFlaeche, label: "Dach", titel: "Dachfläche zeichnen" },
+  { id: "hindernis", zeichen: ZeichenHindernis, label: "Kamin", titel: "Hindernis aufziehen (Kamin, Fenster)" },
+  { id: "baum", zeichen: ZeichenBaum, label: "Baum", titel: "Baum setzen — kostet Ertrag durch Verschattung" },
+  { id: "modul", zeichen: ZeichenModul, label: "Modul", titel: "Einzelnes Modul frei setzen oder zurückholen" },
+  { id: "teilen", zeichen: ZeichenTeilen, label: "Teilen", titel: "Teil der Gruppe als eigenes Feld abtrennen" },
+  { id: "string", zeichen: ZeichenString, label: "String", titel: "Module dem gewählten String zuordnen" },
+  { id: "messen", zeichen: ZeichenMessen, label: "Messen", titel: "Strecke messen" },
 ];
 
 /*
@@ -165,11 +224,24 @@ export function Planer({
   const [mitte, setMitte] = useState<Meter>({ x: 0, y: 0 });
   const [panelOffen, setPanelOffen] = useState(true);
   /*
+   * Zähler fürs Einpassen der Karte. Hochzählen heisst: alle
+   * Dachflächen ins Bild rücken.
+   */
+  const [einpassen, setEinpassen] = useState(0);
+  /*
    * Räumliche Ansicht. Gezeichnet wird weiter in der Draufsicht — hier
    * wird geschaut. Beim Kunden am Tisch ist das der Moment, in dem aus
    * einem Grundriss ein Haus wird.
    */
   const [raeumlich, setRaeumlich] = useState(false);
+  /*
+   * Vollbild: Der Planer legt sich über die ganze Seite.
+   *
+   * Als Überlagerung und nicht über die Fullscreen-API des Browsers:
+   * Auf dem iPad gibt es `requestFullscreen` für gewöhnliche Elemente
+   * nicht, und genau dort wird geplant. Escape beendet.
+   */
+  const [vollbild, setVollbild] = useState(false);
   const [foto, setFoto] = useState<FotoQuelle | null>(projekt.foto);
 
   /*
@@ -338,6 +410,34 @@ export function Planer({
     return () => window.removeEventListener("keydown", taste);
   }, [schrittVor, schrittZurueck]);
 
+  /*
+   * Beim Öffnen einmal einpassen, wenn schon ein Dach im Plan liegt.
+   * Ohne das öffnet sich eine gespeicherte Planung auf dem Zoom, mit
+   * dem sie zuletzt verlassen wurde — und der passt selten.
+   */
+  useEffect(() => {
+    /*
+     * Nur beim Öffnen, und nur wenn schon etwas da ist.
+     *
+     * Der erste Anlauf hing am Zähler der Dachflächen und passte deshalb
+     * auch dann ein, wenn jemand gerade die erste Fläche FERTIG
+     * gezeichnet hatte: Die Karte sprang unter der Hand weg, und der
+     * nächste Klick landete woanders. Einpassen ist eine Ansage, keine
+     * Nebenwirkung — beim Öffnen und nach dem Setzen einer Standardform.
+     */
+    if (plan.flaechen.length > 0) setEinpassen((n) => n + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!vollbild) return;
+    const taste = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setVollbild(false);
+    };
+    window.addEventListener("keydown", taste);
+    return () => window.removeEventListener("keydown", taste);
+  }, [vollbild]);
+
   const onKalibriert = useCallback(
     async (meterProPixel: number, faktor: number) => {
       const schonGezeichnet = plan.flaechen.length > 0;
@@ -463,7 +563,14 @@ export function Planer({
   ];
 
   return (
-    <div className="flex h-full min-h-[520px] flex-col overflow-hidden rounded-card border border-line">
+    <div
+      className={[
+        "flex flex-col overflow-hidden border-line",
+        vollbild
+          ? "fixed inset-0 z-[60] h-dvh rounded-none border-0 bg-panel"
+          : "h-full min-h-[520px] rounded-card border",
+      ].join(" ")}
+    >
       {/* ── Kopf, 56 px ────────────────────────────────────────────── */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-panel px-4">
         <Link
@@ -514,7 +621,15 @@ export function Planer({
           <RundKnopf
             zeichen="+"
             beschriftung="Näher heran"
-            onClick={() => setZoom((z) => Math.min(ZOOM_GRENZEN.max, z + 1))}
+            onClick={() =>
+              setZoom((z) =>
+                /*
+                 * Nicht über die Auflösung des Luftbilds hinaus: Ab dort
+                 * wird nur noch vergrössert, und das Dach zerfliesst.
+                 */
+                Math.min(Math.min(ZOOM_GRENZEN.max, hoechsterZoom(anbieter)), z + 1),
+              )
+            }
           />
         </div>
 
@@ -537,6 +652,17 @@ export function Planer({
 
           <button
             type="button"
+            onClick={() => setVollbild((v) => !v)}
+            aria-pressed={vollbild}
+            aria-label={vollbild ? "Vollbild beenden" : "Auf die ganze Seite"}
+            title={vollbild ? "Vollbild beenden (Esc)" : "Auf die ganze Seite"}
+            className="ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-line bg-surface text-muted transition-colors hover:border-accent hover:text-ink"
+          >
+            {vollbild ? <ZeichenVollbildAus groesse={18} /> : <ZeichenVollbild groesse={18} />}
+          </button>
+
+          <button
+            type="button"
             onClick={() => setRaeumlich((v) => !v)}
             aria-pressed={raeumlich}
             className={[
@@ -550,79 +676,6 @@ export function Planer({
       </header>
 
       <div className="relative flex min-h-0 flex-1">
-        {/*
-          * ── Schritte, schwebend oben mittig ────────────────────────
-          *
-          * Vorher eine 76 px breite Spalte links. Die Zeichenfläche ist
-          * der Arbeitsgegenstand; alles, was sie einrahmt, nimmt ihr
-          * Platz. Schwebend über der Karte bleibt sie so gross wie
-          * möglich — und der Blick springt nicht zwischen Rand und
-          * Mitte.
-          */}
-        <nav
-          className="pointer-events-none absolute left-1/2 top-3 z-20 hidden -translate-x-1/2 items-stretch gap-0.5 rounded-[14px] border border-pl-chrome-linie bg-pl-chrome px-1.5 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,.4)] backdrop-blur-md sm:flex"
-          aria-label="Planungsphasen"
-        >
-          {PHASEN.map((ph) => {
-            const anklickbar = ph.fertig;
-            const aktivePhase = phase === ph.nr;
-            return (
-              <button
-                key={ph.nr}
-                type="button"
-                disabled={!anklickbar}
-                aria-pressed={aktivePhase}
-                onClick={() => {
-                  /*
-                   * Das Bild entsteht beim VERLASSEN einer Zeichenphase.
-                   * In Phase 4 und 5 ist die Leinwand nicht im DOM — wer
-                   * erst dort auslöst, bekommt kein Bild, und das
-                   * Kunden-PDF trüge ein leeres Deckblatt.
-                   */
-                  const zeichnet = phase <= 3;
-                  if (zeichnet && ph.nr >= 4 && schreibrecht) void vorschauMachen();
-                  setPhase(ph.nr);
-                  /*
-                   * Beim Wechsel auf ein erlaubtes Werkzeug zurückfallen.
-                   * Sonst bliebe „Fläche" aktiv, während die Leiste es
-                   * gar nicht mehr anbietet — der nächste Klick auf die
-                   * Karte legte dann eine Ecke an, die niemand wollte.
-                   */
-                  if (!WERKZEUGE_JE_PHASE[ph.nr].includes(werkzeug)) setWerkzeug("auswahl");
-                }}
-                className={[
-                  "pointer-events-auto flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 transition-colors",
-                  aktivePhase
-                    ? "bg-accent text-white"
-                    : anklickbar
-                      ? "text-pl-auf-dunkel-2 hover:bg-white/10"
-                      : "cursor-default text-pl-auf-dunkel-4",
-                ].join(" ")}
-              >
-                <span
-                  className={[
-                    "num flex h-[20px] w-[20px] items-center justify-center rounded-pill text-[11px] font-bold",
-                    aktivePhase
-                      ? "bg-white/25 text-white"
-                      : anklickbar
-                        ? "bg-white/10"
-                        : "bg-white/5",
-                  ].join(" ")}
-                >
-                  {ph.mark}
-                </span>
-                {/*
-                  * Die Beschriftung erst ab genügend Breite. Sonst
-                  * läuft die Leiste unter das Panel, und der letzte
-                  * Schritt ist nicht mehr zu treffen — die Nummer
-                  * allein genügt dort, die Reihenfolge kennt man nach
-                  * dem zweiten Projekt.
-                  */}
-                <span className="hidden text-[12px] font-semibold xl:inline">{ph.label}</span>
-              </button>
-            );
-          })}
-        </nav>
 
         {/* ── Räumliche Ansicht ────────────────────────────────────── */}
         {raeumlich && phase !== 4 && phase !== 5 ? (
@@ -731,6 +784,91 @@ export function Planer({
         ) : (
         /* ── Zeichenfläche, dunkel ────────────────────────────────── */
         <div ref={zeichenflaeche} className="relative min-w-0 flex-1 bg-pl-flaeche">
+          {/*
+            * ── Schritte, schwebend oben mittig ────────────────────────
+            *
+            * Vorher eine 76 px breite Spalte links. Die Zeichenfläche ist
+            * der Arbeitsgegenstand; alles, was sie einrahmt, nimmt ihr
+            * Platz.
+            *
+            * Und zwar mittig über der ZEICHENFLÄCHE, nicht über der
+            * ganzen Zeile: Solange die Leiste ein Geschwister des Panels
+            * war, zählte dessen 344 px breite Spalte mit — die Schritte
+            * standen ein Stück rechts, der Hinweis darunter mittig, und
+            * beide waren sichtbar gegeneinander verschoben.
+            */}
+          <nav
+          className="pointer-events-none absolute left-1/2 top-3 z-20 hidden -translate-x-1/2 items-stretch gap-0.5 rounded-[14px] border border-pl-chrome-linie bg-pl-chrome px-1.5 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,.4)] backdrop-blur-md sm:flex"
+          aria-label="Planungsphasen"
+        >
+          {PHASEN.map((ph) => {
+            const grund = warumGesperrt(ph.nr, plan);
+            const anklickbar = grund === null;
+            const aktivePhase = phase === ph.nr;
+            return (
+              <button
+                key={ph.nr}
+                type="button"
+                disabled={!anklickbar}
+                title={grund ?? ph.label}
+                aria-pressed={aktivePhase}
+                onClick={() => {
+                  /*
+                   * Das Bild entsteht beim VERLASSEN einer Zeichenphase.
+                   * In Phase 4 und 5 ist die Leinwand nicht im DOM — wer
+                   * erst dort auslöst, bekommt kein Bild, und das
+                   * Kunden-PDF trüge ein leeres Deckblatt.
+                   */
+                  const zeichnet = phase <= 3;
+                  if (zeichnet && ph.nr >= 4 && schreibrecht) void vorschauMachen();
+                  setPhase(ph.nr);
+                  /*
+                   * Beim Wechsel auf ein erlaubtes Werkzeug zurückfallen.
+                   * Sonst bliebe „Fläche" aktiv, während die Leiste es
+                   * gar nicht mehr anbietet — der nächste Klick auf die
+                   * Karte legte dann eine Ecke an, die niemand wollte.
+                   */
+                  if (!WERKZEUGE_JE_PHASE[ph.nr].includes(werkzeug)) setWerkzeug("auswahl");
+                }}
+                className={[
+                  "pointer-events-auto flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 transition-colors",
+                  aktivePhase
+                    ? "bg-accent text-white"
+                    : anklickbar
+                      ? "text-pl-auf-dunkel-2 hover:bg-white/10"
+                      : "cursor-default text-pl-auf-dunkel-4",
+                ].join(" ")}
+              >
+                <span
+                  className={[
+                    "num flex h-[20px] w-[20px] items-center justify-center rounded-pill text-[11px] font-bold",
+                    aktivePhase
+                      ? "bg-white/25 text-white"
+                      : anklickbar
+                        ? "bg-white/10"
+                        : "bg-white/5",
+                  ].join(" ")}
+                >
+                  {ph.mark}
+                </span>
+                {/*
+                  * Die Beschriftung erst ab genügend Breite. Sonst
+                  * läuft die Leiste unter das Panel, und der letzte
+                  * Schritt ist nicht mehr zu treffen — die Nummer
+                  * allein genügt dort, die Reihenfolge kennt man nach
+                  * dem zweiten Projekt.
+                  */}
+                {/*
+                  * Beschriftung immer sichtbar, nicht erst ab 1280 px.
+                  * Auf dem iPad quer (1024) blieben sonst nur die Ziffern
+                  * 1 bis 5 stehen — wer den Planer zum ersten Mal
+                  * benutzt, weiss dann nicht, was ihn erwartet.
+                  */}
+                <span className="text-[12px] font-semibold">{ph.label}</span>
+              </button>
+            );
+          })}
+          </nav>
           {foto || verfuegbar(anbieter) ? (
             <Leinwand
               ursprung={projekt.ursprung}
@@ -752,6 +890,7 @@ export function Planer({
               onPlan={onPlan}
               onWerkzeug={setWerkzeug}
               onKamera={onKamera}
+              zeigeAlles={einpassen}
             />
           ) : (
             <NichtEingerichtet stand={staende.find((s) => s.id === anbieter)} />
@@ -799,7 +938,7 @@ export function Planer({
                     aria-pressed={an}
                     onClick={() => setWerkzeug(w.id)}
                     className={[
-                      "flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-[10px] transition-colors",
+                      "flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-[12px] transition-colors",
                       an
                         ? "bg-accent text-white"
                         : gesperrt
@@ -807,8 +946,8 @@ export function Planer({
                           : "text-pl-auf-dunkel-2 hover:bg-white/10",
                     ].join(" ")}
                   >
-                    <span className="text-[16px] leading-none">{w.glyph}</span>
-                    <span className="text-[8px] font-semibold tracking-[0.02em]">{w.label}</span>
+                    <w.zeichen groesse={20} />
+                    <span className="text-[9px] font-semibold tracking-[0.02em]">{w.label}</span>
                   </button>
                 );
               })}
@@ -851,24 +990,35 @@ export function Planer({
             </div>
           ) : null}
 
-          {/* Kennzahlen, schwebend unten mittig */}
-          <div className="pointer-events-none absolute bottom-[74px] left-1/2 z-10 flex -translate-x-1/2 items-stretch rounded-[14px] border border-pl-chrome-linie bg-pl-chrome px-1.5 py-2 shadow-[0_8px_30px_rgba(0,0,0,.4)] backdrop-blur-md">
-            {kennzahlen.map((k) => (
+          {/*
+            * Kennzahlen als schmale Leiste am linken Rand.
+            *
+            * Vorher lagen sie als breiter Block unten in der Mitte —
+            * direkt über der Werkzeugleiste. Zusammen nahmen beide den
+            * unteren Bildrand ein, und bei einem Dach im unteren
+            * Bilddrittel deckten sie genau die Arbeit zu. Links steht
+            * eine schmale Spalte, die man liest, ohne dass sie etwas
+            * verdeckt.
+            */}
+          <div className="pointer-events-none absolute left-3 top-1/2 z-10 flex -translate-y-1/2 flex-col rounded-[14px] border border-pl-chrome-linie bg-pl-chrome px-1 py-1.5 shadow-[0_8px_30px_rgba(0,0,0,.4)] backdrop-blur-md">
+            {/*
+              * Nur Zahlen, die schon etwas bedeuten. „0 MODULE" und
+              * „— KWH/JAHR" auf einer leeren Karte sind kein Stand,
+              * sondern Rauschen.
+              */}
+            {kennzahlen
+              .filter((k) => modulzahl > 0 || k.label === "DACHFLÄCHE")
+              .map((k) => (
               <div
                 key={k.label}
-                className="min-w-[92px] whitespace-nowrap border-r border-pl-chrome-linie px-[17px] text-center last:border-r-0"
+                className="min-w-[84px] whitespace-nowrap border-b border-pl-chrome-linie px-2.5 py-1.5 text-center last:border-b-0"
               >
-                <div className="num text-[19px] font-bold leading-none text-pl-auf-dunkel">{k.wert}</div>
-                <div className="mt-1 text-[10px] font-semibold tracking-[0.04em] text-pl-auf-dunkel-3">
+                <div className="num text-[17px] font-bold leading-none text-pl-auf-dunkel">{k.wert}</div>
+                <div className="mt-1 text-[9.5px] font-semibold tracking-[0.04em] text-pl-auf-dunkel-3">
                   {k.label}
                 </div>
-              </div>
-            ))}
-            <div className="flex items-center pl-3 pr-1">
-              <span className="w-[62px] text-[10px] leading-[1.25] text-pl-auf-dunkel-4">
-                Richtwerte, unverbindlich
-              </span>
-            </div>
+                </div>
+              ))}
           </div>
 
           {/* Griff zum Ausklappen, wenn das Panel zu ist */}
@@ -887,46 +1037,69 @@ export function Planer({
 
         {/* ── Panel, 344 px ───────────────────────────────────────── */}
         {panelOffen && phase !== 5 ? (
+          /*
+           * EIN Panel, ein Schritt, eine Frage.
+           *
+           * Vorher hingen in Schritt 1 und 2 dieselben acht Karten
+           * untereinander — Assistent, Gebäude, Flächenliste, Belegung,
+           * Eigenschaften, Umgebung, Foto. Jetzt zeigt jeder Schritt nur,
+           * was er braucht; alles Seltene liegt hinter „Mehr einstellen".
+           */
           <div className="absolute inset-y-0 right-0 z-30 flex w-[var(--pl-panel-breite)] max-w-[86%] shadow-soft lg:static lg:z-auto lg:shadow-none">
-            {phase === 4 ? (
-              <aside className="flex w-full flex-col border-l border-line bg-panel">
-                <div className="flex items-center px-4 pb-2.5 pt-3.5">
-                  <h2 className="text-[15px] font-extrabold">Deine Angaben</h2>
-                  <button
-                    type="button"
-                    onClick={() => setPanelOffen(false)}
-                    aria-label="Seitenleiste schliessen"
-                    className="ml-auto flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[15px] text-muted hover:bg-sunk lg:hidden"
-                  >
-                    ›
-                  </button>
-                </div>
-                <div className="flex-1 overflow-auto px-4 pb-4">
-                  <WirtschaftPanel
+            <aside className="flex w-full flex-col border-l border-line bg-panel">
+              <div className="flex items-center gap-2 px-4 pb-1 pt-3.5">
+                <span className="num flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[13px] font-bold text-white">
+                  {phase}
+                </span>
+                <span className="text-[12.5px] font-semibold uppercase tracking-[0.06em] text-muted">
+                  Schritt {phase} von 5
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPanelOffen(false)}
+                  aria-label="Seitenleiste schliessen"
+                  className="ml-auto flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-[16px] text-muted hover:bg-sunk lg:hidden"
+                >
+                  ›
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-auto px-4 pb-5 pt-2">
+                {phase === 1 ? (
+                  <DachSchritt
                     plan={plan}
-                    onPlan={(naechster) => onPlan(naechster, true)}
-                    vorgabe={vorgabe}
-                    regionen={regionen}
-                    anlageKwp={leistung}
-                    speicherKwh={speicherKwh}
+                    aktiv={aktiv}
+                    onAktiv={setAktiv}
+                    onPlan={onPlan}
+                    mitte={mitte}
+                    werkzeug={werkzeug}
+                    onWerkzeug={setWerkzeug}
+                    schreibrecht={schreibrecht}
+                    onEinpassen={() => setEinpassen((n) => n + 1)}
+                    foto={
+                      schreibrecht ? (
+                        <FotoLeiste
+                          projektId={projekt.id}
+                          foto={foto}
+                          werkzeug={werkzeug}
+                          onWerkzeug={setWerkzeug}
+                        />
+                      ) : null
+                    }
+                  />
+                ) : phase === 2 ? (
+                  <ModulSchritt
+                    plan={plan}
+                    aktiv={aktiv}
+                    onAktiv={setAktiv}
+                    aktiveGruppe={aktiveGruppe}
+                    onAktiveGruppe={setAktiveGruppe}
+                    onPlan={onPlan}
+                    module={geraete.module}
+                    breitengrad={projekt.ursprung.lat}
                     schreibrecht={schreibrecht}
                   />
-                </div>
-              </aside>
-            ) : phase === 3 ? (
-              <aside className="flex w-full flex-col border-l border-line bg-panel">
-                <div className="flex items-center px-4 pb-2.5 pt-3.5">
-                  <h2 className="text-[15px] font-extrabold">Technik</h2>
-                  <button
-                    type="button"
-                    onClick={() => setPanelOffen(false)}
-                    aria-label="Seitenleiste schliessen"
-                    className="ml-auto flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-[15px] text-muted hover:bg-sunk lg:hidden"
-                  >
-                    ›
-                  </button>
-                </div>
-                <div className="flex-1 overflow-auto px-4 pb-4">
+                ) : phase === 3 ? (
                   <TechnikPanel
                     plan={plan}
                     onPlan={onPlan}
@@ -937,33 +1110,19 @@ export function Planer({
                     onAktiverStrang={setAktiverStrang}
                     schreibrecht={schreibrecht}
                   />
-                </div>
-              </aside>
-            ) : (
-              <FlaechenPanel
-                plan={plan}
-                aktiv={aktiv}
-                onAktiv={setAktiv}
-                onPlan={onPlan}
-                mitte={mitte}
-                schreibrecht={schreibrecht}
-                aktiveGruppe={aktiveGruppe}
-                onAktiveGruppe={setAktiveGruppe}
-                breitengrad={projekt.ursprung.lat}
-                dachAenderbar={phase === 1}
-                onSchliessen={() => setPanelOffen(false)}
-                foto={
-                  schreibrecht ? (
-                    <FotoLeiste
-                      projektId={projekt.id}
-                      foto={foto}
-                      werkzeug={werkzeug}
-                      onWerkzeug={setWerkzeug}
-                    />
-                  ) : null
-                }
-              />
-            )}
+                ) : (
+                  <WirtschaftPanel
+                    plan={plan}
+                    onPlan={(naechster) => onPlan(naechster, true)}
+                    vorgabe={vorgabe}
+                    regionen={regionen}
+                    anlageKwp={leistung}
+                    speicherKwh={speicherKwh}
+                    schreibrecht={schreibrecht}
+                  />
+                )}
+              </div>
+            </aside>
           </div>
         ) : null}
       </div>

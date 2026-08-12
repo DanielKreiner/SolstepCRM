@@ -69,6 +69,7 @@ function gruppe(teil: Partial<Modulgruppe> = {}): Modulgruppe {
     reihen: 2,
     aufstaenderung: null,
     aus: [],
+    entfernt: [],
     frei: {},
     ...teil,
   };

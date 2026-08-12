@@ -18,7 +18,9 @@ import {
 } from "@/lib/planer/flaeche";
 import { type Kamera, meterZuBild, type Meter } from "@/lib/planer/geo";
 import {
+  achsen,
   aktiveZellen,
+  leereZellen,
   modulEcken,
   type Modulgruppe,
   zelle as zellSchluessel,
@@ -48,6 +50,15 @@ export interface Sicht {
   aktiv: string | null;
   /** Kante, über der der Zeiger gerade steht: "flaecheId:index". */
   betont: string | null;
+  /**
+   * Es wird gerade an einer Modulgruppe gearbeitet.
+   *
+   * Dann verschwinden die Kantenmasse: Sie gehören zum Dach, und wer
+   * das Feld verschiebt, braucht sie nicht — zusammen mit Rahmen,
+   * Griffen und Symbolen lagen fünf Pillen auf den Modulen, und man
+   * las keine einzige.
+   */
+  gruppeAktiv?: boolean;
 }
 
 export function bild(k: Kamera, m: Meter) {
@@ -99,11 +110,29 @@ export function meterText(m: number): string {
   return `${m.toFixed(2).replace(".", ",")} m`;
 }
 
-/** Wo die Pille einer Kante sitzt — auch für die Trefferprüfung gebraucht. */
+/** Mitte einer Kante in Bildpunkten. */
 export function kantenMitte(k: Kamera, a: Meter, b: Meter) {
   const p1 = bild(k, a);
   const p2 = bild(k, b);
   return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+}
+
+/**
+ * Wo die Masszahl einer Kante sitzt: aussen vor der Kante.
+ *
+ * Eine Stelle für Zeichnen UND Trefferprüfung. Als ich die Pille nach
+ * aussen versetzt und den Treffer auf der Kantenmitte gelassen hatte,
+ * öffnete ein Klick auf die sichtbare Pille nichts mehr, während ein
+ * Klick ins Leere daneben die Eingabe aufmachte.
+ */
+export function masszahlOrt(k: Kamera, punkte: Meter[], a: Meter, b: Meter) {
+  const m = kantenMitte(k, a, b);
+  const mitte = bild(k, schwerpunkt(punkte));
+  const dx = m.x - mitte.x;
+  const dy = m.y - mitte.y;
+  const l = Math.hypot(dx, dy) || 1;
+  const versatz = 15;
+  return { x: m.x + (dx / l) * versatz, y: m.y + (dy / l) * versatz };
 }
 
 export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachflaeche) {
@@ -161,21 +190,37 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
    * Bei zu kurzen Kanten weggelassen: sonst überdecken sich die Pillen
    * gegenseitig und man liest keine einzige.
    */
+  /*
+   * Masse nur an der gewählten Fläche und nur, solange keine
+   * Modulgruppe bearbeitet wird. Bei drei Dachflächen wären es sonst
+   * zwölf Pillen gleichzeitig.
+   */
+  const zeigeMasse = istAktiv && !s.gruppeAktiv;
   const gefaelle = falllinie(f);
   for (const kante of kanten(f.punkte)) {
     const p1 = bild(k, kante.a);
     const p2 = bild(k, kante.b);
     if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 46) continue;
-    const m = kantenMitte(k, kante.a, kante.b);
     const istTraufe = f.traufe === kante.i;
-    const text = meterText(wahreKantenlaenge(kante.a, kante.b, gefaelle, f.neigung));
+    if (!zeigeMasse && !(s.betont === `${f.id}:${kante.i}`)) continue;
+
+    /*
+     * Die Pille sitzt AUSSERHALB der Fläche, nicht auf ihr. Auf der
+     * Kantenmitte lag sie über den Modulen — bei einem vollen Dach war
+     * die Belegung darunter nicht mehr zu erkennen.
+     */
+    const ort = masszahlOrt(k, f.punkte, kante.a, kante.b);
     pille(
       ctx,
-      m.x,
-      m.y,
-      istTraufe ? `Traufe · ${text}` : text,
+      ort.x,
+      ort.y,
+      istTraufe ? `Traufe · ${text(kante)}` : text(kante),
       s.betont === `${f.id}:${kante.i}` || istTraufe,
     );
+  }
+
+  function text(kante: { a: Meter; b: Meter }): string {
+    return meterText(wahreKantenlaenge(kante.a, kante.b, gefaelle, f.neigung));
   }
 
   if (istAktiv) {
@@ -330,7 +375,8 @@ export function zeichneGruppe(
    */
   schatten?: Map<string, { grad: number }>,
 ) {
-  const aus = new Set(g.aus);
+  // Beide Gründe zusammen: kein Platz UND weggetippt.
+  const aus = leereZellen(g);
   // Klein gezeichnete Module brauchen keinen Rand — sonst ist das Feld
   // nur noch Rand.
   const probe = modulEcken(g, f, 0, 0);
@@ -414,8 +460,97 @@ export function gruppenRahmen(k: Kamera, g: Modulgruppe, f: Dachflaeche): Rahmen
 
 export type GriffArt = "drehen" | "verschieben" | "oben" | "unten" | "links" | "rechts";
 
-/** Wo die Griffe sitzen — ebenfalls für beides: zeichnen und treffen. */
-export function griffe(r: Rahmen): Array<{ art: GriffArt; x: number; y: number }> {
+/**
+ * Die vier Ecken des Modulblocks in Bildpunkten — im Winkel der Gruppe.
+ *
+ * Nicht das umschliessende Rechteck: Bei einer gedrehten Gruppe stand
+ * darum ein achsenparalleles Kästchen, das mit dem Feld nichts zu tun
+ * hatte. Zwei Rechtecke übereinander, von denen nur eines gemeint ist —
+ * genau die Unruhe, wegen der die Fläche unübersichtlich wirkte.
+ *
+ * Reihenfolge: links-oben, rechts-oben, rechts-unten, links-unten,
+ * wobei „oben" bergauf heisst (Richtung First).
+ */
+export function blockEcken(
+  k: Kamera,
+  g: Modulgruppe,
+  f: Dachflaeche,
+): [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }] | null {
+  const zellen = aktiveZellen(g);
+  if (zellen.length === 0) return null;
+  const a = achsen(g, f);
+
+  /*
+   * Alle Modulecken auf die beiden Gruppenachsen projizieren. Ein frei
+   * gezogenes Modul liegt ausserhalb des Rasters — auch das gehört in
+   * den Rahmen, sonst rahmt er nicht die Gruppe, sondern das Raster.
+   */
+  let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+  for (const z of zellen) {
+    for (const p of modulEcken(g, f, z.reihe, z.spalte)) {
+      const u = p.x * a.quer.x + p.y * a.quer.y;
+      const v = p.x * a.laengs.x + p.y * a.laengs.y;
+      if (u < uMin) uMin = u;
+      if (u > uMax) uMax = u;
+      if (v < vMin) vMin = v;
+      if (v > vMax) vMax = v;
+    }
+  }
+  // Etwas Luft, damit der Rahmen nicht auf den Modulkanten klebt.
+  const luft = 0.12;
+  uMin -= luft; uMax += luft; vMin -= luft; vMax += luft;
+
+  const zuMeter = (u: number, v: number): Meter => ({
+    x: a.quer.x * u + a.laengs.x * v,
+    y: a.quer.y * u + a.laengs.y * v,
+  });
+  return [
+    bild(k, zuMeter(uMin, vMax)),
+    bild(k, zuMeter(uMax, vMax)),
+    bild(k, zuMeter(uMax, vMin)),
+    bild(k, zuMeter(uMin, vMin)),
+  ];
+}
+
+/**
+ * Wo die Griffe sitzen — ebenfalls für beides: zeichnen und treffen.
+ *
+ * Mit `ecken` sitzen sie an den Kantenmitten des gedrehten Blocks; ohne
+ * (Rückfall, wenn kein Modul aktiv ist) am umschliessenden Rechteck.
+ */
+export function griffe(
+  r: Rahmen,
+  ecken?: ReturnType<typeof blockEcken>,
+): Array<{ art: GriffArt; x: number; y: number }> {
+  if (ecken) {
+    const [lo, ro, ru, lu] = ecken;
+    const mitte = (a: { x: number; y: number }, b: { x: number; y: number }) => ({
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2,
+    });
+    const oben = mitte(lo, ro);
+    const unten = mitte(lu, ru);
+    /*
+     * Die Symbole sitzen über der Oberkante, in Richtung der
+     * Rahmennormalen — bei gedrehtem Feld also mitgedreht. Ein fest
+     * nach oben gesetztes Paar hinge sonst schief über der Kante.
+     */
+    const nx = oben.x - unten.x;
+    const ny = oben.y - unten.y;
+    const l = Math.hypot(nx, ny) || 1;
+    const auf = { x: nx / l, y: ny / l };
+    // Quer dazu, damit die beiden Scheiben nebeneinander stehen.
+    const quer = { x: -auf.y, y: auf.x };
+    return [
+      { art: "verschieben", x: oben.x + auf.x * 26 - quer.x * 16, y: oben.y + auf.y * 26 - quer.y * 16 },
+      { art: "drehen", x: oben.x + auf.x * 26 + quer.x * 16, y: oben.y + auf.y * 26 + quer.y * 16 },
+      { art: "oben", x: oben.x, y: oben.y },
+      { art: "unten", x: unten.x, y: unten.y },
+      { art: "links", ...mitte(lo, lu) },
+      { art: "rechts", ...mitte(ro, ru) },
+    ];
+  }
+
   const mx = (r.links + r.rechts) / 2;
   const my = (r.oben + r.unten) / 2;
   return [
@@ -504,21 +639,36 @@ function zeichneGruppenRahmen(
   const r = gruppenRahmen(k, g, f);
   if (!r) return;
 
+  const ecken = blockEcken(k, g, f);
+
   ctx.save();
   ctx.setLineDash([6, 4]);
   ctx.strokeStyle = FARBEN.gruppeRahmen;
   ctx.lineWidth = 1.6;
-  ctx.strokeRect(r.links, r.oben, r.rechts - r.links, r.unten - r.oben);
+  if (ecken) {
+    ctx.beginPath();
+    ecken.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.closePath();
+    ctx.stroke();
+  } else {
+    ctx.strokeRect(r.links, r.oben, r.rechts - r.links, r.unten - r.oben);
+  }
   ctx.setLineDash([]);
 
-  // Verbindung zum Symbolpaar über dem Rahmen.
-  const mx = (r.links + r.rechts) / 2;
-  ctx.beginPath();
-  ctx.moveTo(mx, r.oben);
-  ctx.lineTo(mx, r.oben - 26);
-  ctx.stroke();
+  const stellen = griffe(r, ecken);
 
-  for (const griff of griffe(r)) {
+  // Verbindung von der Oberkante zum Symbolpaar.
+  const obenGriff = stellen.find((x) => x.art === "oben");
+  const drehGriff = stellen.find((x) => x.art === "drehen");
+  const schiebGriff = stellen.find((x) => x.art === "verschieben");
+  if (obenGriff && drehGriff && schiebGriff) {
+    ctx.beginPath();
+    ctx.moveTo(obenGriff.x, obenGriff.y);
+    ctx.lineTo((drehGriff.x + schiebGriff.x) / 2, (drehGriff.y + schiebGriff.y) / 2);
+    ctx.stroke();
+  }
+
+  for (const griff of stellen) {
     if (griff.art === "drehen" || griff.art === "verschieben") {
       scheibe(ctx, griff.x, griff.y);
       if (griff.art === "drehen") zeichenDrehen(ctx, griff.x, griff.y);

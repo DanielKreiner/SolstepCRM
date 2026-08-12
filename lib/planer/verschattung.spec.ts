@@ -233,6 +233,7 @@ function planMitBelegung(objekte: Plan["objekte"]): Plan {
         reihen: 2,
         aufstaenderung: null,
         aus: [],
+    entfernt: [],
         frei: {},
       },
     ],

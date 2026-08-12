@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { belegen, dachSetzen } from "./planer-helfer";
 
 /*
  * Planer — Projektliste (Briefing 8.3).
@@ -55,10 +56,9 @@ test.describe("Planer — Projektliste", () => {
     const id = await projektAnlegen(page, "Listentest A");
 
     await page.getByRole("button", { name: "Näher heran" }).click();
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Satteldach");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
     await page.getByRole("button", { name: /^5 Übergabe/ }).click();

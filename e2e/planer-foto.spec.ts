@@ -1,6 +1,7 @@
 import { deflateSync } from "node:zlib";
 import { expect, type Page, test } from "@playwright/test";
 import { DEMO, login } from "./helpers";
+import { mehrOeffnen } from "./planer-helfer";
 
 /*
  * Planer, Stufe 2 — Drohnenfoto und Kalibrierung (Briefing 2.3,
@@ -79,6 +80,8 @@ async function neuesProjekt(page: Page, name: string) {
 }
 
 async function fotoHochladen(page: Page) {
+  // Die Bildquelle steckt hinter „Mehr einstellen" — sie ist die Ausnahme.
+  await mehrOeffnen(page);
   await page.getByLabel("Drohnenfoto hochladen").setInputFiles({
     name: "dach.png",
     mimeType: "image/png",
@@ -204,6 +207,8 @@ test.describe("Planer — Drohnenfoto", () => {
     await expect(page.getByText("kalibriert", { exact: true })).toBeVisible();
 
     await page.reload();
+    // Nach dem Neuladen ist „Mehr einstellen" wieder zu.
+    await mehrOeffnen(page);
     await expect(page.getByText("kalibriert", { exact: true })).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/geschätzt/)).toHaveCount(0);
   });

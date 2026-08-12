@@ -94,6 +94,23 @@ export function anbieter(id: string): Anbieter {
 }
 
 /**
+ * Wie weit sich beim gewählten Anbieter sinnvoll heranzoomen lässt.
+ *
+ * Eine Stufe über die letzte echte Kachelstufe hinaus, mehr nicht: Ab
+ * dort wird eine 30-cm-Aufnahme nur noch vergrössert, und aus dem Dach
+ * wird ein Farbbrei. Der Planer liess vorher bis Stufe 22,5 zu — auf
+ * einem Meter Bildbreite lagen dann acht Bildpunkte des Luftbilds, und
+ * die Kante, die man treffen wollte, war nicht mehr zu sehen.
+ *
+ * Genauer wird die Planung dadurch nicht: Gezeichnet wird im
+ * Metersystem, nicht in Bildpunkten. Wer es genauer braucht, lädt ein
+ * Drohnenfoto und kalibriert es.
+ */
+export function hoechsterZoom(id: AnbieterId): number {
+  return anbieter(id).maxStufe + 2;
+}
+
+/**
  * Direkte Kachel-URL — nur für Anbieter ohne Schlüssel. Alle anderen
  * gehen über den Proxy, siehe `kachelUrl`.
  */

@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { DEMO, login } from "./helpers";
+import { dachSetzen, mehrOeffnen } from "./planer-helfer";
 
 /*
  * Planer, Stufe 2 — Zeichnen (Briefing 13.2).
@@ -51,8 +52,7 @@ async function zeichneRechteck(page: Page, halbBreite = 150, halbHoehe = 100) {
 
 /** Grundfläche aus dem Panel, in Quadratmetern. */
 async function grundflaeche(page: Page): Promise<number> {
-  const zeile = page.locator("dl div", { hasText: "Grundfläche" });
-  const text = (await zeile.locator("dd").textContent()) ?? "";
+  const text = (await page.getByTestId("stand-grundflaeche").textContent()) ?? "";
   return Number(text.replace(" m²", "").replace(".", "").replace(",", "."));
 }
 
@@ -73,11 +73,11 @@ test.describe("Planer — Zeichnen", () => {
     expect(grund).toBeGreaterThan(100);
 
     // Dachfläche = Grundfläche / cos(Neigung). Vorbelegt sind 30°.
-    const dachText = (await page.locator("dl div", { hasText: "Dachfläche" }).locator("dd").textContent()) ?? "";
+    const dachText = (await page.getByTestId("stand-dachflaeche").textContent()) ?? "";
     const dach = Number(dachText.replace(" m²", "").replace(".", "").replace(",", "."));
     expect(dach).toBeCloseTo(grund / Math.cos(Math.PI / 6), 0);
 
-    await expect(page.locator("dl div", { hasText: "Ecken" }).locator("dd")).toHaveText("4");
+    await expect(page.getByTestId("stand-ecken")).toHaveText("4");
   });
 
   test("Kantenmass eintippen setzt die Kante exakt — Abnahmetest 2", async ({ page }) => {
@@ -87,12 +87,28 @@ test.describe("Planer — Zeichnen", () => {
 
     const vorher = await grundflaeche(page);
 
-    // Auf die Pille der oberen Kante tippen: sie sitzt in deren Mitte.
-    const pille = await stelle(page, 0, -100);
-    await page.mouse.click(pille.x, pille.y);
-
+    /*
+     * Auf die Pille der oberen Kante tippen. Sie sitzt seit dem Umbau
+     * AUSSERHALB der Fläche, ein Stück vor der Kante — auf der Kante lag
+     * sie über den Modulen und verdeckte die Belegung.
+     */
     const feld = page.getByLabel("Kantenlänge in Metern");
-    await expect(feld).toBeVisible();
+    /*
+     * Die Pille sitzt seit dem Umbau AUSSERHALB der Fläche, ein Stück
+     * vor der Kante. Wie weit genau, hängt am Zoom — deshalb wird sie
+     * gesucht statt gerechnet. Ein fester Punkt träfe je nach Ausschnitt
+     * daneben, und der Test wäre grün, ohne etwas gezeigt zu haben.
+     */
+    let getroffen = false;
+    for (const dy of [-115, -110, -120, -105, -100, -125]) {
+      const pille = await stelle(page, 0, dy);
+      await page.mouse.click(pille.x, pille.y);
+      if (await feld.isVisible().catch(() => false)) {
+        getroffen = true;
+        break;
+      }
+    }
+    expect(getroffen, "Massangabe an der oberen Kante gefunden").toBe(true);
     await feld.fill("12,4");
     await feld.press("Enter");
 
@@ -107,33 +123,34 @@ test.describe("Planer — Zeichnen", () => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Undoweg 3");
     await zeichneRechteck(page);
-    await expect(page.getByText("Dachflächen (1)")).toBeVisible();
+    await expect(page.getByTestId("stand-flaechenzahl")).toHaveText("1");
 
     // Zweite Fläche daneben.
     await zeichneRechteck(page, 60, 40);
-    await expect(page.getByText("Dachflächen (2)")).toBeVisible();
+    await expect(page.getByTestId("stand-flaechenzahl")).toHaveText("2");
 
     await page.getByRole("button", { name: "Rückgängig" }).click();
-    await expect(page.getByText("Dachflächen (1)")).toBeVisible();
+    await expect(page.getByTestId("stand-flaechenzahl")).toHaveText("1");
     await page.getByRole("button", { name: "Rückgängig" }).click();
-    await expect(page.getByText("Dachflächen (0)")).toBeVisible();
+    /*
+     * Ohne Fläche zeigt der Schritt wieder seine Frage — die Liste und
+     * die Kennzahl dazu verschwinden ganz.
+     */
+    await expect(page.getByTestId("stand-flaechenzahl")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Fläche 1/ })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Wiederholen" }).click();
-    await expect(page.getByText("Dachflächen (1)")).toBeVisible();
+    await expect(page.getByTestId("stand-flaechenzahl")).toHaveText("1");
   });
 
   test("Dachform-Assistent legt ein Walmdach an — Abnahmetest 3", async ({ page }) => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Walmweg 4");
 
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByLabel("Form").selectOption("walm");
-    await page.getByLabel("Länge (m)").fill("14");
-    await page.getByLabel("Tiefe (m)").fill("9");
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Walmdach", "14", "9");
 
     // Vier Flächen: zwei Trapeze, zwei Walme.
-    await expect(page.getByText("Dachflächen (4)")).toBeVisible();
+    await expect(page.getByTestId("stand-flaechenzahl")).toHaveText("4");
 
     /*
      * Zusammen müssen sie den Grundriss ergeben — 14 × 9 = 126 m².
@@ -152,17 +169,17 @@ test.describe("Planer — Zeichnen", () => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Flachweg 5");
 
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByLabel("Form").selectOption("flach");
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Flachdach");
 
-    await expect(page.getByText("Dachflächen (1)")).toBeVisible();
-    await expect(page.getByLabel("Neigung (°)")).toHaveValue("0");
+    await expect(page.getByTestId("stand-flaechenzahl")).toHaveText("1");
+    await expect(page.getByLabel("Neigung", { exact: true })).toHaveValue("0");
+    // Traufkante und Randabstand liegen hinter „Mehr einstellen".
+    await mehrOeffnen(page);
     await expect(page.getByLabel("Traufkante")).toHaveValue("");
-    await expect(page.getByLabel("Randabstand (m)")).toHaveValue("1");
+    await expect(page.getByLabel("Randabstand", { exact: true })).toHaveValue("1");
     // Grund- und Dachfläche fallen bei 0° zusammen.
     const grund = await grundflaeche(page);
-    const dachText = (await page.locator("dl div", { hasText: "Dachfläche" }).locator("dd").textContent()) ?? "";
+    const dachText = (await page.getByTestId("stand-dachflaeche").textContent()) ?? "";
     expect(Number(dachText.replace(" m²", "").replace(",", "."))).toBeCloseTo(grund, 1);
   });
 
@@ -172,12 +189,12 @@ test.describe("Planer — Zeichnen", () => {
     await zeichneRechteck(page);
 
     const grund = await grundflaeche(page);
-    await page.getByLabel("Neigung (°)").fill("45");
-    await page.getByLabel("Neigung (°)").blur();
+    await page.getByLabel("Neigung", { exact: true }).fill("45");
+    await page.getByLabel("Neigung", { exact: true }).blur();
 
     // Grundriss unverändert — die Draufsicht kennt keine Neigung.
     await expect.poll(async () => grundflaeche(page)).toBeCloseTo(grund, 0);
-    const dachText = (await page.locator("dl div", { hasText: "Dachfläche" }).locator("dd").textContent()) ?? "";
+    const dachText = (await page.getByTestId("stand-dachflaeche").textContent()) ?? "";
     const dach = Number(dachText.replace(" m²", "").replace(".", "").replace(",", "."));
     expect(dach).toBeCloseTo(grund / Math.cos(Math.PI / 4), 0);
   });
@@ -228,7 +245,7 @@ test.describe("Planer — Zeichnen", () => {
     await expect(page.getByText("gesichert")).toBeVisible({ timeout: 15_000 });
     await page.reload();
     await expect(page.getByTestId("planer-leinwand")).toBeVisible();
-    await expect(page.getByText("Dachflächen (1)")).toBeVisible();
+    await expect(page.getByTestId("stand-flaechenzahl")).toHaveText("1");
 
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
     expect(await grundflaeche(page)).toBeCloseTo(vorher, 0);

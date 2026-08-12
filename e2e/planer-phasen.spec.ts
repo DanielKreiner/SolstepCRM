@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { belegen, dachSetzen, mehrOeffnen } from "./planer-helfer";
 
 /*
  * Planer — was ein Schritt sperrt.
@@ -36,11 +37,7 @@ async function projektMitBelegung(page: Page, name: string) {
   const id = page.url().split("/").pop()!;
 
   await page.getByRole("button", { name: "Näher heran" }).click();
-  await page.getByRole("button", { name: /Standardform setzen/ }).click();
-  await page.getByLabel("Form").selectOption("pult");
-  await page.getByLabel("Länge (m)").fill("14");
-  await page.getByLabel("Tiefe (m)").fill("9");
-  await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+  await dachSetzen(page, "Pultdach", "14", "9");
   await page.getByRole("button", { name: /^Fläche 1/ }).click();
   return id;
 }
@@ -57,7 +54,12 @@ async function sucheKante(page: Page): Promise<{ x: number; y: number }> {
   const kasten = (await page.getByTestId("planer-leinwand").boundingBox())!;
   const mitte = { x: kasten.x + kasten.width / 2, y: kasten.y + kasten.height / 2 };
   const feld = page.getByLabel("Kantenlänge in Metern");
-  for (const dy of [-70, -80, -90, -100, -110, -120, -60, -50]) {
+  /*
+   * Weiter gespannt als früher: Die Massangabe sitzt seit dem Umbau
+   * AUSSERHALB der Fläche, ein Stück vor der Kante. Wie weit, hängt am
+   * Zoom — deshalb wird gesucht statt gerechnet.
+   */
+  for (const dy of [-70, -80, -90, -100, -110, -120, -130, -140, -150, -60, -50]) {
     await page.mouse.click(mitte.x, mitte.y + dy);
     if (await feld.isVisible().catch(() => false)) {
       await page.keyboard.press("Escape");
@@ -92,7 +94,11 @@ test.describe("Planer — Schrittsperren", () => {
     await expect(page.getByRole("button", { name: "Dachfläche zeichnen" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Einzelnes Modul/ })).toBeVisible();
 
-    // Schritt 3: Strings — auch die Modulwerkzeuge sind weg.
+    /*
+     * Schritt 3 verlangt Module — ohne sie gäbe es nichts auszulegen,
+     * und der Schritt bleibt gesperrt.
+     */
+    await belegen(page);
     await page.getByRole("button", { name: /^3 Technik/ }).click();
     await expect(page.getByRole("button", { name: /Einzelnes Modul/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Module dem gewählten String/ })).toBeVisible();
@@ -154,7 +160,7 @@ test.describe("Planer — Schrittsperren", () => {
     const id = await projektMitBelegung(page, "Phasen Module");
 
     await page.getByRole("button", { name: /^2 Belegung/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
     const zahl = async () => {
@@ -181,23 +187,35 @@ test.describe("Planer — Schrittsperren", () => {
     await login(page, DEMO.gf);
     const id = await projektMitBelegung(page, "Phasen Kopie");
 
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
-    /*
-     * Nicht auf „Feld 1" klicken: Nach dem Belegen ist die Gruppe schon
-     * gewählt, und der Klick würde sie abwählen — dann verschwinden ihre
-     * Aktionen. Genau daran ist der erste Anlauf dieses Tests
-     * gescheitert.
-     */
     const gruppen = async () => {
       const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();
       return (data!.plan as { gruppen: unknown[] }).gruppen.length;
     };
     await expect.poll(gruppen, { timeout: 20_000 }).toBe(1);
 
-    await page.getByRole("button", { name: "Gruppe duplizieren" }).click();
-    await expect(page.getByRole("button", { name: /Kopie/ })).toBeVisible();
+    /*
+     * Erst Platz schaffen: Nach dem automatischen Belegen ist das Dach
+     * voll, und eine Kopie hätte nirgends Platz — der Planer sagt das
+     * dann auch, statt ein leeres Feld anzulegen. Der obere Griff nach
+     * unten nimmt zwei Reihen weg.
+     */
+    const leinwand = page.getByTestId("planer-leinwand");
+    const roh = await leinwand.getAttribute("data-gruppenrahmen");
+    const kasten = (await leinwand.boundingBox())!;
+    const [l, o, r] = roh!.split(",").map(Number) as [number, number, number, number];
+    const oben = { x: kasten.x + (l + r) / 2, y: kasten.y + o };
+    await page.mouse.move(oben.x, oben.y);
+    await page.mouse.down();
+    await page.mouse.move(oben.x, oben.y + 90, { steps: 12 });
+    await page.mouse.up();
+    await page.waitForTimeout(1500);
+
+    await mehrOeffnen(page, "Feineinstellung");
+    await page.getByRole("button", { name: "Feld duplizieren" }).click();
+    await expect(page.getByRole("button", { name: /^Feld 1 Kopie/ })).toBeVisible();
     await expect.poll(gruppen, { timeout: 20_000 }).toBe(2);
 
     /*
@@ -206,8 +224,21 @@ test.describe("Planer — Schrittsperren", () => {
      * heraus, und eine leere Gruppe wäre nutzlos.
      */
     const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();
-    const plan = data!.plan as { gruppen: Array<{ name: string; reihen: number; spalten: number }> };
+    const plan = data!.plan as {
+      gruppen: Array<{
+        name: string;
+        reihen: number;
+        spalten: number;
+        aus?: string[];
+        entfernt?: string[];
+      }>;
+    };
     const kopie = plan.gruppen.find((g) => g.name.includes("Kopie"))!;
-    expect(kopie.reihen * kopie.spalten).toBeGreaterThan(0);
+    /*
+     * Und sie trägt Module. Eine Kopie ohne Module ist kein Feld,
+     * sondern Arbeit: Man muss sie erst suchen und wieder löschen.
+     */
+    const leer = new Set([...(kopie.aus ?? []), ...(kopie.entfernt ?? [])]);
+    expect(kopie.reihen * kopie.spalten - leer.size).toBeGreaterThan(0);
   });
 });

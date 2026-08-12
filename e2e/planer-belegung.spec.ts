@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { DEMO, login } from "./helpers";
+import { belegen, dachSetzen, gewaehlteWattzahl, mehrOeffnen } from "./planer-helfer";
 
 /*
  * Planer, Stufe 3 — Modulbelegung (Briefing 4).
@@ -29,17 +30,9 @@ async function neuesProjekt(page: Page, name: string) {
   await page.getByRole("button", { name: "Näher heran" }).click();
 }
 
-async function dachSetzen(page: Page, form: string, laenge: string, tiefe: string) {
-  await page.getByRole("button", { name: /Standardform setzen/ }).click();
-  await page.getByLabel("Form").selectOption(form);
-  await page.getByLabel("Länge (m)").fill(laenge);
-  await page.getByLabel("Tiefe (m)").fill(tiefe);
-  await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
-}
-
-/** Die drei Zahlen der schwebenden Kennzahlenleiste. */
+/** Die Zahlen der schwebenden Kennzahlenleiste (links am Bildrand). */
 async function kennzahlen(page: Page) {
-  const werte = await page.locator("div.num.text-\\[19px\\]").allTextContents();
+  const werte = await page.locator("div.num.text-\\[17px\\]").allTextContents();
   return {
     dachflaeche: Number((werte[0] ?? "").replace(/[^0-9]/g, "")),
     module: Number(werte[1] ?? "0"),
@@ -51,21 +44,22 @@ test.describe("Planer — Belegung", () => {
   test("Automatische Belegung füllt die Fläche, Leistung passt zur Modulzahl", async ({ page }) => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Belegweg 1");
-    await dachSetzen(page, "pult", "14", "9");
+    await dachSetzen(page, "Pultdach", "14", "9");
 
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await expect(page.getByRole("button", { name: "Fläche automatisch belegen" })).toBeVisible();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
 
     await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(20);
     const k = await kennzahlen(page);
 
     /*
-     * Die Leistung muss aus der Modulzahl folgen — 440 Wp je Modul.
-     * Weichen die beiden Zahlen voneinander ab, rechnet irgendwo etwas
-     * mit einem anderen Bestand.
+     * Die Leistung muss aus der Modulzahl folgen — mit der Wattzahl des
+     * GEWÄHLTEN Moduls. Weichen die beiden Zahlen voneinander ab,
+     * rechnet irgendwo etwas mit einem anderen Bestand.
      */
-    expect(k.kwp).toBeCloseTo((k.module * 440) / 1000, 2);
+    const wp = await gewaehlteWattzahl(page);
+    expect(wp, "ein Modul ist gewählt").toBeGreaterThan(100);
+    expect(k.kwp).toBeCloseTo((k.module * wp) / 1000, 2);
 
     // Und die Belegung darf die Dachfläche nicht überschreiten.
     expect(k.module * 1.134 * 1.762).toBeLessThan(k.dachflaeche);
@@ -74,9 +68,9 @@ test.describe("Planer — Belegung", () => {
   test("Ein Modul wegtippen senkt Zahl und Leistung um genau eines", async ({ page }) => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Tippweg 2");
-    await dachSetzen(page, "pult", "14", "9");
+    await dachSetzen(page, "Pultdach", "14", "9");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(20);
 
     const vorher = await kennzahlen(page);
@@ -87,7 +81,8 @@ test.describe("Planer — Belegung", () => {
 
     await expect.poll(async () => (await kennzahlen(page)).module).toBe(vorher.module - 1);
     const nachher = await kennzahlen(page);
-    expect(nachher.kwp).toBeCloseTo(vorher.kwp - 0.44, 2);
+    const wp = await gewaehlteWattzahl(page);
+    expect(nachher.kwp).toBeCloseTo(vorher.kwp - wp / 1000, 2);
 
     /*
      * Nochmal tippen holt es zurück: das Modul wurde abgeschaltet, nicht
@@ -100,14 +95,19 @@ test.describe("Planer — Belegung", () => {
   test("Ein Hindernis kostet Module", async ({ page }) => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Kaminweg 3");
-    await dachSetzen(page, "pult", "14", "9");
+    await dachSetzen(page, "Pultdach", "14", "9");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(20);
     const ohne = (await kennzahlen(page)).module;
 
-    // Gruppe entfernen, Kamin setzen, neu belegen.
-    await page.getByRole("button", { name: "Gruppe entfernen" }).click();
+    /*
+     * Feld entfernen, Kamin setzen, neu belegen. Der Kamin gehört zum
+     * Dach, also zurück in Schritt 1 — dort liegt das Werkzeug.
+     */
+    await page.getByRole("button", { name: /^Entfernen: Feld \d+$/ }).click();
+    await page.getByRole("button", { name: /^1 Dach/ }).click();
+    await page.getByRole("button", { name: /^Fläche 1/ }).click();
     await page.getByRole("button", { name: /Hindernis aufziehen/ }).click();
     const kasten = (await page.getByTestId("planer-leinwand").boundingBox())!;
     const m = { x: kasten.x + kasten.width / 2, y: kasten.y + kasten.height / 2 };
@@ -117,7 +117,7 @@ test.describe("Planer — Belegung", () => {
     await page.mouse.up();
     await expect(page.getByText(/Hindernisse \(1\)/i)).toBeVisible();
 
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(0);
     expect((await kennzahlen(page)).module).toBeLessThan(ohne);
   });
@@ -125,33 +125,35 @@ test.describe("Planer — Belegung", () => {
   test("Flachdach bekommt Aufständerung und einen Reihenabstand gegen Winterschatten", async ({ page }) => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Flachweg 4");
-    await dachSetzen(page, "flach", "20", "14");
+    await dachSetzen(page, "Flachdach", "20", "14");
 
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(0);
 
     // Beim Flachdach steht das Modul auf einem Gestell — Süd, 15°.
-    await expect(page.getByLabel("Art")).toHaveValue("sued");
-    await expect(page.getByLabel("Winkel (°)")).toHaveValue("15");
+    await mehrOeffnen(page, "Feineinstellung");
+    await expect(page.getByLabel("Aufständerung")).toHaveValue("sued");
+    await expect(page.getByLabel("Winkel", { exact: true })).toHaveValue("15");
 
     /*
      * Der vorgeschlagene Reihenabstand ist der Winterschatten:
      * 1,762 · sin(15°) / tan(90 − 48,31 − 23,44) = rund 1,36 m.
      * Er muss deutlich über dem Zeilenabstand eines Schrägdachs liegen.
      */
-    const abstand = Number((await page.getByLabel("Reihenabstand (m)").inputValue()).replace(",", "."));
+    const abstand = Number((await page.getByLabel("Reihenabstand", { exact: true }).inputValue()).replace(",", "."));
     expect(abstand).toBeGreaterThan(1.2);
     expect(abstand).toBeLessThan(1.6);
-    await expect(page.getByRole("button", { name: /Winterverschattung/ })).toBeVisible();
+    // Und der Vorschlagsknopf steht daneben — mit derselben Zahl.
+    await expect(page.getByRole("button", { name: /Reihenabstand vorschlagen/ })).toBeVisible();
   });
 
   test("Belegung übersteht das Neuladen", async ({ page }) => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Bestandweg 5");
-    await dachSetzen(page, "pult", "14", "9");
+    await dachSetzen(page, "Pultdach", "14", "9");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(20);
     const vorher = await kennzahlen(page);
 
@@ -167,9 +169,9 @@ test.describe("Planer — Gruppe umformen", () => {
   async function belegt(page: Page, name: string) {
     await login(page, DEMO.buero);
     await neuesProjekt(page, name);
-    await dachSetzen(page, "pult", "14", "9");
+    await dachSetzen(page, "Pultdach", "14", "9");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(20);
     // Die Auto-Belegung wählt die neue Gruppe schon aus.
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
@@ -228,7 +230,8 @@ test.describe("Planer — Gruppe umformen", () => {
 
   test("Am Drehgriff ziehen dreht das Raster", async ({ page }) => {
     await belegt(page, "Drehweg 10");
-    await expect(page.getByLabel("Drehung (°)")).toHaveValue("0");
+    await mehrOeffnen(page, "Feineinstellung");
+    await expect(page.getByLabel("Drehung", { exact: true })).toHaveValue("0");
 
     const dreh = await griff(page, "drehen");
     const mitte = await griff(page, "links");
@@ -238,7 +241,7 @@ test.describe("Planer — Gruppe umformen", () => {
     await page.mouse.move(dreh.x + 160, mitte.y, { steps: 14 });
     await page.mouse.up();
 
-    const winkel = Number((await page.getByLabel("Drehung (°)").inputValue()).replace(",", "."));
+    const winkel = Number((await page.getByLabel("Drehung", { exact: true }).inputValue()).replace(",", "."));
     expect(Math.abs(winkel)).toBeGreaterThan(10);
   });
 
@@ -278,7 +281,7 @@ test.describe("Planer — Gruppe umformen", () => {
   test("Modul-Werkzeug und Teilen brauchen eine gewählte Gruppe", async ({ page }) => {
     await login(page, DEMO.buero);
     await neuesProjekt(page, "Sperrweg 7");
-    await dachSetzen(page, "pult", "14", "9");
+    await dachSetzen(page, "Pultdach", "14", "9");
 
     // Ohne Gruppe: beide Werkzeuge gesperrt, mit Grund im Tooltip.
     const modul = page.getByRole("button", { name: /Einzelnes Modul/ });
@@ -288,7 +291,7 @@ test.describe("Planer — Gruppe umformen", () => {
     await expect(modul).toHaveAttribute("title", /Modulgruppe auswählen/);
 
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(modul).toBeEnabled();
     await expect(teilen).toBeEnabled();
 
@@ -298,12 +301,12 @@ test.describe("Planer — Gruppe umformen", () => {
      * einmal der Gegenproben-Text beim Modul-Werkzeug gelandet.
      */
     await modul.click();
-    await expect(page.getByText("Einzelnes Modul versetzen")).toBeVisible();
+    await expect(page.getByText("Modul versetzen", { exact: true })).toBeVisible();
     await expect(page.getByText(/aus dem Raster ziehen/)).toBeVisible();
 
     await teilen.click();
     await expect(page.getByText("Gruppe teilen")).toBeVisible();
-    await expect(page.getByText(/Teil der gewählten Gruppe/)).toBeVisible();
+    await expect(page.getByText(/Rechteck über einen Teil der Gruppe/)).toBeVisible();
   });
 
   test("Gruppe teilen erzeugt eine zweite Gruppe ohne Module zu verlieren", async ({ page }) => {

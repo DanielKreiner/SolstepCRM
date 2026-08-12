@@ -55,6 +55,7 @@ function planMit(gruppen: Array<{ typ: string; wp: number; reihen: number; spalt
     reihen: g.reihen,
     aufstaenderung: null,
     aus: [],
+    entfernt: [],
     frei: {},
   }));
   return p;

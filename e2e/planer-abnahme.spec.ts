@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { belegen, dachSetzen } from "./planer-helfer";
 
 /*
  * Planer — die restlichen Abnahmetests aus Briefing 12.
@@ -51,11 +52,7 @@ async function projektMitFlaeche(page: Page, name: string) {
   const id = page.url().split("/").pop()!;
 
   await page.getByRole("button", { name: "Näher heran" }).click();
-  await page.getByRole("button", { name: /Standardform setzen/ }).click();
-  await page.getByLabel("Form").selectOption("pult");
-  await page.getByLabel("Länge (m)").fill("14");
-  await page.getByLabel("Tiefe (m)").fill("9");
-  await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+  await dachSetzen(page, "Pultdach", "14", "9");
   await expect(page.getByRole("button", { name: /^Fläche 1/ })).toBeVisible();
   return id;
 }
@@ -96,9 +93,8 @@ test.describe("Planer — Abnahmetests", () => {
      * Panel. 10 × 7 m sind 70 m² — vor wie nach dem Zoom.
      */
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    const zeile = page.locator("dl div", { hasText: "Grundfläche" });
     const flaeche = Number(
-      ((await zeile.locator("dd").textContent()) ?? "")
+      ((await page.getByTestId("stand-grundflaeche").textContent()) ?? "")
         .replace(" m²", "")
         .replace(".", "")
         .replace(",", "."),
@@ -108,57 +104,54 @@ test.describe("Planer — Abnahmetests", () => {
     expect(flaeche).toBeLessThan(132);
   });
 
-  test("Langer Druck löst ein Modul aus dem Raster — Abnahmetest 9 und 23", async ({ page }) => {
+  test("Ein frei gezogenes Modul kommt nicht neben dem Dach zu liegen", async ({ page }) => {
+    /*
+     * Abnahmetest 9 in seiner heutigen Form.
+     *
+     * Den langen Druck gibt es nicht mehr: Er löste nach 450 ms ohne
+     * Bewegung ein Modul aus dem Raster, und mit der Maus passierte das
+     * ständig aus Versehen — man setzt an, überlegt kurz, zieht dann.
+     * Freistellen ist jetzt eine Entscheidung: Werkzeug „Modul".
+     *
+     * Geprüft wird hier die Grenze, an der es vorher wirklich weh tat:
+     * Ein freigestelltes Modul liess sich überallhin ziehen, auch neben
+     * das Haus. Auf dem Bild lagen dann Module im Nachbargarten, und
+     * die Stückliste zählte sie mit.
+     */
     await login(page, DEMO.gf);
-    await projektMitFlaeche(page, "Abnahme Druck");
+    const id = await projektMitFlaeche(page, "Abnahme Frei");
 
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
-    /*
-     * Auf ein Modul drücken und halten — ohne das Werkzeug zu wechseln.
-     * Auf dem iPad ist das der einzige gangbare Weg: keine rechte
-     * Maustaste, kein Modifikator, und für jedes Modul oben das
-     * Werkzeug zu wechseln hält niemand durch.
-     */
+    const db = admin();
+    // Nicht `module`: In Next.js ist der Name gesperrt.
+    const modulzahl = async () => {
+      const { data } = await db.from("planer_projekt").select("plan").eq("id", id).single();
+      const plan = data!.plan as {
+        gruppen: Array<{ reihen: number; spalten: number; aus?: string[]; entfernt?: string[] }>;
+      };
+      return plan.gruppen.reduce(
+        (n, g) => n + g.reihen * g.spalten - new Set([...(g.aus ?? []), ...(g.entfernt ?? [])]).size,
+        0,
+      );
+    };
+    await expect.poll(modulzahl, { timeout: 20_000 }).toBeGreaterThan(10);
+    const vorher = await modulzahl();
+
+    // Ein Modul greifen und weit neben das Dach ziehen.
+    await page.getByRole("button", { name: /Einzelnes Modul/ }).click();
     const k = (await page.getByTestId("planer-leinwand").boundingBox())!;
     const mitte = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
-
     await page.mouse.move(mitte.x, mitte.y);
     await page.mouse.down();
-    // Länger als die Schwelle von 450 ms, ohne zu wackeln.
-    await page.waitForTimeout(700);
-    await expect(page.locator("[data-langer-druck]")).toBeVisible();
-
-    // Und nach dem Loslassen ist der Hinweis wieder weg.
+    await page.mouse.move(mitte.x - 300, mitte.y + 220, { steps: 14 });
     await page.mouse.up();
-    await expect(page.locator("[data-langer-druck]")).toHaveCount(0);
-  });
 
-  test("Bewegung bricht den langen Druck ab", async ({ page }) => {
-    await login(page, DEMO.gf);
-    await projektMitFlaeche(page, "Abnahme Wisch");
-
-    await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
-    await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
-
-    /*
-     * Wer schiebt, will die Gruppe verschieben — nicht ein einzelnes
-     * Modul lösen. Ohne diesen Abbruch würde jeder etwas langsamere Zug
-     * die Gruppe zerpflücken.
-     */
-    const k = (await page.getByTestId("planer-leinwand").boundingBox())!;
-    const mitte = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
-
-    await page.mouse.move(mitte.x, mitte.y);
-    await page.mouse.down();
-    await page.mouse.move(mitte.x + 40, mitte.y, { steps: 8 });
-    await page.waitForTimeout(700);
-
-    await expect(page.locator("[data-langer-druck]")).toHaveCount(0);
-    await page.mouse.up();
+    // Der Planer sagt, was er getan hat — und die Zahl bleibt gleich.
+    await expect(page.getByText(/kein Platz/i)).toBeVisible();
+    await expect.poll(modulzahl, { timeout: 20_000 }).toBe(vorher);
   });
 
   test("Das PDF vermerkt eine nicht abgeschlossene Prüfung — Abnahmetest 20", async ({ page }) => {
@@ -185,7 +178,7 @@ test.describe("Planer — Abnahmetests", () => {
     const id = await projektMitFlaeche(page, "Abnahme PDF");
 
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
     await page.getByRole("button", { name: /^3 Technik/ }).click();
     await page.getByLabel("Modul", { exact: true }).selectOption(modul!.id);
@@ -236,7 +229,7 @@ test.describe("Planer — iPad", () => {
     const id = await projektMitFlaeche(page, "Abnahme iPad");
 
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
     await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
     /*
@@ -304,13 +297,9 @@ test.describe("Planer — iPad", () => {
      * dass die Bedienung antwortet: Ein Tipp muss ein Modul abschalten,
      * und zwar in erträglicher Zeit.
      */
-    await page.getByRole("button", { name: /Standardform setzen/ }).click();
-    await page.getByLabel("Form").selectOption("pult");
-    await page.getByLabel("Länge (m)").fill("40");
-    await page.getByLabel("Tiefe (m)").fill("20");
-    await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+    await dachSetzen(page, "Pultdach", "40", "20");
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+    await belegen(page);
 
     const zahl = async () => {
       const t = (await page.getByText("MODULE").locator("..").locator("div.num").textContent()) ?? "0";

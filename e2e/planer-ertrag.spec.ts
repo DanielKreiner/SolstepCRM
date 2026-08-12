@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
+import { belegen, dachSetzen } from "./planer-helfer";
 
 /*
  * Planer, Stufe 5 — Ertrag und Wirtschaftlichkeit
@@ -30,12 +31,9 @@ async function projektMitBelegung(page: Page, name: string) {
   await page.getByRole("button", { name: "Näher heran" }).click();
   await page.getByRole("button", { name: "Näher heran" }).click();
 
-  await page.getByRole("button", { name: /Standardform setzen/ }).click();
-  await page.getByLabel("Länge (m)").fill("12");
-  await page.getByLabel("Tiefe (m)").fill("8");
-  await page.getByRole("button", { name: "In die Bildmitte setzen" }).click();
+  await dachSetzen(page, "Satteldach", "12", "8");
   await page.getByRole("button", { name: /^Fläche 1/ }).click();
-  await page.getByRole("button", { name: "Fläche automatisch belegen" }).click();
+  await belegen(page);
   await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 }
 
@@ -291,7 +289,7 @@ test.describe("Planer — Ertrag und Wirtschaftlichkeit", () => {
     await expect(page.getByText("8 000 kWh")).toBeVisible();
   });
 
-  test("Ohne Module steht dort ein Satz statt einer erfundenen Zahl", async ({ page }) => {
+  test("Ohne Module ist der Ertragsschritt gesperrt — mit Begründung", async ({ page }) => {
     await login(page, DEMO.gf);
     await page.goto("/planer/neu");
     await page.route("**/api/planer/adresse**", (r) =>
@@ -306,7 +304,13 @@ test.describe("Planer — Ertrag und Wirtschaftlichkeit", () => {
     await page.getByRole("button", { name: "Projekt anlegen" }).click();
     await page.waitForURL(/\/planer\/[0-9a-f-]{36}$/);
 
-    await page.getByRole("button", { name: /^4 Ertrag/ }).click();
-    await expect(page.getByText(/Noch keine Module belegt/)).toBeVisible();
+    /*
+     * Der Schritt ist gar nicht erst erreichbar: Ein Ertrag ohne Module
+     * wäre eine erfundene Zahl. Warum es nicht weitergeht, steht am
+     * Knopf — sonst hält man die Sperre für einen Fehler.
+     */
+    const ertrag = page.getByRole("button", { name: /^4 Ertrag/ });
+    await expect(ertrag).toBeDisabled();
+    await expect(ertrag).toHaveAttribute("title", /Dachfläche|Module/);
   });
 });
