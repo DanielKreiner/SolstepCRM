@@ -85,10 +85,18 @@ export function bedarfAusPlan(plan: Plan, geraete: GeraeteStand): BedarfPosition
      * der gewählte ist. Bei zwei Typen auf dem Dach gehört sie nur zu
      * einem — die andere Position bekommt lieber gar keinen Artikel als
      * den falschen.
+     *
+     * Liegt nur EIN Typ auf dem Dach, ist die Sache eindeutig: Dann ist
+     * das gewählte Modul dieses Modul, egal wie die Gruppe heisst. Der
+     * Namensvergleich allein war zu streng — er verlangte, dass die
+     * Bezeichnung in der Gruppe zum Gerätenamen passt, und die stammt
+     * aus dem Moment der Wahl. Wer das Gerät später im Stamm umbenannte,
+     * bekam eine Position ohne Artikel und damit ohne Preis.
      */
     const passt =
       gewaehltesModul &&
-      `${gewaehltesModul.hersteller} ${gewaehltesModul.bezeichnung}`.includes(name);
+      (nachTyp.size === 1 ||
+        `${gewaehltesModul.hersteller} ${gewaehltesModul.bezeichnung}`.includes(name));
     positionen.push({
       bezeichnung: `${name} (${daten.wp} Wp)`,
       menge: daten.anzahl,

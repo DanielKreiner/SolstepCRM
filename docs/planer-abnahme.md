@@ -126,6 +126,22 @@ nur die Antwortzeit: Ein Tipp auf ein Modul muss binnen einer Sekunde
 wirken, geprüft mit einer 40 × 20 m grossen Halle. Ob die Karte dabei
 flüssig läuft, sagt kein Testlauf im Hintergrund verlässlich.
 
+## Vorgang ↔ Planung (13.08.2026)
+
+Der Weg lief bisher nur in eine Richtung: Aus einer fertigen Planung
+liess sich ein Vorgang machen. Umgekehrt ging nichts.
+
+| Inhalt | Geprüft in |
+|--------|-----------|
+| Planung aus dem Vorgang anlegen, Verweis in beide Richtungen | `e2e/planer-bruecke.spec.ts` |
+| Geräte der Planung als Angebotspositionen, Preis aus dem Artikelstamm | `e2e/planer-bruecke.spec.ts` |
+| Zweiter Klick legt nichts doppelt an | `e2e/planer-bruecke.spec.ts` |
+| Artikelbezug bei einem Modultyp, auch nach Umbenennen | `lib/planer/uebergabe.spec.ts` |
+
+Ob überhaupt geplant wird, entscheidet der Betrieb: Für einen
+Speichertausch braucht niemand ein Dachmodell. Die Karte im
+Angebotsreiter bietet es an, verlangt es aber nicht.
+
 ## Die Tests laufen gegen die Arbeitsdatenbank
 
 Es gibt kein eigenes Testprojekt bei Supabase; die E2E-Suite legt ihre

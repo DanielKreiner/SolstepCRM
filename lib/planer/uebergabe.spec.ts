@@ -202,4 +202,30 @@ describe("Abgleich bei erneuter Übergabe", () => {
     expect(schluesselAusNotiz(null)).toBeNull();
     expect(schluesselAusNotiz("von Hand ergänzt")).toBeNull();
   });
+
+  it("hängt den Artikel an, auch wenn die Gruppe anders heisst", () => {
+    /*
+     * Die Bezeichnung in der Gruppe stammt aus dem Moment der Wahl. Wer
+     * das Gerät später im Stamm umbenennt, bekam vorher eine Position
+     * ohne Artikel — und im Angebot eine Zeile ohne Preis. Bei nur
+     * einem Modultyp auf dem Dach ist die Zuordnung eindeutig.
+     */
+    const plan = planMit([{ typ: "Altname 400", wp: 400, reihen: 3, spalten: 2 }]);
+    plan.technik.modul = "m1";
+    const bedarf = bedarfAusPlan(plan, GERAETE);
+    const modul = bedarf.find((b) => b.schluessel.startsWith("modul:"))!;
+    expect(modul.menge).toBe(6);
+    expect(modul.artikel_id).toBe("art-modul");
+  });
+
+  it("lässt bei zwei Modultypen den fremden ohne Artikel", () => {
+    const plan = planMit([
+      { typ: "AIKO Neostar 3P+", wp: 470, reihen: 2, spalten: 2 },
+      { typ: "Fremdmodul 380", wp: 380, reihen: 1, spalten: 2 },
+    ]);
+    plan.technik.modul = "m1";
+    const bedarf = bedarfAusPlan(plan, GERAETE);
+    const fremd = bedarf.find((b) => b.schluessel === "modul:Fremdmodul 380")!;
+    expect(fremd.artikel_id).toBeNull();
+  });
 });

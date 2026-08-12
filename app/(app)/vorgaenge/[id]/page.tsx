@@ -7,6 +7,7 @@ import { Stepper } from "@/components/vorgang/Stepper";
 import { AufnahmeBlock, type AufnahmePunkt } from "@/components/vorgang/Aufnahme";
 import { Bedarf } from "@/components/vorgang/Bedarf";
 import { Seriennummern } from "@/components/vorgang/Seriennummern";
+import { Planung } from "@/components/vorgang/Planung";
 import { Positionen } from "@/components/vorgang/Positionen";
 import { Postausgang, type MailZeile } from "@/components/vorgang/Postausgang";
 import { Rechnungen } from "@/components/vorgang/Rechnungen";
@@ -184,7 +185,7 @@ export default async function VorgangPage({
    */
   const { data: planung } = await supabase
     .from("planer_projekt")
-    .select("id, name")
+    .select("id, name, kwp")
     .eq("vorgang_id", id)
     .maybeSingle();
 
@@ -566,6 +567,18 @@ async function AngebotReiter({
   gesehenAm: string | null;
 }) {
   const supabase = await createClient();
+  const me = await requireMe();
+
+  /*
+   * Die Planung zu diesem Vorgang. Sie steht im Angebotsreiter, weil
+   * von dort ihr Nutzen kommt: Module, Wechselrichter und Speicher
+   * gehen als Positionen ins Angebot.
+   */
+  const { data: planung } = await supabase
+    .from("planer_projekt")
+    .select("id, name, kwp")
+    .eq("vorgang_id", id)
+    .maybeSingle();
 
   /* Welche Fassung liegt beim Kunden — die letzte verschickte. */
   const { data: letzteFassung } = await supabase
@@ -621,6 +634,26 @@ async function AngebotReiter({
         anzahlPositionen={positionen.length}
         kundeMail={(kunde?.email as string | null) ?? null}
         hatPortal={(portale ?? 0) > 0}
+        gesperrt={gesperrt}
+      />
+
+      {/*
+        * Die Planung steht über den Positionen: Von dort kommen Module,
+        * Wechselrichter und Speicher ins Angebot, und wer noch keine
+        * hat, entscheidet hier, ob er eine braucht.
+        */}
+      <Planung
+        vorgangId={id}
+        planung={
+          planung
+            ? {
+                id: planung.id as string,
+                name: planung.name as string,
+                kwp: planung.kwp === null ? null : Number(planung.kwp),
+              }
+            : null
+        }
+        darfPlanen={me.perms.planer === "write"}
         gesperrt={gesperrt}
       />
 
