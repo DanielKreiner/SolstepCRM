@@ -203,3 +203,20 @@ gelegentlich einen Test durch Zeitüberschreitung — in jedem Lauf einen
 anderen, jeweils einzeln grün. Die Ursache und der verworfene
 Lösungsversuch (Produktionsbuild als Testserver) stehen als Kommentar
 in `playwright.config.ts`.
+
+## Räumliche Ansicht und Strings (13.08.2026)
+
+| # | Prüfung | Erwartung |
+|---|---|---|
+| R1 | 3D öffnen | Dachflächen tragen das Luftbild, der Boden ist dunkler, jede Dachkante ist sichtbar |
+| R2 | „Belegen" wählen, über das Dach fahren | Geistermodul am Zeiger, grün wo es passt, rot am Rand |
+| R3 | Tippen | genau ein Modul, sofort gespeichert, auch in der Draufsicht da |
+| R4 | Auf ein Modul tippen | Modul weg, Gruppe verschwindet wenn sie leer wird |
+| R5 | Ziehen im Belegen-Modus | Kamera dreht, kein Modul entsteht |
+| R6 | Schritt 3, „Strings automatisch verlegen" | jedes belegte Modul hängt an genau einem String, Längen unterscheiden sich um höchstens eins |
+| R7 | Zwei Dachflächen belegen und verlegen | kein String läuft über beide Flächen |
+| R8 | Kabelweg | heller Strich über den Modulen, Scheibe am Anfang, Ring am Ende — in 2D und 3D |
+
+Ohne gewählten Wechselrichter bleibt der Verlegeknopf gesperrt: Die
+Stringlänge kommt aus der Kaltspannung des Moduls und dem MPP-Fenster
+des Geräts, geraten wird sie nicht.

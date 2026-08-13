@@ -170,3 +170,42 @@ Module kamen nach jeder Bewegung zurück; frei gezogene Module liessen
 sich neben das Dach legen; das Luftbild war beim Heranzoomen verzerrt
 (CSS-Reset staucht Kacheln, die breiter sind als das Fenster); ein Klick
 auf die schon gewählte Zeile wählte sie ab, sodass das Panel leer wirkte.
+
+## 7. Dach aus dem Luftbild, Belegen in der Perspektive, Stringverlegung (13.08.2026)
+
+Ausgelöst durch zwei Reonic-Bilder von Daniel: „reonic hat das dach die
+bilddaten von der karte genommen und man kann in der 3D vorschau die
+Module belegen" und „sieh dir auch an wie reonic die strings verlegt".
+
+Drei Dinge sind daraus geworden:
+
+**Dachtextur.** Die Kacheln der Karte werden in eine einzige Textur
+gezeichnet (160 m, 2048 px) und von oben auf Boden UND Dachflächen
+projiziert. Die Draufsichtprojektion ist nicht Bequemlichkeit, sondern
+richtig: Ein Luftbild IST eine Draufsicht, also sitzt der Schornstein
+im Bild dort, wo er auf dem Dach steht. Der Boden wird dabei
+abgedunkelt (Faktor 0,61) — sonst tragen Dach und Grundstück dasselbe
+Bild in derselben Helligkeit, und das Haus verschwindet im Untergrund.
+Eine dunkle Kante um jede Dachfläche und um jedes Modul hält den
+Umriss lesbar.
+
+**Belegen in der Perspektive.** Ein Umschalter „Ansehen / Belegen"
+rechts oben in der räumlichen Ansicht. Im Belegen-Modus hängt ein
+Geistermodul am Zeiger (grün passt, rot passt nicht), ein Tipp setzt es,
+ein Tipp auf ein Modul nimmt es weg. Ein Zug über mehr als sechs
+Bildpunkte dreht weiterhin die Kamera und setzt nichts — sonst wäre
+jedes Drehen am Ende auch ein Modul.
+
+Die Rechnung dahinter ist NICHT zweimal geschrieben: `lib/planer/setzen.ts`
+hält Vorschau, Setzen und Wegnehmen, und die Draufsicht benutzt seit
+diesem Umbau dieselben Funktionen.
+
+**Stringverlegung.** `lib/planer/strings.ts`, ausgelöst über „Strings
+automatisch verlegen" in Schritt 3. Drei Regeln: ein String bleibt in
+einer Modulgruppe (nie über zwei Ausrichtungen), die Reihenfolge läuft
+im Bogen (Reihe hin, nächste zurück — so läuft das Kabel auf dem Dach),
+und die Länge kommt aus der Kaltspannung, wobei der Rest verteilt statt
+angehängt wird (21 Module bei höchstens 12 werden 11 + 10, nicht 12 + 9).
+Gezeichnet wird der Kabelweg in beiden Ansichten: heller Strich mit
+dunkler Fassung — NICHT in der Stringfarbe, sonst liegt er farbgleich
+auf seinen eigenen Modulen. Volle Scheibe am Anfang, Ring am Ende.

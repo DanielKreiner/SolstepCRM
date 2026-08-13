@@ -36,6 +36,8 @@ import {
   type Plan,
   strangFarbe,
 } from "@/lib/planer/plan";
+import { strangWeg } from "@/lib/planer/strings";
+import { modulSetzen, modulVorschau } from "@/lib/planer/setzen";
 import { anbieter as anbieterZu, type AnbieterId, hoechsterZoom, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
@@ -69,6 +71,7 @@ import {
   gruppenRahmen,
   zeichneObjekte,
   zeichneAnbaustellen,
+  zeichneStrangwege,
   zeichneAuswahl,
   zeichneGruppe,
   zeichneGeistermodul,
@@ -437,6 +440,22 @@ export function Leinwand(p: LeinwandProps) {
           stand.current.schatten,
         );
       }
+    }
+
+    /*
+     * Die Kabelwege über die Module. Nur wenn es Strings gibt — ein
+     * leeres Dach soll nicht aussehen, als fehle etwas.
+     */
+    if (stand.current.plan.strings.length > 0) {
+      zeichneStrangwege(
+        ctx,
+        k,
+        stand.current.plan.strings.map((s, i) => ({
+          punkte: strangWeg(stand.current.plan, s).punkte,
+          farbe: strangFarbe(i),
+          betont: stand.current.aktiverStrang === null || stand.current.aktiverStrang === s.id,
+        })),
+      );
     }
 
     /*
@@ -922,39 +941,8 @@ export function Leinwand(p: LeinwandProps) {
      */
     const geisterFuer = (m: Meter): { ecken: Meter[]; passt: boolean } | null => {
       const s = stand.current;
-      const f =
-        s.plan.flaechen.find((x) => punktInPolygon(m, x.punkte)) ??
-        s.plan.flaechen.find((x) => x.id === s.aktiv);
-      if (!f) return null;
-
-      const vorbild = s.plan.gruppen.find((g) => g.flaeche === f.id);
-      const typ = vorbild?.typ ?? s.plan.gruppen[0]?.typ ?? STANDARD_MODUL;
-      const gruppe = einzelnesModul(f, m, "geist", "Geist", {
-        typ,
-        ausrichtung: vorbild?.ausrichtung ?? "hoch",
-        reihenabstand: vorbild?.reihenabstand ?? 0.02,
-        spaltenabstand: vorbild?.spaltenabstand ?? 0.02,
-        winkel: vorbild?.winkel ?? 0,
-        aufstaenderung: vorbild?.aufstaenderung ?? null,
-      });
-
-      /*
-       * `einzelnesModul` gibt null zurück, wenn es nicht passt. Fürs
-       * Bild wird trotzdem gezeichnet — rot, damit man sieht, WARUM
-       * nichts passiert. Dafür wird die Lage noch einmal ohne Prüfung
-       * gerechnet.
-       */
-      if (gruppe) return { ecken: modulEcken(gruppe, f, 0, 0), passt: true };
-
-      const roh = modulLage(f, m, "geist", "Geist", {
-        typ,
-        ausrichtung: vorbild?.ausrichtung ?? "hoch",
-        reihenabstand: vorbild?.reihenabstand ?? 0.02,
-        spaltenabstand: vorbild?.spaltenabstand ?? 0.02,
-        winkel: vorbild?.winkel ?? 0,
-        aufstaenderung: vorbild?.aufstaenderung ?? null,
-      });
-      return { ecken: modulEcken(roh, f, 0, 0), passt: false };
+      const v = modulVorschau(s.plan, m, s.aktiv, s.plan.gruppen[0]?.typ ?? STANDARD_MODUL);
+      return v ? { ecken: v.ecken, passt: v.passt } : null;
     };
 
     /**
@@ -1030,51 +1018,18 @@ export function Leinwand(p: LeinwandProps) {
          * Ein Klick setzt genau ein Modul dorthin, wo das Geisterbild
          * steht. Passt es nicht, passiert nichts — das Bild hat das
          * vorher in Rot gesagt.
-         *
-         * Liegt schon ein Feld auf der Fläche, bekommt das neue Modul
-         * dessen Rastermasse und Drehung; so lässt es sich anschliessend
-         * mit den Pluszeichen weiterbauen.
          */
         const m = bildZuMeter(kamera.current, bp);
-        const f =
-          s.plan.flaechen.find((x) => punktInPolygon(m, x.punkte)) ??
-          s.plan.flaechen.find((x) => x.id === s.aktiv);
-        if (!f) {
-          setMeldung("Zuerst eine Dachfläche zeichnen.");
+        const erg = modulSetzen(s.plan, m, s.aktiv, s.plan.gruppen[0]?.typ ?? STANDARD_MODUL);
+        if (!erg.ok) {
+          setMeldung(erg.meldung);
           zieht.current = null;
           return;
         }
 
-        const vorbild = s.plan.gruppen.find((g) => g.flaeche === f.id);
-        const belegt = s.plan.gruppen
-          .filter((g) => g.flaeche === f.id)
-          .flatMap((g) => aktiveZellen(g).map((z) => modulEcken(g, f, z.reihe, z.spalte)));
-
-        const neu = einzelnesModul(
-          f,
-          m,
-          naechsteId(s.plan.gruppen.map((g) => g.id), "g"),
-          `Feld ${s.plan.gruppen.length + 1}`,
-          {
-            typ: vorbild?.typ ?? s.plan.gruppen[0]?.typ ?? STANDARD_MODUL,
-            ausrichtung: vorbild?.ausrichtung ?? "hoch",
-            reihenabstand: vorbild?.reihenabstand ?? 0.02,
-            spaltenabstand: vorbild?.spaltenabstand ?? 0.02,
-            winkel: vorbild?.winkel ?? 0,
-            aufstaenderung: vorbild?.aufstaenderung ?? null,
-            besetzt: belegt,
-          },
-        );
-
-        if (!neu) {
-          setMeldung("Hier ist kein Platz — Randabstand, Hindernis oder ein Modul im Weg.");
-          zieht.current = null;
-          return;
-        }
-
-        s.onPlan({ ...s.plan, gruppen: [...s.plan.gruppen, neu] }, true);
-        s.onAktiv(f.id);
-        s.onAktiveGruppe(neu.id);
+        s.onPlan(erg.plan, true);
+        s.onAktiv(erg.flaeche);
+        s.onAktiveGruppe(erg.gruppe);
         /*
          * Nach dem ersten Modul zurück auf „Wählen".
          *

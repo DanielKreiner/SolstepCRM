@@ -884,3 +884,85 @@ export function zeichneGeistermodul(
   ctx.stroke();
   ctx.restore();
 }
+
+/**
+ * Die Kabelwege der Strings.
+ *
+ * Ein Linienzug je String durch die Modulmitten, in Verlegereihenfolge,
+ * in der Farbe des Strings. Am Anfang ein gefüllter Punkt, am Ende ein
+ * Ring — sonst ist bei einem Bogen über vier Reihen nicht zu sehen, wo
+ * der String beginnt und wo der Wechselrichter hinkommt.
+ *
+ * Gezeichnet wird ÜBER die Module, aber mit einer dunklen Unterlinie:
+ * Die Stringfarben liegen auf gleich farbigen Modulen, und ohne den
+ * Kontrast verschwindet der Weg genau dort, wo er hingehört.
+ */
+export function zeichneStrangwege(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  wege: Array<{ punkte: Meter[]; farbe: string; betont: boolean }>,
+) {
+  for (const w of wege) {
+    if (w.punkte.length < 1) continue;
+    const bp = w.punkte.map((m) => bild(k, m));
+    /*
+     * Die Strichstärke hängt am Zoom: Ein fester Wert ist bei
+     * herausgezoomter Karte ein Balken über dem halben Feld und bei
+     * hereingezoomter ein Haar.
+     */
+    const spanne =
+      bp.length > 1 ? Math.hypot(bp[1]!.x - bp[0]!.x, bp[1]!.y - bp[0]!.y) : 24;
+    const stark = Math.max(1.2, Math.min(4, spanne / 11));
+
+    ctx.save();
+    ctx.globalAlpha = w.betont ? 1 : 0.45;
+
+    if (bp.length > 1) {
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      bp.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      /*
+       * Heller Kern in dunkler Fassung — NICHT in der Stringfarbe.
+       *
+       * Der erste Anlauf zeichnete das Kabel in der Farbe des Strings.
+       * Es lag damit farbgleich auf seinen eigenen Modulen und war
+       * genau dort unsichtbar, wo man es braucht. Welcher String
+       * gemeint ist, sagt ohnehin die Fläche darunter.
+       */
+      ctx.strokeStyle = "rgba(12, 14, 20, 0.75)";
+      ctx.lineWidth = stark + 2.4;
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.lineWidth = stark;
+      ctx.stroke();
+    }
+
+    const r = Math.max(3, Math.min(8, spanne / 5.5));
+    const anfang = bp[0]!;
+    const ende = bp[bp.length - 1]!;
+
+    // Anfang: volle Scheibe. Wo der String beginnt, hängt der Stecker.
+    ctx.beginPath();
+    ctx.arc(anfang.x, anfang.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(12, 14, 20, 0.75)";
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    // Ende: Ring, damit die Modulfarbe durchscheint.
+    if (bp.length > 1) {
+      ctx.beginPath();
+      ctx.arc(ende.x, ende.y, r, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(12, 14, 20, 0.75)";
+      ctx.lineWidth = Math.max(3, r / 1.6);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.96)";
+      ctx.lineWidth = Math.max(1.6, r / 3);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+}

@@ -1,9 +1,13 @@
 "use client";
 
+import { useState } from "react";
+
 import { num } from "@/lib/format";
 import { Frage } from "./Bausteine";
 import { modulname } from "./ModulSchritt";
 import {
+  maxModuleProString,
+  minModuleProString,
   type ModulElektrik,
   pruefe,
   type String as PvString,
@@ -11,6 +15,7 @@ import {
 } from "@/lib/planer/elektrik";
 import { anzahlModule, aktiveZellen, type Modulgruppe, nachfuehren } from "@/lib/planer/module";
 import { modulSchluessel, naechsteId, type Plan, strangFarbe } from "@/lib/planer/plan";
+import { verlegeStrings } from "@/lib/planer/strings";
 
 /*
  * Anmerkung zu den Beschriftungen: die Auswahlfelder tragen zusätzlich
@@ -88,6 +93,8 @@ export function TechnikPanel({
   onAktiverStrang: (id: string | null) => void;
   schreibrecht: boolean;
 }) {
+  /** Rückmeldung der letzten automatischen Verlegung. */
+  const [verlegt, setVerlegt] = useState<string | null>(null);
   const gewaehlterWr = wechselrichter.find((w) => w.id === plan.technik.wechselrichter) ?? null;
   const gewaehltesModul = module.find((m) => m.id === plan.technik.modul) ?? null;
 
@@ -391,6 +398,45 @@ export function TechnikPanel({
 
         {schreibrecht ? (
           <>
+            {/*
+              * Der Knopf, der die Handarbeit ersetzt.
+              *
+              * Er steht VOR „String anlegen": Wer hier ankommt, will in
+              * neun von zehn Fällen die naheliegende Verlegung und nicht
+              * 34 Module von Hand anmalen. Von Hand geht danach immer
+              * noch — die Verlegung ist ein Vorschlag, kein Ergebnis.
+              */}
+            <button
+              type="button"
+              disabled={!gewaehltesModul || !gewaehlterWr || alleModule.length === 0}
+              onClick={() => {
+                if (!gewaehltesModul || !gewaehlterWr) return;
+                const elektrik = alsElektrik(gewaehltesModul);
+                const wr = alsWr(gewaehlterWr);
+                const { strings, hinweis } = verlegeStrings(plan, {
+                  max: maxModuleProString(elektrik, wr),
+                  min: Math.max(
+                    1,
+                    ...wr.mppt.map((m) => minModuleProString(elektrik, m)),
+                  ),
+                  mppt: wr.mppt.length,
+                });
+                onPlan({ ...plan, strings }, true);
+                onAktiverStrang(null);
+                setVerlegt(hinweis);
+              }}
+              className="flex h-11 items-center justify-center rounded-[10px] bg-accent px-4 font-bold text-white transition-colors hover:bg-accent-to disabled:opacity-40"
+            >
+              Strings automatisch verlegen
+            </button>
+            {!gewaehltesModul || !gewaehlterWr ? (
+              <p className="text-[11.5px] text-muted">
+                Dafür müssen Modul und Wechselrichter gewählt sein — die Länge eines Strings
+                hängt an der Kaltspannung des Moduls und am MPP-Fenster des Geräts.
+              </p>
+            ) : null}
+            {verlegt ? <p className="text-[11.5px] text-muted">{verlegt}</p> : null}
+
             <button
               type="button"
               onClick={() => {

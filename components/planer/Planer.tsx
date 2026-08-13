@@ -53,6 +53,7 @@ import {
 import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
 import { anzahlModule, kwp } from "@/lib/planer/module";
+import { modulEntfernen, modulSetzen } from "@/lib/planer/setzen";
 import { num } from "@/lib/format";
 import type { Plan } from "@/lib/planer/plan";
 import {
@@ -215,6 +216,13 @@ export function Planer({
   const [aktiv, setAktiv] = useState<string | null>(null);
   const [aktiveGruppe, setAktiveGruppe] = useState<string | null>(null);
   const [aktiverStrang, setAktiverStrang] = useState<string | null>(null);
+  /*
+   * Wird in der räumlichen Ansicht belegt oder nur geschaut? Der
+   * Zustand gehört nicht in den Plan: Er beschreibt, was jemand
+   * gerade tut, nicht die Anlage.
+   */
+  const [raumBelegen, setRaumBelegen] = useState(false);
+  const [raumMeldung, setRaumMeldung] = useState<string | null>(null);
   /*
    * Phase 1 zeichnet und belegt, Phase 3 legt die Technik fest, Phase 4
    * rechnet. In Phase 4 tritt die Karte ganz zurück — dort wird nicht
@@ -791,10 +799,75 @@ export function Planer({
               wandhoehe={plan.gebaeude.wandhoehe}
               ueberstand={plan.gebaeude.ueberstand}
               schatten={ertrag.schattenJeModul}
+              aktiv={aktiv}
+              belegen={raumBelegen && schreibrecht}
+              onSetzen={(punkt) => {
+                const erg = modulSetzen(plan, punkt, aktiv, plan.gruppen[0]?.typ);
+                if (!erg.ok) {
+                  setRaumMeldung(erg.meldung);
+                  return;
+                }
+                onPlan(erg.plan, true);
+                setAktiv(erg.flaeche);
+                setAktiveGruppe(erg.gruppe);
+                setRaumMeldung(null);
+              }}
+              onModulWeg={(g, reihe, spalte) => {
+                onPlan(modulEntfernen(plan, g, reihe, spalte), true);
+                setRaumMeldung(null);
+              }}
             />
+
+            {/*
+              * Der Umschalter zwischen Schauen und Belegen.
+              *
+              * Getrennt, weil beides mit derselben Geste anfängt: Wer
+              * das Haus dreht, tippt am Ende auf das Dach. Ohne den
+              * Schalter wäre jedes Drehen auch ein gesetztes Modul.
+              */}
+            {schreibrecht ? (
+              /*
+                * Rechts, UNTER der Schrittleiste. Die ist mittig, aber
+                * breit, und ihr Kasten deckte den Umschalter ab: Der
+                * Knopf war zu sehen und nicht zu treffen. Unten liegt
+                * der Bedienhinweis.
+                */
+              <div className="absolute right-3 top-[68px] z-20 flex overflow-hidden rounded-pill border border-pl-chrome-linie bg-pl-chrome backdrop-blur-md">
+                {[
+                  { id: false, text: "Ansehen" },
+                  { id: true, text: "Belegen" },
+                ].map((w) => (
+                  <button
+                    key={String(w.id)}
+                    type="button"
+                    onClick={() => {
+                      setRaumBelegen(w.id);
+                      setRaumMeldung(null);
+                    }}
+                    aria-pressed={raumBelegen === w.id}
+                    className={[
+                      "h-9 px-3.5 text-[12.5px] font-semibold transition-colors",
+                      raumBelegen === w.id
+                        ? "bg-accent text-white"
+                        : "text-pl-auf-dunkel-2 hover:text-white",
+                    ].join(" ")}
+                  >
+                    {w.text}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
             <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 text-[11.5px] text-pl-auf-dunkel-2 backdrop-blur-md">
-              Ziehen dreht · Umschalt oder rechte Taste schwenkt · Rad zoomt
+              {raumBelegen && schreibrecht
+                ? "Tippen setzt ein Modul · auf ein Modul tippen nimmt es weg · Ziehen dreht"
+                : "Ziehen dreht · Umschalt oder rechte Taste schwenkt · Rad zoomt"}
             </p>
+            {raumMeldung ? (
+              <p className="pointer-events-none absolute bottom-14 left-1/2 -translate-x-1/2 rounded-pill bg-s-crit px-3 py-1.5 text-[12px] font-semibold text-white">
+                {raumMeldung}
+              </p>
+            ) : null}
           </div>
         ) : phase === 5 ? (
           /*
