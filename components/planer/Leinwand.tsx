@@ -36,7 +36,7 @@ import {
   type Plan,
   strangFarbe,
 } from "@/lib/planer/plan";
-import { strangWeg } from "@/lib/planer/strings";
+import { strangUmschalten, strangWeg } from "@/lib/planer/strings";
 import { modulSetzen, modulVorschau } from "@/lib/planer/setzen";
 import { anbieter as anbieterZu, type AnbieterId, hoechsterZoom, kachelUrl } from "@/lib/planer/anbieter";
 import {
@@ -843,28 +843,8 @@ export function Leinwand(p: LeinwandProps) {
     if (gemalt.current.has(schluessel)) return;
     gemalt.current.add(schluessel);
 
-    const strang = s.plan.strings.find((x) => x.id === s.aktiverStrang);
-    if (!strang) return;
-    const drin = strang.module.includes(schluessel);
-
-    s.onPlan(
-      {
-        ...s.plan,
-        strings: s.plan.strings.map((x) => {
-          if (x.id === strang.id) {
-            return {
-              ...x,
-              module: drin
-                ? x.module.filter((m) => m !== schluessel)
-                : [...x.module, schluessel],
-            };
-          }
-          // Ein Modul gehört zu genau einem String — aus den anderen raus.
-          return drin ? x : { ...x, module: x.module.filter((m) => m !== schluessel) };
-        }),
-      },
-      false,
-    );
+    if (!s.plan.strings.some((x) => x.id === s.aktiverStrang)) return;
+    s.onPlan(strangUmschalten(s.plan, s.aktiverStrang, schluessel), false);
   }, []);
 
   /* ── Eingabe ─────────────────────────────────────────────────── */

@@ -217,6 +217,10 @@ in `playwright.config.ts`.
 | R7 | Zwei Dachflächen belegen und verlegen | kein String läuft über beide Flächen |
 | R8 | Kabelweg | heller Strich über den Modulen, Scheibe am Anfang, Ring am Ende — in 2D und 3D |
 
+| R9 | Sperrzone aufziehen | gelb schraffiert mit gestricheltem Saum, in Draufsicht UND 3D |
+| R10 | Schritt 3, Umschalter „Strings", Modul antippen | Modul landet im gewählten String, nochmal tippen nimmt es heraus |
+| R11 | Bildquelle wechseln | 3D lädt die Kacheln über `/api/planer/kachel/...`; kommt keine an, steht es im Bild |
+
 Ohne gewählten Wechselrichter bleibt der Verlegeknopf gesperrt: Die
 Stringlänge kommt aus der Kaltspannung des Moduls und dem MPP-Fenster
 des Geräts, geraten wird sie nicht.

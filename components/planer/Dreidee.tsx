@@ -12,7 +12,7 @@ import {
   meterProPixel,
   weltPixel,
 } from "@/lib/planer/geo";
-import { kachelUrl } from "@/lib/planer/anbieter";
+import { anbieter as anbieterZu, kachelUrlGleicheHerkunft } from "@/lib/planer/anbieter";
 import { modulVorschau } from "@/lib/planer/setzen";
 import type { AnbieterId } from "@/lib/planer/anbieter";
 import { type Plan, strangFarbe } from "@/lib/planer/plan";
@@ -63,14 +63,54 @@ export interface DreideeProps {
   /** Gewählte Dachfläche — sie gilt, wenn der Klick keine trifft. */
   aktiv?: string | null;
   /**
-   * Belegen statt nur schauen. Ohne Schreibrecht bleibt es aus; dann
-   * dreht ein Klick nur die Kamera.
+   * Was ein Tipp bedeutet.
+   *
+   * `ansehen` — nichts, die Kamera gehört sich selbst.
+   * `belegen` — Modul setzen bzw. wegnehmen.
+   * `strings` — Modul dem gewählten String zuschlagen oder herausnehmen.
+   *
+   * Getrennte Betriebsarten und keine Sondertaste: Beides fängt mit
+   * derselben Geste an, und wer das Haus dreht, tippt am Ende auf das
+   * Dach.
    */
-  belegen?: boolean;
+  modus?: "ansehen" | "belegen" | "strings";
   /** Ein Modul an diesen Punkt setzen (Meter im Planursprung). */
   onSetzen?: (punkt: Meter) => void;
   /** Dieses Modul wegnehmen. */
   onModulWeg?: (gruppe: string, reihe: number, spalte: number) => void;
+  /** Dieses Modul dem gewählten String zuschlagen oder herausnehmen. */
+  onModulStrang?: (gruppe: string, reihe: number, spalte: number) => void;
+}
+
+/**
+ * Schraffur für Sperrzonen — dieselbe Aussage wie in der Draufsicht.
+ *
+ * Als wiederholte Textur und nicht als einzelne Linien: Eine Zone kann
+ * jede Form haben, und Striche einzeln zu beschneiden hiesse, das
+ * Clipping der Zeichenfläche in three nachzubauen.
+ */
+function schraffur(): THREE.CanvasTexture | null {
+  const c = document.createElement("canvas");
+  c.width = 32;
+  c.height = 32;
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "rgba(232, 176, 43, 0.34)";
+  ctx.fillRect(0, 0, 32, 32);
+  ctx.strokeStyle = "rgba(150, 98, 6, 0.92)";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  // Zweimal versetzt, damit die Kachel an beiden Rändern zusammenpasst.
+  ctx.moveTo(-8, 24);
+  ctx.lineTo(24, -8);
+  ctx.moveTo(8, 40);
+  ctx.lineTo(40, 8);
+  ctx.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 /** Weltkoordinaten: x nach Osten, y nach oben, z nach Süden. */
@@ -88,7 +128,12 @@ function zuWelt(p: Punkt3D): THREE.Vector3 {
  * Punkt ist für konvexe Flächen exakt und für unsere Dachformen
  * ausreichend.
  */
-function flaecheGeometrie(punkte: Punkt3D[], kartenseite?: number): THREE.BufferGeometry {
+function flaecheGeometrie(
+  punkte: Punkt3D[],
+  kartenseite?: number,
+  /** Kachelweite der Textur in Metern — für sich wiederholende Muster. */
+  uvMeter?: number,
+): THREE.BufferGeometry {
   const ecken = punkte.map(zuWelt);
   const positionen: number[] = [];
   const uvs: number[] = [];
@@ -101,10 +146,11 @@ function flaecheGeometrie(punkte: Punkt3D[], kartenseite?: number): THREE.Buffer
    * ist richtig so, denn die geneigte Fläche ist in der Draufsicht
    * genauso verkürzt.
    */
-  const uv = (p: Punkt3D): [number, number] =>
-    kartenseite
-      ? [(p.x + kartenseite / 2) / kartenseite, (p.y + kartenseite / 2) / kartenseite]
-      : [0, 0];
+  const uv = (p: Punkt3D): [number, number] => {
+    if (uvMeter) return [p.x / uvMeter, p.y / uvMeter];
+    if (kartenseite) return [(p.x + kartenseite / 2) / kartenseite, (p.y + kartenseite / 2) / kartenseite];
+    return [0, 0];
+  };
 
   for (let i = 1; i + 1 < ecken.length; i++) {
     positionen.push(
@@ -116,7 +162,7 @@ function flaecheGeometrie(punkte: Punkt3D[], kartenseite?: number): THREE.Buffer
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(positionen, 3));
-  if (kartenseite) g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  if (kartenseite || uvMeter) g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   g.computeVertexNormals();
   return g;
 }
@@ -129,6 +175,14 @@ export function Dreidee(p: DreideeProps) {
    * dieselbe Angabe führt die Zeichenfläche schon.
    */
   const [geistAttribut, setGeistAttribut] = useState<string | undefined>(undefined);
+  /*
+   * Ob das Luftbild angekommen ist.
+   *
+   * Ein stiller Fehlschlag sah aus wie ein kaputter Renderer: eine
+   * einfarbige Fläche, kein Haus zu erkennen, keine Meldung. Jetzt
+   * steht da, was los ist.
+   */
+  const [bildFehlt, setBildFehlt] = useState(false);
   const stand = useRef(p);
   stand.current = p;
   /*
@@ -322,7 +376,7 @@ export function Dreidee(p: DreideeProps) {
      */
     const geistFuehren = (e: PointerEvent) => {
       const s = stand.current;
-      if (!s.belegen) {
+      if (s.modus !== "belegen") {
         geistWeg();
         return;
       }
@@ -362,9 +416,16 @@ export function Dreidee(p: DreideeProps) {
     /** Ein Tipp ohne Zug: Modul setzen oder wegnehmen. */
     const angetippt = (e: PointerEvent) => {
       const s = stand.current;
-      if (!s.belegen) return;
+      if (s.modus !== "belegen" && s.modus !== "strings") return;
       const ziel2 = gemeint(e);
       if (!ziel2) return;
+
+      if (s.modus === "strings") {
+        // Nur Module — der freie Dachbereich gehört zu keinem String.
+        if (ziel2.art === "modul") s.onModulStrang?.(ziel2.gruppe, ziel2.reihe, ziel2.spalte);
+        return;
+      }
+
       if (ziel2.art === "modul") s.onModulWeg?.(ziel2.gruppe, ziel2.reihe, ziel2.spalte);
       else s.onSetzen?.(ziel2.punkt);
     };
@@ -384,6 +445,7 @@ export function Dreidee(p: DreideeProps) {
      * gut zwanzig Kacheln neu angefordert.
      */
     const KARTENSEITE = 160;
+    const sperrmuster = schraffur();
     let karte: THREE.CanvasTexture | null = null;
     let karteSchluessel = "";
 
@@ -415,10 +477,18 @@ export function Dreidee(p: DreideeProps) {
        * Kacheln, entsprechend grob.
        */
       const mppZiel = KARTENSEITE / leinwand.width;
+      /*
+       * Nicht über das hinaus, was der Anbieter ausliefert. Die Rechnung
+       * unten kommt bei 160 m auf 2048 Bildpunkten auf Stufe 20 —
+       * basemap.at endet bei 19 und antwortet darüber mit 404. Dann
+       * bleibt die Textur leer, und man sieht eine einfarbige Fläche
+       * ohne Hinweis darauf, warum.
+       */
+      const hoechste = anbieterZu(s.anbieter).maxStufe;
       const stufe = Math.max(
         1,
         Math.min(
-          21,
+          hoechste,
           /*
            * mpp = 156543,03 · cos(lat) / 2^zoom, also
            * zoom = log2(156543,03 · cos(lat) / mpp). Ohne Abzug — der
@@ -439,7 +509,7 @@ export function Dreidee(p: DreideeProps) {
           breite: KARTENSEITE / meterProPixel(s.ursprung.lat, stufe),
           hoehe: KARTENSEITE / meterProPixel(s.ursprung.lat, stufe),
         },
-        21,
+        hoechste,
       );
       if (kacheln.length === 0) return null;
 
@@ -447,6 +517,14 @@ export function Dreidee(p: DreideeProps) {
       textur.colorSpace = THREE.SRGBColorSpace;
 
       const proMeter = leinwand.width / KARTENSEITE;
+      let angekommen = 0;
+      let danebengegangen = 0;
+      const bilanz = () => {
+        // Erst urteilen, wenn alle Kacheln geantwortet haben.
+        if (angekommen + danebengegangen < kacheln.length) return;
+        setBildFehlt(angekommen === 0);
+      };
+
       for (const t of kacheln) {
         const mppStufe = meterProPixel(s.ursprung.lat, t.z);
         const nullpunkt = weltPixel(s.ursprung, t.z);
@@ -466,8 +544,14 @@ export function Dreidee(p: DreideeProps) {
             gross,
           );
           textur.needsUpdate = true;
+          angekommen++;
+          bilanz();
         };
-        bild.src = kachelUrl(s.anbieter, t.z, t.x, t.y);
+        bild.onerror = () => {
+          danebengegangen++;
+          bilanz();
+        };
+        bild.src = kachelUrlGleicheHerkunft(s.anbieter, t.z, t.x, t.y);
       }
 
       karte = textur;
@@ -636,6 +720,45 @@ export function Dreidee(p: DreideeProps) {
                 { x: p1.x, y: p1.y, z: hoeheAn(p1) },
               ]),
               new THREE.MeshLambertMaterial({ color: 0xe8e2d8, side: THREE.DoubleSide }),
+            ),
+          );
+        }
+
+        /*
+         * Sperrzonen auf der Dachhaut. Sie liegen ÜBER den Modulen
+         * (8 cm statt 4), damit man sieht, wenn versehentlich in eine
+         * Zone hinein belegt wurde — ein Modul unter der Schraffur ist
+         * ein Fehler, den man sehen muss, kein Schönheitsfehler.
+         */
+        for (const h of f.hindernisse) {
+          if (h.punkte.length < 3) continue;
+          gruppe.add(
+            new THREE.Mesh(
+              flaecheGeometrie(
+                h.punkte.map((q) => ({ x: q.x, y: q.y, z: hoeheAn(q) + 0.08 })),
+                undefined,
+                /*
+                 * 60 cm je Kachel. Bei 1,4 m sah eine kleine Zone —
+                 * ein Kamin misst keinen Meter — nach einer einzigen
+                 * Kachel aus, also nach einer glatten gelben Fläche.
+                 */
+                0.6,
+              ),
+              new THREE.MeshBasicMaterial({
+                map: sperrmuster,
+                transparent: true,
+                opacity: 0.85,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+              }),
+            ),
+          );
+          gruppe.add(
+            new THREE.LineLoop(
+              new THREE.BufferGeometry().setFromPoints(
+                h.punkte.map((q) => new THREE.Vector3(q.x, hoeheAn(q) + 0.09, -q.y)),
+              ),
+              new THREE.LineBasicMaterial({ color: 0xe8b02b }),
             ),
           );
         }
@@ -834,12 +957,26 @@ export function Dreidee(p: DreideeProps) {
     neuAufbauen.current?.();
   }, [abbild]);
 
+  /*
+   * Zwei Ebenen: aussen der von React verwaltete Kasten, innen der
+   * Kasten für three. Sonst hängen die Leinwand von three und ein
+   * React-Kind im selben Elternknoten, und React stolpert beim
+   * Entfernen über einen Knoten, den es nie eingefügt hat.
+   */
   return (
     <div
-      ref={halter}
       data-testid="planer-3d"
       data-geist={geistAttribut}
-      className="h-full w-full"
-    />
+      data-luftbild={bildFehlt ? "fehlt" : "da"}
+      className="relative h-full w-full"
+    >
+      <div ref={halter} className="absolute inset-0" />
+      {bildFehlt ? (
+        <p className="pointer-events-none absolute left-1/2 top-3 z-10 max-w-[26rem] -translate-x-1/2 rounded-[12px] bg-s-crit px-3 py-2 text-[12px] leading-[1.45] text-white">
+          Das Luftbild ist für diese Ansicht nicht geladen — Dach und Boden bleiben einfarbig.
+          Andere Bildquelle in der Leiste probieren; an der Planung ändert das nichts.
+        </p>
+      ) : null}
+    </div>
   );
 }

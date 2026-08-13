@@ -183,3 +183,33 @@ export function strangWeg(
 
   return { punkte, flaeche };
 }
+
+/**
+ * Ein Modul einem String zuschlagen — oder herausnehmen.
+ *
+ * Ein Modul gehört zu genau einem String. Deshalb wird es beim
+ * Zuschlagen aus allen anderen entfernt: Sonst zählt die elektrische
+ * Prüfung dasselbe Modul zweimal, und die Anlage rechnet sich auf dem
+ * Papier grösser, als sie ist.
+ *
+ * Eine Stelle für beide Ansichten — in der Draufsicht wird gemalt, in
+ * der räumlichen Ansicht getippt.
+ */
+export function strangUmschalten(plan: Plan, strangId: string, schluessel: string): Plan {
+  const strang = plan.strings.find((x) => x.id === strangId);
+  if (!strang) return plan;
+  const drin = strang.module.includes(schluessel);
+
+  return {
+    ...plan,
+    strings: plan.strings.map((x) => {
+      if (x.id === strangId) {
+        return {
+          ...x,
+          module: drin ? x.module.filter((m) => m !== schluessel) : [...x.module, schluessel],
+        };
+      }
+      return drin ? x : { ...x, module: x.module.filter((m) => m !== schluessel) };
+    }),
+  };
+}

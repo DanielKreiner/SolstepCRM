@@ -54,8 +54,9 @@ import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
 import { anzahlModule, kwp } from "@/lib/planer/module";
 import { modulEntfernen, modulSetzen } from "@/lib/planer/setzen";
+import { strangUmschalten } from "@/lib/planer/strings";
 import { num } from "@/lib/format";
-import type { Plan } from "@/lib/planer/plan";
+import { modulSchluessel, type Plan } from "@/lib/planer/plan";
 import {
   kannVor,
   kannZurueck,
@@ -217,11 +218,11 @@ export function Planer({
   const [aktiveGruppe, setAktiveGruppe] = useState<string | null>(null);
   const [aktiverStrang, setAktiverStrang] = useState<string | null>(null);
   /*
-   * Wird in der räumlichen Ansicht belegt oder nur geschaut? Der
-   * Zustand gehört nicht in den Plan: Er beschreibt, was jemand
-   * gerade tut, nicht die Anlage.
+   * Was ein Tipp in der räumlichen Ansicht bedeutet. Der Zustand
+   * gehört nicht in den Plan: Er beschreibt, was jemand gerade tut,
+   * nicht die Anlage.
    */
-  const [raumBelegen, setRaumBelegen] = useState(false);
+  const [raumModus, setRaumModus] = useState<"ansehen" | "belegen" | "strings">("ansehen");
   const [raumMeldung, setRaumMeldung] = useState<string | null>(null);
   /*
    * Phase 1 zeichnet und belegt, Phase 3 legt die Technik fest, Phase 4
@@ -800,7 +801,7 @@ export function Planer({
               ueberstand={plan.gebaeude.ueberstand}
               schatten={ertrag.schattenJeModul}
               aktiv={aktiv}
-              belegen={raumBelegen && schreibrecht}
+              modus={schreibrecht ? raumModus : "ansehen"}
               onSetzen={(punkt) => {
                 const erg = modulSetzen(plan, punkt, aktiv, plan.gruppen[0]?.typ);
                 if (!erg.ok) {
@@ -814,6 +815,17 @@ export function Planer({
               }}
               onModulWeg={(g, reihe, spalte) => {
                 onPlan(modulEntfernen(plan, g, reihe, spalte), true);
+                setRaumMeldung(null);
+              }}
+              onModulStrang={(g, reihe, spalte) => {
+                if (!aktiverStrang) {
+                  setRaumMeldung("Zuerst rechts einen String anlegen oder auswählen.");
+                  return;
+                }
+                onPlan(
+                  strangUmschalten(plan, aktiverStrang, modulSchluessel(g, reihe, spalte)),
+                  true,
+                );
                 setRaumMeldung(null);
               }}
             />
@@ -833,21 +845,31 @@ export function Planer({
                 * der Bedienhinweis.
                 */
               <div className="absolute right-3 top-[68px] z-20 flex overflow-hidden rounded-pill border border-pl-chrome-linie bg-pl-chrome backdrop-blur-md">
-                {[
-                  { id: false, text: "Ansehen" },
-                  { id: true, text: "Belegen" },
-                ].map((w) => (
+                {(
+                  [
+                    { id: "ansehen", text: "Ansehen" },
+                    { id: "belegen", text: "Belegen" },
+                    /*
+                      * „Strings" nur im Technikschritt: Dort steht die
+                      * Stringliste im Panel daneben. In Schritt 1 wäre
+                      * es eine Betriebsart, zu der die Auswahl fehlt.
+                      */
+                    ...(phase === 3
+                      ? ([{ id: "strings", text: "Strings" }] as const)
+                      : ([] as const)),
+                  ] as const
+                ).map((w) => (
                   <button
-                    key={String(w.id)}
+                    key={w.id}
                     type="button"
                     onClick={() => {
-                      setRaumBelegen(w.id);
+                      setRaumModus(w.id);
                       setRaumMeldung(null);
                     }}
-                    aria-pressed={raumBelegen === w.id}
+                    aria-pressed={raumModus === w.id}
                     className={[
                       "h-9 px-3.5 text-[12.5px] font-semibold transition-colors",
-                      raumBelegen === w.id
+                      raumModus === w.id
                         ? "bg-accent text-white"
                         : "text-pl-auf-dunkel-2 hover:text-white",
                     ].join(" ")}
@@ -859,9 +881,11 @@ export function Planer({
             ) : null}
 
             <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 text-[11.5px] text-pl-auf-dunkel-2 backdrop-blur-md">
-              {raumBelegen && schreibrecht
-                ? "Tippen setzt ein Modul · auf ein Modul tippen nimmt es weg · Ziehen dreht"
-                : "Ziehen dreht · Umschalt oder rechte Taste schwenkt · Rad zoomt"}
+              {!schreibrecht || raumModus === "ansehen"
+                ? "Ziehen dreht · Umschalt oder rechte Taste schwenkt · Rad zoomt"
+                : raumModus === "belegen"
+                  ? "Tippen setzt ein Modul · auf ein Modul tippen nimmt es weg · Ziehen dreht"
+                  : "Auf Module tippen legt sie in den gewählten String · nochmal tippen nimmt sie heraus"}
             </p>
             {raumMeldung ? (
               <p className="pointer-events-none absolute bottom-14 left-1/2 -translate-x-1/2 rounded-pill bg-s-crit px-3 py-1.5 text-[12px] font-semibold text-white">

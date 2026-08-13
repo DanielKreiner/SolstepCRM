@@ -110,6 +110,43 @@ test.describe("Planer — räumliche Ansicht", () => {
     expect(plan.gruppen).toHaveLength(1);
   });
 
+  test("In der Perspektive lässt sich ein Modul einem String zuschlagen", async ({ page }) => {
+    await login(page, DEMO.gf);
+    const id = await neuesProjekt(page);
+
+    await dachSetzen(page, "Pultdach", "14", "9");
+    await page.getByRole("button", { name: /^Fläche 1/ }).click();
+    await belegen(page);
+
+    await page.getByRole("button", { name: /^3 Technik/ }).click();
+    await page.getByRole("button", { name: "String anlegen" }).click();
+
+    await page.getByRole("button", { name: "2D", exact: true }).click();
+    const raum = page.getByTestId("planer-3d");
+    await expect(raum).toBeVisible();
+    await page.getByRole("button", { name: "Strings", exact: true }).click();
+
+    const k = (await raum.boundingBox())!;
+    const mitte = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
+
+    const imStrang = async () => {
+      const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();
+      const plan = data!.plan as { strings: Array<{ module: string[] }> };
+      return plan.strings[0]?.module.length ?? 0;
+    };
+    expect(await imStrang()).toBe(0);
+
+    /*
+     * Auf ein Modul tippen. Wo eines liegt, hängt am Kamerawinkel —
+     * deshalb ein paar Stellen probieren, bis der String wächst.
+     */
+    for (let i = 0; i < 25 && (await imStrang()) === 0; i++) {
+      await page.mouse.click(mitte.x + ((i % 5) - 2) * 40, mitte.y + (Math.floor(i / 5) - 2) * 26);
+      await page.waitForTimeout(350);
+    }
+    expect(await imStrang(), "ein Tipp legt das Modul in den String").toBeGreaterThan(0);
+  });
+
   test("Strings werden auf Knopfdruck verlegt", async ({ page }) => {
     await login(page, DEMO.gf);
     const id = await neuesProjekt(page);
@@ -157,5 +194,31 @@ test.describe("Planer — räumliche Ansicht", () => {
     // Keine Dopplung: Ein Modul hängt an genau einem String.
     const alle = plan.strings.flatMap((s) => s.module);
     expect(new Set(alle).size).toBe(alle.length);
+  });
+});
+
+/*
+ * Der Kachelproxy.
+ *
+ * Er lag lange falsch, ohne aufzufallen: Die Prüfung liess höchstens
+ * dreistellige Kachelindizes zu, echte haben bei Stufe 19 sechs. Damit
+ * antwortete er auf JEDE echte Kachel mit „Ungültige Kachel" — Google
+ * und Azure lieferten im ganzen Planer kein Bild, und weil die
+ * Voreinstellung basemap.at direkt lädt, sah man es nie.
+ */
+test.describe("Planer — Kachelproxy", () => {
+  test("nimmt echte Kachelindizes an und weist unmögliche ab", async ({ page }) => {
+    await login(page, DEMO.gf);
+    await page.goto("/planer");
+
+    const antwort = async (pfad: string) =>
+      page.evaluate(async (p) => (await fetch(p)).status, pfad);
+
+    // Stufe 19, sechsstellig — das ist der Normalfall auf einem Dach.
+    expect(await antwort("/api/planer/kachel/basemap/19/281655/181240")).not.toBe(400);
+    // Zu grosser Index für die Stufe: kann es nicht geben.
+    expect(await antwort("/api/planer/kachel/basemap/10/999999/1")).toBe(400);
+    // Kein Anbieter.
+    expect(await antwort("/api/planer/kachel/erfunden/19/281655/181240")).toBe(400);
   });
 });

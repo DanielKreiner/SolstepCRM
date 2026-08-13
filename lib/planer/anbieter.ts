@@ -124,6 +124,19 @@ export function kachelUrl(id: AnbieterId, z: number, x: number, y: number): stri
 }
 
 /**
+ * Dieselbe Kachel, aber garantiert von der eigenen Herkunft.
+ *
+ * Für die räumliche Ansicht: Dort werden die Kacheln in ein Canvas
+ * gezeichnet, und dafür muss die Quelle CORS erlauben. Bei einer
+ * fremden Herkunft entscheidet das der fremde Server — in der
+ * Produktion kam von basemap.at nichts an, und das Dach blieb leer.
+ * Über den eigenen Proxy stellt sich die Frage nicht.
+ */
+export function kachelUrlGleicheHerkunft(id: AnbieterId, z: number, x: number, y: number): string {
+  return `/api/planer/kachel/${id}/${z}/${x}/${y}`;
+}
+
+/**
  * Was der Client über die Verfügbarkeit wissen muss. Bewusst nur ein
  * Wahrheitswert je Anbieter — nie der Schlüssel selbst.
  */

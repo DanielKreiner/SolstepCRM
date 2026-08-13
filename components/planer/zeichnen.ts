@@ -34,7 +34,17 @@ export const FARBEN = {
   flaeche: "rgba(232, 149, 43, 0.16)",
   flaecheAktiv: "rgba(232, 149, 43, 0.28)",
   linie: "#ffffff",
-  hindernis: "rgba(21, 18, 16, 0.55)",
+  /*
+   * Sperrzone: gelb schraffiert statt dunkel gefüllt.
+   *
+   * Die dunkle Fläche sah aus wie ein Loch im Dach — und auf einem
+   * dunklen Luftbild war sie gar nicht zu sehen. Schraffur liest sich
+   * als „hier nicht", nicht als „hier fehlt etwas", und funktioniert
+   * auf jedem Untergrund.
+   */
+  sperrflaeche: "rgba(232, 176, 43, 0.30)",
+  sperrstrich: "rgba(196, 132, 12, 0.85)",
+  sperrrand: "rgba(232, 176, 43, 0.95)",
   warnung: "#d2543f",
   schrift: "#151210",
   /* Module: dunkles Blau-Grau wie echte Zellen, nicht bunt. Die Fläche
@@ -158,7 +168,7 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
     ctx.restore();
   }
 
-  // Hindernisse mit Sperrsaum.
+  // Sperrzonen mit Sperrsaum.
   for (const h of f.hindernisse) {
     ctx.save();
     ctx.setLineDash([4, 3]);
@@ -168,11 +178,35 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
     ctx.stroke();
     ctx.restore();
 
+    ctx.save();
     pfad(ctx, k, h.punkte);
-    ctx.fillStyle = FARBEN.hindernis;
+    ctx.fillStyle = FARBEN.sperrflaeche;
     ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = 1.4;
+    /*
+     * Die Schraffur wird auf die Fläche geclippt und in Bildpunkten
+     * gerechnet, nicht in Metern: Beim Herauszoomen soll der Abstand
+     * der Striche gleich bleiben, sonst wird die Zone bei kleiner
+     * Ansicht zu einem vollflächigen Gelb.
+     */
+    ctx.clip();
+    const bp = h.punkte.map((q) => bild(k, q));
+    const links = Math.min(...bp.map((q) => q.x));
+    const rechts = Math.max(...bp.map((q) => q.x));
+    const oben = Math.min(...bp.map((q) => q.y));
+    const unten = Math.max(...bp.map((q) => q.y));
+    ctx.strokeStyle = FARBEN.sperrstrich;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let x = links - (unten - oben); x < rechts; x += 9) {
+      ctx.moveTo(x, unten);
+      ctx.lineTo(x + (unten - oben), oben);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    pfad(ctx, k, h.punkte);
+    ctx.strokeStyle = FARBEN.sperrrand;
+    ctx.lineWidth = 1.6;
     ctx.stroke();
   }
 

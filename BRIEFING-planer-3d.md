@@ -209,3 +209,37 @@ angehängt wird (21 Module bei höchstens 12 werden 11 + 10, nicht 12 + 9).
 Gezeichnet wird der Kabelweg in beiden Ansichten: heller Strich mit
 dunkler Fassung — NICHT in der Stringfarbe, sonst liegt er farbgleich
 auf seinen eigenen Modulen. Volle Scheibe am Anfang, Ring am Ende.
+
+## 8. Sperrzonen sichtbar, Strings von Hand in 3D, Kachelproxy (13.08.2026)
+
+**Sperrzone.** Vorher eine dunkle Fläche — die sah aus wie ein Loch im
+Dach und war auf dunklem Luftbild gar nicht zu sehen. Jetzt gelb
+schraffiert, in beiden Ansichten, mit gestricheltem Sperrsaum. In der
+räumlichen Ansicht liegt sie ÜBER den Modulen (8 cm statt 4): Ein Modul
+unter der Schraffur ist ein Fehler, den man sehen muss.
+
+**Strings von Hand in 3D.** Der Umschalter hat im Technikschritt eine
+dritte Stellung „Strings": Tippen legt ein Modul in den gewählten
+String, nochmal tippen nimmt es heraus. Dieselbe Regel wie beim Malen
+in der Draufsicht, und seit diesem Umbau auch derselbe Code
+(`strangUmschalten` in `lib/planer/strings.ts`) — ein Modul gehört zu
+genau einem String und fliegt beim Zuschlagen aus allen anderen.
+
+**Kachelproxy.** Zwei Fehler, beide still:
+
+1. Die Wegprüfung liess höchstens dreistellige Kachelindizes zu. Bei
+   Stufe 19 hat ein Index sechs Stellen — der Proxy hat also JEDE echte
+   Kachel abgelehnt. Google und Azure lieferten damit im ganzen Planer
+   kein Bild; aufgefallen ist es nie, weil die Voreinstellung
+   basemap.at direkt lädt. Geprüft wird jetzt gegen die Stufe (2^z je
+   Achse).
+2. Die räumliche Ansicht holte ihre Kacheln direkt von basemap.at. Für
+   ein Canvas braucht das CORS, und in der Produktion kam nichts an:
+   Boden und Dach blieben einfarbig, ohne jede Meldung. Die 3D-Textur
+   geht deshalb IMMER über den eigenen Proxy — gleiche Herkunft, keine
+   Frage. Die Draufsicht lädt weiter direkt, dort gibt es kein Canvas.
+   Und wenn doch keine Kachel ankommt, steht es jetzt im Bild.
+
+Dazu: Die Stufe für die 3D-Textur wird auf das begrenzt, was der
+Anbieter wirklich liefert. Die Rechnung kommt bei 160 m auf 2048
+Bildpunkten auf Stufe 20 — basemap.at endet bei 19.

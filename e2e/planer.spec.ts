@@ -141,13 +141,26 @@ test.describe("Planer", () => {
     const ohneSchluessel = await page.request.get("/api/planer/kachel/google/19/1/1");
     expect(ohneSchluessel.status()).toBe(428);
 
-    // Basemap läuft nicht über den Proxy und darf hier nicht durchrutschen.
-    const falsch = await page.request.get("/api/planer/kachel/basemap/19/1/1");
-    expect(falsch.status()).toBe(400);
+    /*
+     * Basemap läuft seit dem 13.08.2026 ebenfalls über den Proxy — die
+     * räumliche Ansicht zeichnet die Kacheln in ein Canvas und braucht
+     * dafür gleiche Herkunft. Ein Schlüssel wird dabei nicht verlangt.
+     */
+    const frei = await page.request.get("/api/planer/kachel/basemap/19/281655/181240");
+    expect(frei.status(), "freie Quelle braucht keinen Schlüssel").not.toBe(428);
+    expect(frei.status()).not.toBe(400);
+
+    // Einen erfundenen Anbieter gibt es nicht.
+    const erfunden = await page.request.get("/api/planer/kachel/erfunden/19/1/1");
+    expect(erfunden.status()).toBe(400);
 
     // Pfadstücke müssen Zahlen sein, sonst hängt man an die Anbieter-URL an.
     const boese = await page.request.get("/api/planer/kachel/google/19/1/..%2F..%2Fadmin");
     expect(boese.status()).toBe(400);
+
+    // Und ein Index, den es auf dieser Stufe nicht geben kann.
+    const zuGross = await page.request.get("/api/planer/kachel/google/10/999999/1");
+    expect(zuGross.status()).toBe(400);
   });
 
   test("Mandantentrennung: fremdes Projekt ist nicht erreichbar", async ({ page }) => {
