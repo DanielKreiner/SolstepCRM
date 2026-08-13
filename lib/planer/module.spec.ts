@@ -3,6 +3,8 @@ import { type Dachflaeche, grundflaeche, punktInPolygon } from "./flaeche";
 import type { Meter } from "./geo";
 import {
   achsen,
+  ausrichtungen,
+  einzelnesModul,
   aktiveZellen,
   anbaustellen,
   anzahlModule,
@@ -793,5 +795,99 @@ describe("Modulweise anbauen", () => {
     // Und ein Klick darauf stellt genau dieses eine wieder her.
     const zurueck = modulAnbauen(ohne, f, { reihe: 0, spalte: 1 });
     expect(anzahlModule(zurueck)).toBe(6);
+  });
+});
+
+describe("Einzelnes Modul setzen", () => {
+  it("legt genau ein Modul um die angegebene Mitte", () => {
+    const f = dach();
+    const g = einzelnesModul(f, { x: 5, y: 3.5 }, "g9", "Feld 9", {
+      typ: STANDARD_MODUL,
+      ausrichtung: "hoch",
+      reihenabstand: 0.02,
+      spaltenabstand: 0.02,
+      winkel: 0,
+      aufstaenderung: null,
+    })!;
+    expect(g).not.toBeNull();
+    expect(anzahlModule(g)).toBe(1);
+
+    /*
+     * Die Mitte des gesetzten Moduls muss dort liegen, wo der Zeiger
+     * war — sonst springt das Modul beim Klick weg vom Geisterbild.
+     */
+    const m = modulMitte(g, f, 0, 0);
+    expect(m.x).toBeCloseTo(5, 6);
+    expect(m.y).toBeCloseTo(3.5, 6);
+  });
+
+  it("gibt null zurück, wo kein Platz ist", () => {
+    const f = dach();
+    // Weit ausserhalb des Rechtecks 10 × 7.
+    expect(
+      einzelnesModul(f, { x: 40, y: 40 }, "g9", "Feld 9", {
+        typ: STANDARD_MODUL,
+        ausrichtung: "hoch",
+        reihenabstand: 0.02,
+        spaltenabstand: 0.02,
+        winkel: 0,
+        aufstaenderung: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("weicht einem schon belegten Platz aus", () => {
+    const f = dach();
+    const erstes = einzelnesModul(f, { x: 5, y: 3.5 }, "g1", "Feld 1", {
+      typ: STANDARD_MODUL,
+      ausrichtung: "hoch",
+      reihenabstand: 0.02,
+      spaltenabstand: 0.02,
+      winkel: 0,
+      aufstaenderung: null,
+    })!;
+    const belegt = [modulEcken(erstes, f, 0, 0)];
+    expect(
+      einzelnesModul(f, { x: 5.1, y: 3.6 }, "g2", "Feld 2", {
+        typ: STANDARD_MODUL,
+        ausrichtung: "hoch",
+        reihenabstand: 0.02,
+        spaltenabstand: 0.02,
+        winkel: 0,
+        aufstaenderung: null,
+        besetzt: belegt,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("Wohin ein Feld schaut", () => {
+  it("folgt auf dem Schrägdach der Fläche", () => {
+    const f = dach({ neigung: 30, azimut: 200 });
+    const a = ausrichtungen(gruppe(), f);
+    expect(a).toEqual([{ azimut: 200, neigung: 30, anteil: 1 }]);
+  });
+
+  it("schaut bei Süd-Aufständerung nach Süden, nicht wie das Flachdach", () => {
+    /*
+     * Ein Flachdach hat oft einen willkürlichen Azimut aus der
+     * Traufkante. Das Gestell entscheidet, nicht das Dach.
+     */
+    const f = dach({ neigung: 0, azimut: 47 });
+    const a = ausrichtungen(gruppe({ aufstaenderung: { art: "sued", winkel: 15 } }), f);
+    expect(a).toEqual([{ azimut: 180, neigung: 15, anteil: 1 }]);
+  });
+
+  it("teilt Ost/West in zwei Hälften", () => {
+    /*
+     * Der Kern: Ost und West getrennt rechnen. Ein Mittelwert wäre
+     * Süden, und der Ertrag läge über zehn Prozent zu hoch.
+     */
+    const f = dach({ neigung: 0, azimut: 180 });
+    const a = ausrichtungen(gruppe({ aufstaenderung: { art: "ost-west", winkel: 12 } }), f);
+    expect(a).toHaveLength(2);
+    expect(a.map((x) => x.azimut).sort((p, q) => p - q)).toEqual([90, 270]);
+    expect(a.every((x) => x.neigung === 12)).toBe(true);
+    expect(a.reduce((sum, x) => sum + x.anteil, 0)).toBeCloseTo(1, 9);
   });
 });

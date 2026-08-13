@@ -349,6 +349,82 @@ function aufRichtung(von: Meter, ziel: Meter, grad: number): Meter {
   return { x: von.x + Math.cos(r) * l, y: von.y + Math.sin(r) * l };
 }
 
+
+/**
+ * Fang beim ZIEHEN einer vorhandenen Ecke.
+ *
+ * Nicht derselbe wie beim Zeichnen, und das ist der Kern: Beim Zeichnen
+ * zeigt man eine Richtung, und der Punkt darf auf dem Strahl wandern —
+ * `fange` dreht ihn deshalb um den Bezugspunkt und behält die Länge.
+ *
+ * Beim Ziehen einer bestehenden Ecke ist genau das falsch. Der Abstand
+ * zum Bezugspunkt ist dort gross (bei einem 18-Meter-Dach eben 18 m),
+ * und 4° Toleranz sind dann über einen Meter Versatz: Die Kante sprang
+ * beim Anfassen von 18 auf 21 m, ohne dass sich der Zeiger nennenswert
+ * bewegt hätte.
+ *
+ * Hier wird deshalb LOTRECHT auf den Fangstrahl projiziert und nur
+ * angenommen, wenn der Zeiger nah genug daran liegt — nah in Metern,
+ * abgeleitet aus einer Bildschirmentfernung. Damit bleibt der Punkt
+ * immer dort, wo der Finger ist, und die Hilfe zieht ihn nur um die
+ * letzten Zentimeter gerade.
+ */
+export function fangeBeimZiehen(
+  ziel: Meter,
+  /** Nachbarecken, gegen die gefangen wird (beide Seiten). */
+  bezuege: Meter[],
+  bestehendeKanten: Array<{ a: Meter; b: Meter }>,
+  opt: FangOptionen,
+  /** Wie weit der Zeiger vom Strahl entfernt sein darf, in Metern. */
+  toleranzMeter: number,
+): { punkt: Meter; hinweis: "rechter-winkel" | "parallel" | "raster" | null } {
+  let bester: { punkt: Meter; abstand: number; hinweis: "rechter-winkel" | "parallel" } | null =
+    null;
+
+  const pruefe = (
+    bezug: Meter,
+    grad: number,
+    hinweis: "rechter-winkel" | "parallel",
+  ): void => {
+    const r = (grad * Math.PI) / 180;
+    const e = { x: Math.cos(r), y: Math.sin(r) };
+    const v = { x: ziel.x - bezug.x, y: ziel.y - bezug.y };
+    const laengs = v.x * e.x + v.y * e.y;
+    // Nur nach vorn: Hinter dem Bezugspunkt liegt die Gegenrichtung.
+    const fuss = { x: bezug.x + e.x * laengs, y: bezug.y + e.y * laengs };
+    const abstand = Math.hypot(ziel.x - fuss.x, ziel.y - fuss.y);
+    if (abstand > toleranzMeter) return;
+    if (!bester || abstand < bester.abstand) bester = { punkt: fuss, abstand, hinweis };
+  };
+
+  for (const bezug of bezuege) {
+    if (opt.rechterWinkel) {
+      for (const achse of [0, 90, 180, -90]) pruefe(bezug, achse, "rechter-winkel");
+    }
+    if (opt.parallel) {
+      for (const k of bestehendeKanten) {
+        const kr = (Math.atan2(k.b.y - k.a.y, k.b.x - k.a.x) * 180) / Math.PI;
+        pruefe(bezug, kr, "parallel");
+        pruefe(bezug, kr + 180, "parallel");
+      }
+    }
+  }
+
+  if (bester) {
+    const treffer = bester as { punkt: Meter; hinweis: "rechter-winkel" | "parallel" };
+    return { punkt: treffer.punkt, hinweis: treffer.hinweis };
+  }
+
+  if (opt.raster) {
+    const r = opt.rasterMass;
+    return {
+      punkt: { x: Math.round(ziel.x / r) * r, y: Math.round(ziel.y / r) * r },
+      hinweis: "raster",
+    };
+  }
+  return { punkt: ziel, hinweis: null };
+}
+
 /** Differenz zweier Winkel, immer in (−180, 180]. */
 export function winkelDifferenz(a: number, b: number): number {
   let d = ((a - b + 180) % 360) - 180;

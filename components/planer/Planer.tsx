@@ -11,6 +11,7 @@ import {
   ZeichenHindernis,
   ZeichenMessen,
   ZeichenModul,
+  ZeichenPlus,
   ZeichenString,
   ZeichenTeilen,
   ZeichenVollbild,
@@ -147,6 +148,7 @@ const WERKZEUGE: Array<{
   { id: "flaeche", zeichen: ZeichenFlaeche, label: "Dach", titel: "Dachfläche zeichnen" },
   { id: "hindernis", zeichen: ZeichenHindernis, label: "Kamin", titel: "Hindernis aufziehen (Kamin, Fenster)" },
   { id: "baum", zeichen: ZeichenBaum, label: "Baum", titel: "Baum setzen — kostet Ertrag durch Verschattung" },
+  { id: "setzen", zeichen: ZeichenPlus, label: "Setzen", titel: "Modul setzen — das Geisterbild zeigt, wohin es kommt" },
   { id: "modul", zeichen: ZeichenModul, label: "Modul", titel: "Einzelnes Modul frei setzen oder zurückholen" },
   { id: "teilen", zeichen: ZeichenTeilen, label: "Teilen", titel: "Teil der Gruppe als eigenes Feld abtrennen" },
   { id: "string", zeichen: ZeichenString, label: "String", titel: "Module dem gewählten String zuordnen" },
@@ -167,8 +169,8 @@ const WERKZEUGE: Array<{
  * dorthin steht als Satz auf der Zeichenfläche.
  */
 const WERKZEUGE_JE_PHASE: Record<1 | 2 | 3 | 4 | 5, Werkzeug[]> = {
-  1: ["auswahl", "flaeche", "hindernis", "baum", "modul", "teilen", "messen"],
-  2: ["auswahl", "modul", "teilen", "messen"],
+  1: ["auswahl", "flaeche", "hindernis", "baum", "setzen", "modul", "teilen", "messen"],
+  2: ["auswahl", "setzen", "modul", "teilen", "messen"],
   3: ["auswahl", "string", "messen"],
   4: ["auswahl"],
   5: ["auswahl"],
@@ -939,6 +941,7 @@ export function Planer({
                  */
                 const gesperrt =
                   (w.id === "hindernis" && (plan.flaechen.length === 0 || !aktiv)) ||
+                  (w.id === "setzen" && plan.flaechen.length === 0) ||
                   ((w.id === "modul" || w.id === "teilen") && !aktiveGruppe) ||
                   (w.id === "string" && !aktiverStrang);
                 const an = werkzeug === w.id;
@@ -951,6 +954,8 @@ export function Planer({
                       gesperrt
                         ? w.id === "hindernis"
                           ? "Zuerst eine Dachfläche auswählen."
+                        : w.id === "setzen"
+                          ? "Zuerst eine Dachfläche zeichnen."
                           : w.id === "string"
                             ? "Zuerst einen String anlegen oder auswählen."
                             : "Zuerst eine Modulgruppe auswählen."
@@ -1122,6 +1127,8 @@ export function Planer({
                     module={geraete.module}
                     breitengrad={projekt.ursprung.lat}
                     schreibrecht={schreibrecht}
+                    werkzeug={werkzeug}
+                    onWerkzeug={setWerkzeug}
                   />
                 ) : phase === 3 ? (
                   <TechnikPanel

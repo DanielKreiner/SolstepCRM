@@ -484,6 +484,116 @@ export function nachfuehren(g: Modulgruppe, f: Dachflaeche, besetzt: Meter[][] =
   return { ...g, aus };
 }
 
+
+/**
+ * Ein einzelnes Modul an einer Stelle — als Gruppe aus genau einem.
+ *
+ * Fuer den Fall, den ein Betrieb am haeufigsten hat und der bisher
+ * fehlte: erst EIN Modul hinsetzen und von dort weiterbauen. Bisher gab
+ * es nur "Dach voll belegen" und danach das Wegtippen — wer eine kleine
+ * Anlage plante, entfernte dreissig Module von Hand.
+ *
+ * Das Raster richtet sich nach der Flaeche (Traufe = quer, Falllinie =
+ * laengs); die angegebene Stelle wird zur MITTE des Moduls. Passt es
+ * dort nicht aufs Dach, kommt null zurueck — der Aufrufer zeigt das
+ * Geistermodul dann rot und legt nichts an.
+ */
+export function einzelnesModul(
+  f: Dachflaeche,
+  mitte: Meter,
+  id: string,
+  name: string,
+  opt: Omit<BelegOptionen, "besetzt"> & { besetzt?: Meter[][] },
+): Modulgruppe | null {
+  const gruppe = modulLage(f, mitte, id, name, opt);
+  const ecken = modulEcken(gruppe, f, 0, 0);
+  if (!modulPasst(ecken, f)) return null;
+  if (opt.besetzt && stoesstAn(ecken, opt.besetzt)) return null;
+  return gruppe;
+}
+
+/**
+ * Dieselbe Lage OHNE Prüfung.
+ *
+ * Gebraucht fürs Geisterbild: Es soll auch dort erscheinen, wo das
+ * Modul nicht hinpasst — dann eben rot. Ein Zeiger ohne Rückmeldung
+ * lässt einen raten, warum der Klick nichts tut.
+ */
+export function modulLage(
+  f: Dachflaeche,
+  mitte: Meter,
+  id: string,
+  name: string,
+  opt: Omit<BelegOptionen, "besetzt"> & { besetzt?: Meter[][] },
+): Modulgruppe {
+  const vorlage: Modulgruppe = {
+    id,
+    name,
+    flaeche: f.id,
+    typ: opt.typ,
+    ausrichtung: opt.ausrichtung,
+    reihenabstand: opt.reihenabstand,
+    spaltenabstand: opt.spaltenabstand,
+    winkel: opt.winkel,
+    anker: { x: 0, y: 0 },
+    spalten: 1,
+    reihen: 1,
+    aufstaenderung: opt.aufstaenderung,
+    aus: [],
+    entfernt: [],
+    frei: {},
+  };
+
+  /*
+   * Der Anker ist die linke untere Ecke des Rasters, gefragt ist die
+   * Mitte: eine halbe Modulbreite und -hoehe zurueck, in den Achsen der
+   * Flaeche.
+   */
+  const a = achsen(vorlage, f);
+  const m = planMasse(vorlage, f);
+  const halbQuer = (m.quer + opt.spaltenabstand) / 2;
+  const halbLaengs = (m.laengs + opt.reihenabstand) / 2;
+  const gruppe: Modulgruppe = {
+    ...vorlage,
+    anker: {
+      x: mitte.x - a.quer.x * halbQuer - a.laengs.x * halbLaengs,
+      y: mitte.y - a.quer.y * halbQuer - a.laengs.y * halbLaengs,
+    },
+  };
+
+  return gruppe;
+}
+
+
+/**
+ * Wohin ein Modulfeld tatsaechlich schaut — Ausrichtung und Neigung.
+ *
+ * Auf dem Schraegdach ist das die Flaeche selbst. Auf dem Flachdach
+ * nicht: Dort liegt das Modul auf einem Gestell, und das Gestell
+ * bestimmt beides.
+ *
+ * - Sued-Aufstaenderung: alles schaut nach Sueden, im Gestellwinkel —
+ *   egal, wie das Flachdach selbst orientiert ist.
+ * - Ost/West: die Haelfte schaut nach Osten, die Haelfte nach Westen.
+ *   Das ist der Grund, warum diese Bauart ueberhaupt gewaehlt wird
+ *   (breiterer Tagesgang, mehr Module je Quadratmeter) — und es MUSS
+ *   getrennt gerechnet werden. Ein Mittelwert aus 90 und 270 Grad ist
+ *   Sueden, und der Ertrag laege gut zehn Prozent zu hoch.
+ */
+export function ausrichtungen(
+  g: Modulgruppe,
+  f: Dachflaeche,
+): Array<{ azimut: number; neigung: number; anteil: number }> {
+  if (!g.aufstaenderung) return [{ azimut: f.azimut, neigung: f.neigung, anteil: 1 }];
+  if (g.aufstaenderung.art === "sued") {
+    return [{ azimut: 180, neigung: g.aufstaenderung.winkel, anteil: 1 }];
+  }
+  return [
+    { azimut: 90, neigung: g.aufstaenderung.winkel, anteil: 0.5 },
+    { azimut: 270, neigung: g.aufstaenderung.winkel, anteil: 0.5 },
+  ];
+}
+
 /** Nächste freie Rasterzelle zu einem Punkt — für „ins Raster zurück". */
 export function naechsteZelle(
   g: Modulgruppe,

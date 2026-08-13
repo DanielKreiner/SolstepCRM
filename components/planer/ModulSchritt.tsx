@@ -22,6 +22,7 @@ import { Frage, Knopf, Listenzeile, Mehr, Stand, Wahlkarte, Zahlfeld } from "./B
 import { ZeichenModul, ZeichenPlus } from "./Zeichen";
 import { modulTyp, planMitModul } from "./modulwahl";
 import type { GeraetModul } from "./TechnikPanel";
+import type { Werkzeug } from "./Leinwand";
 
 /*
  * Schritt 2 — „Welche Module, und wie viele passen?"
@@ -44,6 +45,8 @@ export interface ModulSchrittProps {
   module: GeraetModul[];
   breitengrad: number;
   schreibrecht: boolean;
+  werkzeug: Werkzeug;
+  onWerkzeug: (w: Werkzeug) => void;
 }
 
 /**
@@ -133,6 +136,17 @@ export function ModulSchritt(p: ModulSchrittProps) {
       )}
 
       {/* ── Belegen ───────────────────────────────────────────────── */}
+      {p.schreibrecht && flaeche ? (
+        <Knopf
+          art={p.werkzeug === "setzen" ? "haupt" : "zweit"}
+          onClick={() => p.onWerkzeug(p.werkzeug === "setzen" ? "auswahl" : "setzen")}
+          zeichen={<ZeichenPlus />}
+          aus={p.module.length > 0 && !gewaehltesModul}
+        >
+          {p.werkzeug === "setzen" ? "Setzen beenden" : "Modul einzeln setzen"}
+        </Knopf>
+      ) : null}
+
       {p.schreibrecht && flaeche ? (
         <Knopf
           onClick={() => belegen(flaeche)}

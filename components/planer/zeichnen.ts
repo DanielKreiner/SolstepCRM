@@ -377,6 +377,8 @@ export function zeichneGruppe(
 ) {
   // Beide Gründe zusammen: kein Platz UND weggetippt.
   const aus = leereZellen(g);
+  /* Nur diese bleiben als blasse Kästchen stehen. */
+  const weggetippt = new Set(g.entfernt ?? []);
   // Klein gezeichnete Module brauchen keinen Rand — sonst ist das Feld
   // nur noch Rand.
   const probe = modulEcken(g, f, 0, 0);
@@ -417,7 +419,18 @@ export function zeichneGruppe(
           ctx.lineWidth = 0.7;
           ctx.stroke();
         }
-      } else if (feineLinie) {
+      } else if (feineLinie && weggetippt.has(zellSchluessel(r, c))) {
+        /*
+         * Nur die von HAND weggetippten Zellen bleiben sichtbar: Sie
+         * sind Löcher, die jemand gemacht hat, und er soll sie
+         * wiederfinden.
+         *
+         * Zellen, in die geometrisch nichts passt (`aus`), verschwinden.
+         * Sie lagen als blasses Raster rund um das Dach und über die
+         * Nachbargrundstücke — Information, die niemand braucht und die
+         * vom Dach ablenkt. An der Rechnung ändert das nichts: Das
+         * Raster bleibt, es wird nur nicht mehr gezeichnet.
+         */
         ctx.save();
         ctx.setLineDash([3, 3]);
         ctx.fillStyle = FARBEN.modulAus;
@@ -838,4 +851,36 @@ export function zeichneObjekte(
       pille(ctx, m.x, m.y, `${meterText(o.hoehe)} hoch`);
     }
   }
+}
+
+/**
+ * Das Modul am Zeiger, bevor es gesetzt wird.
+ *
+ * Ohne dieses Bild ist das Setzen ein Ratespiel: Ein Modul ist gut
+ * anderthalb Meter lang, und wohin es sich dreht, hängt an der Traufe
+ * der Fläche. Grün heisst „passt", rot heisst „hier nicht" — dann legt
+ * der Klick auch nichts an.
+ */
+export function zeichneGeistermodul(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  ecken: Meter[],
+  passt: boolean,
+) {
+  if (ecken.length < 3) return;
+  ctx.save();
+  ctx.beginPath();
+  ecken.forEach((p, i) => {
+    const b = bild(k, p);
+    if (i === 0) ctx.moveTo(b.x, b.y);
+    else ctx.lineTo(b.x, b.y);
+  });
+  ctx.closePath();
+  ctx.fillStyle = passt ? "rgba(28, 42, 60, 0.45)" : "rgba(210, 84, 63, 0.28)";
+  ctx.fill();
+  ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = passt ? "rgba(255,255,255,0.9)" : FARBEN.warnung;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
 }

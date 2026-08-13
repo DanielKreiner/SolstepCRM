@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect } from "react";
 import {
   planungAnlegen,
   type PlanungStatus,
@@ -37,7 +38,20 @@ export function Planung({
   /** Angebot bereits versendet — dann keine Positionen mehr einfügen. */
   gesperrt: boolean;
 }) {
+  const router = useRouter();
   const [anlegenStand, anlegen, legtAn] = useActionState(planungAnlegen, LEER);
+
+  /*
+   * Nach dem Anlegen die Seite neu holen.
+   *
+   * Die Aktion ruft `revalidatePath`, aber der Router hält die schon
+   * gerenderte Seite im Speicher: Die Karte zeigte weiter „Planung
+   * anlegen", obwohl die Planung längst dranhing — und ein zweiter
+   * Klick hätte sie beinahe ein zweites Mal angelegt.
+   */
+  useEffect(() => {
+    if (anlegenStand.id) router.refresh();
+  }, [anlegenStand.id, router]);
   const [uebernahmeStand, uebernehmen, uebernimmt] = useActionState(positionenAusPlanung, LEER);
   const meldung = anlegenStand.error ?? uebernahmeStand.error ?? anlegenStand.ok ?? uebernahmeStand.ok;
   const fehler = Boolean(anlegenStand.error ?? uebernahmeStand.error);

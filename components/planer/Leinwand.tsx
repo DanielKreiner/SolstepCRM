@@ -15,6 +15,7 @@ import {
 } from "@/lib/planer/geo";
 import {
   azimutAusTraufe,
+  fangeBeimZiehen,
   type Dachflaeche,
   type FangOptionen,
   fange,
@@ -43,13 +44,16 @@ import {
   erweitere,
   fangeAufRaster,
   insRasterZurueck,
+  einzelnesModul,
   modulEcken,
+  modulLage,
   modulMitte,
   modulPasst,
   nachfuehren,
   planMasse,
   achsen as rasterAchsen,
   setzeFrei,
+  STANDARD_MODUL,
   stoesstAn,
   teileGruppe,
   zelle as zellSchluessel,
@@ -67,6 +71,7 @@ import {
   zeichneAnbaustellen,
   zeichneAuswahl,
   zeichneGruppe,
+  zeichneGeistermodul,
   zeichneMessung,
   zeichneUrsprung,
 } from "./zeichnen";
@@ -95,6 +100,8 @@ export type Werkzeug =
   | "gegenprobe"
   /** Einzelne Module frei ziehen und zurücksetzen. */
   | "baum"
+  /** Ein einzelnes Modul setzen — mit Geisterbild am Zeiger. */
+  | "setzen"
   | "modul"
   /** Auswahlrechteck ziehen und daraus eine eigene Gruppe machen. */
   | "teilen"
@@ -210,6 +217,13 @@ export function Leinwand(p: LeinwandProps) {
    * am Griff ankommt. Vier Zahlen, die ohnehin schon berechnet werden.
    */
   const [rahmenAttribut, setRahmenAttribut] = useState<string | undefined>(undefined);
+  /*
+   * Ob gerade ein Geistermodul am Zeiger hängt und ob es dort passt.
+   * Es liegt im Canvas und ist von aussen sonst nicht zu sehen — ohne
+   * diese Angabe liesse sich nicht prüfen, ob das Setzen überhaupt
+   * etwas anzeigt.
+   */
+  const [geistAttribut, setGeistAttribut] = useState<string | undefined>(undefined);
   /** Kurze Rückmeldung, wenn eine Eingabe abgelehnt wurde. */
   const [meldung, setMeldung] = useState<string | null>(null);
 
@@ -222,6 +236,13 @@ export function Leinwand(p: LeinwandProps) {
     | { art: "ecke"; flaeche: string; index: number }
     | { art: "kante"; flaeche: string; index: number; letzte: Meter }
     | { art: "hindernis"; flaeche: string; von: Meter }
+    /*
+     * Die ganze Dachfläche schieben. Vorher liess sie sich nur über die
+     * Ecken verformen: Wer die Standardform einen Meter neben dem Haus
+     * gesetzt hatte, musste vier Ecken einzeln nachziehen und hatte
+     * danach ein anderes Dach.
+     */
+    | { art: "flaecheZiehen"; flaeche: string; letzte: Meter }
     | { art: "gruppe"; gruppe: string; reihe: number; spalte: number; letzte: Meter }
     /*
      * Zug am Verschiebe-Symbol. Getrennt von "gruppe": Dort
@@ -230,7 +251,13 @@ export function Leinwand(p: LeinwandProps) {
      * darf dort kein Modul abschalten, das gar nicht darunter liegt.
      */
     | { art: "schieben"; gruppe: string; letzte: Meter }
-    | { art: "drehen"; gruppe: string }
+    /*
+     * Beim Drehen wird der Winkel zwischen Zeiger und Feldmitte
+     * gemessen. Gespeichert wird der Versatz zum Winkel der Gruppe im
+     * Moment des Anfassens — sonst springt das Feld beim ersten
+     * Pixel auf den absoluten Zeigerwinkel.
+     */
+    | { art: "drehen"; gruppe: string; versatz: number }
     | { art: "erweitern"; gruppe: string; richtung: "oben" | "unten" | "links" | "rechts"; start: Meter; angewandt: number }
     | { art: "modul"; gruppe: string; reihe: number; spalte: number }
     | { art: "auswahl"; von: Meter }
@@ -412,6 +439,15 @@ export function Leinwand(p: LeinwandProps) {
       }
     }
 
+    /*
+     * Geistermodul am Zeiger. Es liegt über der Belegung, damit man
+     * sieht, wo es hinkommt — und unter den Bäumen, weil die davor
+     * stehen.
+     */
+    if (stand.current.werkzeug === "setzen" && geisterRef.current) {
+      zeichneGeistermodul(ctx, k, geisterRef.current.ecken, geisterRef.current.passt);
+    }
+
     // Bäume und Nachbargebäude über der Belegung: sie stehen davor.
     if (stand.current.plan.objekte.length > 0) {
       zeichneObjekte(ctx, k, stand.current.plan.objekte);
@@ -466,6 +502,8 @@ export function Leinwand(p: LeinwandProps) {
   }, []);
 
   const zeigerRef = useRef<Meter | null>(null);
+  /** Das Modul am Zeiger im Werkzeug „setzen" — Ecken und ob es passt. */
+  const geisterRef = useRef<{ ecken: Meter[]; passt: boolean } | null>(null);
   /** Anbaustellen aus dem letzten Zeichnen — Grundlage für den Treffer. */
   const stellen = useRef<Array<{ gruppe: string; reihe: number; spalte: number }>>([]);
 
@@ -851,6 +889,96 @@ export function Leinwand(p: LeinwandProps) {
       return punkt;
     };
 
+    /**
+     * Fang beim Ziehen einer vorhandenen Ecke.
+     *
+     * Anderer Fang als beim Zeichnen: Dort zeigt man eine Richtung, hier
+     * hält man einen Punkt fest. Die Toleranz ist deshalb keine
+     * Winkeltoleranz, sondern eine Entfernung — und zwar eine, die sich
+     * am Bildschirm gleich anfühlt: zwölf Bildpunkte, in Meter
+     * umgerechnet. Vorher zog eine 4°-Toleranz die Ecke eines
+     * 18-Meter-Dachs um über einen Meter zur Seite.
+     */
+    const gefangenBeimZiehen = (bp: { x: number; y: number }, bezuege: Meter[]): Meter => {
+      const s = stand.current;
+      const k = kamera.current;
+      const roh = bildZuMeter(k, bp);
+      const bestehende = s.plan.flaechen.flatMap((f) =>
+        kanten(f.punkte).map((kk) => ({ a: kk.a, b: kk.b })),
+      );
+      const toleranzMeter = 12 * meterProPixel(k.ursprung.lat, k.zoom);
+      const { punkt, hinweis } = fangeBeimZiehen(roh, bezuege, bestehende, s.fang, toleranzMeter);
+      setFangHinweis(
+        hinweis === "rechter-winkel" ? "rechter Winkel" : hinweis === "parallel" ? "parallel" : null,
+      );
+      return punkt;
+    };
+
+    /**
+     * Wo läge das Modul, wenn man jetzt klickt — und passt es dort?
+     *
+     * Gerechnet wird auf der Fläche unter dem Zeiger, nicht auf der
+     * gewählten: Wer über das Nachbardach fährt, meint das Nachbardach.
+     */
+    const geisterFuer = (m: Meter): { ecken: Meter[]; passt: boolean } | null => {
+      const s = stand.current;
+      const f =
+        s.plan.flaechen.find((x) => punktInPolygon(m, x.punkte)) ??
+        s.plan.flaechen.find((x) => x.id === s.aktiv);
+      if (!f) return null;
+
+      const vorbild = s.plan.gruppen.find((g) => g.flaeche === f.id);
+      const typ = vorbild?.typ ?? s.plan.gruppen[0]?.typ ?? STANDARD_MODUL;
+      const gruppe = einzelnesModul(f, m, "geist", "Geist", {
+        typ,
+        ausrichtung: vorbild?.ausrichtung ?? "hoch",
+        reihenabstand: vorbild?.reihenabstand ?? 0.02,
+        spaltenabstand: vorbild?.spaltenabstand ?? 0.02,
+        winkel: vorbild?.winkel ?? 0,
+        aufstaenderung: vorbild?.aufstaenderung ?? null,
+      });
+
+      /*
+       * `einzelnesModul` gibt null zurück, wenn es nicht passt. Fürs
+       * Bild wird trotzdem gezeichnet — rot, damit man sieht, WARUM
+       * nichts passiert. Dafür wird die Lage noch einmal ohne Prüfung
+       * gerechnet.
+       */
+      if (gruppe) return { ecken: modulEcken(gruppe, f, 0, 0), passt: true };
+
+      const roh = modulLage(f, m, "geist", "Geist", {
+        typ,
+        ausrichtung: vorbild?.ausrichtung ?? "hoch",
+        reihenabstand: vorbild?.reihenabstand ?? 0.02,
+        spaltenabstand: vorbild?.spaltenabstand ?? 0.02,
+        winkel: vorbild?.winkel ?? 0,
+        aufstaenderung: vorbild?.aufstaenderung ?? null,
+      });
+      return { ecken: modulEcken(roh, f, 0, 0), passt: false };
+    };
+
+    /**
+     * Wie weit Zeiger und Gruppenwinkel beim Anfassen auseinanderliegen.
+     *
+     * Ohne diesen Versatz springt das Feld in dem Moment, in dem man den
+     * Drehgriff berührt: Es übernähme den Winkel des Zeigers, und der
+     * ist selten der Winkel, den das Feld gerade hat.
+     */
+    const drehVersatz = (gruppeId: string, bp: { x: number; y: number }): number => {
+      const s = stand.current;
+      const g = s.plan.gruppen.find((x) => x.id === gruppeId);
+      const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
+      if (!g || !f) return 0;
+      const rahmen = gruppenRahmen(kamera.current, g, f);
+      if (!rahmen) return 0;
+      const mitte = {
+        x: (rahmen.links + rahmen.rechts) / 2,
+        y: (rahmen.oben + rahmen.unten) / 2,
+      };
+      const zeigerWinkel = (Math.atan2(bp.x - mitte.x, mitte.y - bp.y) * 180) / Math.PI;
+      return zeigerWinkel - g.winkel;
+    };
+
     const runter = (e: PointerEvent) => {
       el.setPointerCapture(e.pointerId);
       const bp = ortVon(e);
@@ -873,6 +1001,60 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = { art: "messen" };
         return;
       }
+      if (s.werkzeug === "setzen") {
+        /*
+         * Ein Klick setzt genau ein Modul dorthin, wo das Geisterbild
+         * steht. Passt es nicht, passiert nichts — das Bild hat das
+         * vorher in Rot gesagt.
+         *
+         * Liegt schon ein Feld auf der Fläche, bekommt das neue Modul
+         * dessen Rastermasse und Drehung; so lässt es sich anschliessend
+         * mit den Pluszeichen weiterbauen.
+         */
+        const m = bildZuMeter(kamera.current, bp);
+        const f =
+          s.plan.flaechen.find((x) => punktInPolygon(m, x.punkte)) ??
+          s.plan.flaechen.find((x) => x.id === s.aktiv);
+        if (!f) {
+          setMeldung("Zuerst eine Dachfläche zeichnen.");
+          zieht.current = null;
+          return;
+        }
+
+        const vorbild = s.plan.gruppen.find((g) => g.flaeche === f.id);
+        const belegt = s.plan.gruppen
+          .filter((g) => g.flaeche === f.id)
+          .flatMap((g) => aktiveZellen(g).map((z) => modulEcken(g, f, z.reihe, z.spalte)));
+
+        const neu = einzelnesModul(
+          f,
+          m,
+          naechsteId(s.plan.gruppen.map((g) => g.id), "g"),
+          `Feld ${s.plan.gruppen.length + 1}`,
+          {
+            typ: vorbild?.typ ?? s.plan.gruppen[0]?.typ ?? STANDARD_MODUL,
+            ausrichtung: vorbild?.ausrichtung ?? "hoch",
+            reihenabstand: vorbild?.reihenabstand ?? 0.02,
+            spaltenabstand: vorbild?.spaltenabstand ?? 0.02,
+            winkel: vorbild?.winkel ?? 0,
+            aufstaenderung: vorbild?.aufstaenderung ?? null,
+            besetzt: belegt,
+          },
+        );
+
+        if (!neu) {
+          setMeldung("Hier ist kein Platz — Randabstand, Hindernis oder ein Modul im Weg.");
+          zieht.current = null;
+          return;
+        }
+
+        s.onPlan({ ...s.plan, gruppen: [...s.plan.gruppen, neu] }, true);
+        s.onAktiv(f.id);
+        s.onAktiveGruppe(neu.id);
+        zieht.current = null;
+        return;
+      }
+
       if (s.werkzeug === "baum") {
         /*
          * Ein Klick setzt einen Baum mit Standardmassen — Höhe und
@@ -953,7 +1135,7 @@ export function Leinwand(p: LeinwandProps) {
       if (t?.art === "griff") {
         zieht.current =
           t.welcher === "drehen"
-            ? { art: "drehen", gruppe: t.gruppe }
+            ? { art: "drehen", gruppe: t.gruppe, versatz: drehVersatz(t.gruppe, bp) }
             : t.welcher === "verschieben"
               ? { art: "schieben", gruppe: t.gruppe, letzte: bildZuMeter(kamera.current, bp) }
               : {
@@ -987,6 +1169,22 @@ export function Leinwand(p: LeinwandProps) {
           spalte: t.spalte,
           letzte: bildZuMeter(kamera.current, bp),
         };
+      } else if (
+        t?.art === "flaeche" &&
+        s.bearbeitbar.flaechen &&
+        s.werkzeug === "auswahl" &&
+        s.aktiv === t.flaeche
+      ) {
+        /*
+         * In der GEWÄHLTEN Fläche zieht man sie; in einer anderen wählt
+         * man sie erst aus. Sonst verschöbe der erste Klick auf ein
+         * fremdes Dach dieses gleich mit.
+         */
+        zieht.current = {
+          art: "flaecheZiehen",
+          flaeche: t.flaeche,
+          letzte: bildZuMeter(kamera.current, bp),
+        };
       } else if (t?.art === "ecke") {
         zieht.current = { art: "ecke", flaeche: t.flaeche, index: t.index };
       } else if (t?.art === "kante") {
@@ -1013,6 +1211,32 @@ export function Leinwand(p: LeinwandProps) {
         const m = s.werkzeug === "flaeche" ? gefangen(jetzt, bezug) : bildZuMeter(k, jetzt);
         zeigerRef.current = s.werkzeug === "flaeche" ? m : null;
         setZeigerMeter(m);
+
+        /*
+         * Geistermodul: Bei jeder Zeigerbewegung neu berechnet, damit
+         * man vor dem Klick sieht, wohin das Modul kommt und ob es
+         * überhaupt passt.
+         */
+        if (s.werkzeug === "setzen") {
+          const vorschau = geisterFuer(m);
+          const alt = geisterRef.current;
+          geisterRef.current = vorschau;
+          const gleich =
+            alt &&
+            vorschau &&
+            alt.passt === vorschau.passt &&
+            Math.abs((alt.ecken[0]?.x ?? 0) - (vorschau.ecken[0]?.x ?? 0)) < 1e-6 &&
+            Math.abs((alt.ecken[0]?.y ?? 0) - (vorschau.ecken[0]?.y ?? 0)) < 1e-6;
+          if (!gleich) anstossen();
+          setGeistAttribut(vorschau ? (vorschau.passt ? "passt" : "eng") : undefined);
+          return;
+        }
+        if (geisterRef.current) {
+          geisterRef.current = null;
+          setGeistAttribut(undefined);
+          anstossen();
+        }
+
         if (entwurf.current.length) anstossen();
         return;
       }
@@ -1073,9 +1297,18 @@ export function Leinwand(p: LeinwandProps) {
       if (z.art === "ecke") {
         const f = s.plan.flaechen.find((x) => x.id === z.flaeche);
         if (!f) return;
-        const nachbarn = f.punkte.filter((_, i) => i !== z.index);
-        const bezug = f.punkte[(z.index - 1 + f.punkte.length) % f.punkte.length]!;
-        const ziel = gefangen(jetzt, nachbarn.length ? bezug : null);
+        /*
+         * Gefangen wird gegen BEIDE Nachbarecken: Eine Ecke gehört zu
+         * zwei Kanten, und beide sollen gerade werden können. Vorher
+         * zählte nur die vorige — die andere Kante liess sich nicht
+         * ausrichten.
+         */
+        const n = f.punkte.length;
+        const bezuege = [
+          f.punkte[(z.index - 1 + n) % n]!,
+          f.punkte[(z.index + 1) % n]!,
+        ];
+        const ziel = gefangenBeimZiehen(jetzt, bezuege);
         aendereFlaeche(
           z.flaeche,
           (alt) => ({ ...alt, punkte: alt.punkte.map((pp, i) => (i === z.index ? ziel : pp)) }),
@@ -1104,7 +1337,15 @@ export function Leinwand(p: LeinwandProps) {
         if (!rahmen) return;
         const mitteBild = { x: (rahmen.links + rahmen.rechts) / 2, y: (rahmen.oben + rahmen.unten) / 2 };
         // Winkel des Zeigers gegen „oben" — der Drehgriff sitzt dort.
-        const roh = (Math.atan2(jetzt.x - mitteBild.x, mitteBild.y - jetzt.y) * 180) / Math.PI;
+        const zeigerWinkel =
+          (Math.atan2(jetzt.x - mitteBild.x, mitteBild.y - jetzt.y) * 180) / Math.PI;
+        /*
+         * Der beim Anfassen gemerkte Versatz macht das Drehen ruhig:
+         * Vorher übernahm das Feld sofort den absoluten Zeigerwinkel
+         * und sprang beim ersten Pixel um den Betrag, um den Griff und
+         * Zeiger auseinanderlagen.
+         */
+        const roh = zeigerWinkel - z.versatz;
         // Traufparallel einrasten: der mit Abstand häufigste Fall.
         const winkel = Math.abs(roh) < 4 ? 0 : Math.round(roh * 2) / 2;
         s.onPlan(
@@ -1181,6 +1422,52 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
+      if (z.art === "flaecheZiehen") {
+        const jetztM = bildZuMeter(k, jetzt);
+        const um = { x: jetztM.x - z.letzte.x, y: jetztM.y - z.letzte.y };
+        z.letzte = jetztM;
+
+        /*
+         * Alles, was auf dem Dach liegt, wandert mit: Hindernisse und
+         * Modulfelder. Bliebe die Belegung stehen, läge sie nach dem
+         * Verschieben neben dem Haus — und `nachfuehren` würde sie beim
+         * nächsten Anfassen wegwerfen.
+         */
+        s.onPlan(
+          {
+            ...s.plan,
+            flaechen: s.plan.flaechen.map((f) =>
+              f.id === z.flaeche
+                ? {
+                    ...f,
+                    punkte: f.punkte.map((pp) => ({ x: pp.x + um.x, y: pp.y + um.y })),
+                    hindernisse: f.hindernisse.map((h) => ({
+                      ...h,
+                      punkte: h.punkte.map((pp) => ({ x: pp.x + um.x, y: pp.y + um.y })),
+                    })),
+                  }
+                : f,
+            ),
+            gruppen: s.plan.gruppen.map((g) =>
+              g.flaeche === z.flaeche
+                ? {
+                    ...g,
+                    anker: { x: g.anker.x + um.x, y: g.anker.y + um.y },
+                    frei: Object.fromEntries(
+                      Object.entries(g.frei).map(([schluessel, p]) => [
+                        schluessel,
+                        { x: p.x + um.x, y: p.y + um.y },
+                      ]),
+                    ),
+                  }
+                : g,
+            ),
+          },
+          false,
+        );
+        return;
+      }
+
       if (z.art === "kante") {
         const jetztM = bildZuMeter(k, jetzt);
         const um = { x: jetztM.x - z.letzte.x, y: jetztM.y - z.letzte.y };
@@ -1217,6 +1504,13 @@ export function Leinwand(p: LeinwandProps) {
       if (z?.art === "malen") {
         zieht.current = null;
         // Einen Rückschritt für den ganzen Zug, nicht je Modul.
+        s.onPlan(s.plan, true);
+        return;
+      }
+
+      if (z?.art === "flaecheZiehen") {
+        zieht.current = null;
+        // Ein Rückschritt für den ganzen Zug, nicht dreissig.
         s.onPlan(s.plan, true);
         return;
       }
@@ -1493,7 +1787,7 @@ export function Leinwand(p: LeinwandProps) {
       if (t?.art === "griff") {
         zieht.current =
           t.welcher === "drehen"
-            ? { art: "drehen", gruppe: t.gruppe }
+            ? { art: "drehen", gruppe: t.gruppe, versatz: drehVersatz(t.gruppe, bp) }
             : t.welcher === "verschieben"
               ? { art: "schieben", gruppe: t.gruppe, letzte: bildZuMeter(kamera.current, bp) }
               : {
@@ -1600,6 +1894,7 @@ export function Leinwand(p: LeinwandProps) {
     <div
       ref={huelle}
       data-testid="planer-leinwand"
+      data-geist={geistAttribut}
       data-gruppenrahmen={rahmenAttribut}
       className="relative h-full w-full overflow-hidden bg-pl-flaeche"
       style={{

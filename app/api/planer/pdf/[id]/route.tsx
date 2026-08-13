@@ -2,7 +2,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
 import { type PlanungPdfData, PlanungPdf } from "@/lib/pdf/planung";
 import { markeAus } from "@/lib/marke";
-import { aktiveZellen, anzahlModule, kwp } from "@/lib/planer/module";
+import { aktiveZellen, anzahlModule, ausrichtungen, kwp } from "@/lib/planer/module";
 import { modulSchluessel, planLesen } from "@/lib/planer/plan";
 import { bedarfAusPlan, type GeraeteStand } from "@/lib/planer/uebergabe";
 import { pruefe } from "@/lib/planer/elektrik";
@@ -119,16 +119,23 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const gruppen = plan.gruppen.flatMap((g) => {
     const flaeche = plan.flaechen.find((f) => f.id === g.flaeche);
     if (!flaeche) return [];
+    const leistung = kwp(g);
     /*
-     * Serverseitig wird der Fallback gerechnet, nicht PVGIS gefragt.
+     * Je Ausrichtung getrennt — dieselbe Regel wie am Bildschirm. Ein
+     * Ost/West-Flachdach besteht aus zwei Hälften, und ihr Mittelwert
+     * wäre Süden.
+     *
+     * Serverseitig wird der Fallback gerechnet, nicht PVGIS gefragt:
      * Das PDF entsteht auf Knopfdruck und darf nicht an einer fremden
      * API hängen; die Herkunft steht auf der Ertragsseite dabei.
      */
-    const e = fallbackErtrag(
-      { lat, lon: 0, azimut: flaeche.azimut, neigung: flaeche.neigung, verlustProzent: 14 },
-      regionAus(lat),
-    );
-    return [{ kwp: kwp(g), spezifisch: e.spezifisch, monate: e.monate }];
+    return ausrichtungen(g, flaeche).map((a) => {
+      const e = fallbackErtrag(
+        { lat, lon: 0, azimut: a.azimut, neigung: a.neigung, verlustProzent: 14 },
+        regionAus(lat),
+      );
+      return { kwp: leistung * a.anteil, spezifisch: e.spezifisch, monate: e.monate };
+    });
   });
   const roh = anlagenErtrag(gruppen);
 

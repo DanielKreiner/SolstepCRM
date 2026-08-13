@@ -126,6 +126,42 @@ nur die Antwortzeit: Ein Tipp auf ein Modul muss binnen einer Sekunde
 wirken, geprüft mit einer 40 × 20 m grossen Halle. Ob die Karte dabei
 flüssig läuft, sagt kein Testlauf im Hintergrund verlässlich.
 
+## Ziehen und Setzen (13.08.2026)
+
+Drei Meldungen aus der Benutzung, alle bestätigt und behoben:
+
+| Was war | Was jetzt | Geprüft in |
+|---------|-----------|-----------|
+| Eine gesetzte Dachform liess sich nur über die Ecken verformen | Ziehen in der gewählten Fläche verschiebt sie samt Hindernissen und Belegung | `e2e/planer-zeichnen.spec.ts` |
+| Beim Ziehen einer Ecke sprang die Kante von 18 auf 21 m | Fang projiziert lotrecht und greift erst im Umkreis von zwölf Bildpunkten | `lib/planer/flaeche.spec.ts` |
+| Nur „Dach voll belegen"; ein einzelnes Modul ging nicht | Werkzeug „Setzen" mit Geistermodul am Zeiger — grün passt, rot passt nicht | `e2e/planer-setzen.spec.ts`, `lib/planer/module.spec.ts` |
+
+Der Sprung war kein Zufallsfehler, sondern die Winkeltoleranz: Der Fang
+beim Zeichnen dreht den Punkt um den Bezugspunkt und behält die Länge.
+Bei 18 m Abstand sind 4° eben 1,26 m. Beim Ziehen einer bestehenden Ecke
+ist das die falsche Rechnung — dort zählt der Abstand zum Strahl, nicht
+der Winkel.
+
+## Ost/West-Aufständerung — die Zahl, die falsch war
+
+Bis 13.08.2026 wurde die Aufständerungsart zwar gespeichert, aber
+nirgends gerechnet: Nur der Winkel ging in den Ertrag ein, die Richtung
+nicht. Ein Ost/West-Flachdach wurde also mit dem Azimut der Dachfläche
+gerechnet — und der stammt beim Flachdach aus einer beliebigen
+Traufkante.
+
+Jetzt bestimmt das Gestell die Ausrichtung (`ausrichtungen()` in
+`lib/planer/module.ts`):
+
+- **Süd:** alles nach Süden, im Gestellwinkel — unabhängig davon, wie
+  das Flachdach selbst orientiert ist
+- **Ost/West:** zwei Hälften, 90° und 270°, getrennt gerechnet und nach
+  Leistung gewichtet
+
+Der Mittelwert aus Ost und West wäre Süden; der Ertrag läge über zehn
+Prozent zu hoch. Bildschirm und PDF benutzen dieselbe Funktion.
+Geprüft in `lib/planer/module.spec.ts`.
+
 ## Vorgang ↔ Planung (13.08.2026)
 
 Der Weg lief bisher nur in eine Richtung: Aus einer fertigen Planung

@@ -8,7 +8,7 @@ import {
   type Quelle,
   zwischenwert,
 } from "@/lib/planer/ertrag";
-import { kwp } from "@/lib/planer/module";
+import { ausrichtungen, kwp } from "@/lib/planer/module";
 import type { Plan } from "@/lib/planer/plan";
 import {
   anlagenVerschattung,
@@ -60,6 +60,11 @@ interface FlaechenStand {
   neigung: number;
 }
 
+/** Schlüssel des Ertragsspeichers: die Ausrichtung selbst. */
+function ausrichtungsSchluessel(azimut: number, neigung: number): string {
+  return `${Math.round(azimut)}|${Math.round(neigung)}`;
+}
+
 const LEER: AnlagenErtrag = {
   kwp: 0,
   jahresertragKwh: 0,
@@ -99,26 +104,44 @@ export function useErtrag(
     .map((g) => `${g.id}:${g.reihen}x${g.spalten}:${g.aus.length}:${g.anker.x.toFixed(2)}`)
     .join("|");
 
-  const ausrichtungen = plan.flaechen
-    .map((f) => `${f.id}:${Math.round(f.azimut)}:${Math.round(f.neigung)}`)
-    .join("|");
+  /*
+   * Welche Ausrichtungen die Anlage überhaupt hat.
+   *
+   * Nicht mehr je Dachfläche: Ein aufgeständertes Flachdach schaut
+   * dorthin, wo das Gestell hinzeigt — bei Ost/West in ZWEI Richtungen.
+   * Der Ertrag wird deshalb je Ausrichtung geholt und mit der jeweiligen
+   * Leistung gewichtet. Ein Mittelwert aus Ost und West wäre Süden und
+   * läge über zehn Prozent zu hoch.
+   */
+  const anteile = plan.gruppen.flatMap((g) => {
+    const f = plan.flaechen.find((x) => x.id === g.flaeche);
+    if (!f) return [];
+    const leistung = kwp(g);
+    return ausrichtungen(g, f).map((a) => ({
+      kwp: leistung * a.anteil,
+      azimut: Math.round(a.azimut),
+      neigung: Math.round(a.neigung),
+    }));
+  });
+
+  const gebraucht = [...new Set(anteile.map((a) => ausrichtungsSchluessel(a.azimut, a.neigung)))]
+    .sort()
+    .join(";");
 
   useEffect(() => {
-    const flaechen = ausrichtungen ? ausrichtungen.split("|") : [];
-    if (flaechen.length === 0) return;
+    const noetig = gebraucht ? gebraucht.split(";") : [];
+    if (noetig.length === 0) return;
 
     let abgebrochen = false;
     const uhr = setTimeout(async () => {
       setLaedt(true);
       await Promise.all(
-        flaechen.map(async (eintrag) => {
-          const [id, azimutText, neigungText] = eintrag.split(":");
-          if (!id) return;
+        noetig.map(async (schluessel) => {
+          const [azimutText, neigungText] = schluessel.split("|");
           const azimut = Number(azimutText);
           const neigung = Number(neigungText);
-
-          const bekannt = antworten.current.get(id);
-          if (bekannt && bekannt.azimut === azimut && bekannt.neigung === neigung) return;
+          if (!Number.isFinite(azimut) || !Number.isFinite(neigung)) return;
+          if (antworten.current.has(schluessel)) return;
 
           const url =
             `/api/planer/ertrag?lat=${ursprung.lat}&lon=${ursprung.lon}` +
@@ -127,7 +150,7 @@ export function useErtrag(
             const antwort = await fetch(url);
             if (!antwort.ok || abgebrochen) return;
             const daten = (await antwort.json()) as ErtragAntwort;
-            antworten.current.set(id, { antwort: daten, azimut, neigung });
+            antworten.current.set(schluessel, { antwort: daten, azimut, neigung });
           } catch {
             /*
              * Netz weg: den letzten bekannten Wert stehen lassen. Ein
@@ -148,7 +171,7 @@ export function useErtrag(
       abgebrochen = true;
       clearTimeout(uhr);
     };
-  }, [ausrichtungen, ursprung.lat, ursprung.lon, verlustProzent]);
+  }, [gebraucht, ursprung.lat, ursprung.lon, verlustProzent]);
 
   /*
    * Aus den vorliegenden Antworten die Anlage rechnen. Flächen, deren
@@ -159,21 +182,26 @@ export function useErtrag(
   let vorlaeufig = false;
   let irgendwasGeschaetzt = false;
 
-  const gruppen = plan.gruppen.flatMap((g) => {
-    const flaeche = plan.flaechen.find((f) => f.id === g.flaeche);
-    const stand = flaeche ? antworten.current.get(flaeche.id) : undefined;
-    if (!flaeche || !stand) return [];
-
-    const jetzt = { azimut: Math.round(flaeche.azimut), neigung: Math.round(flaeche.neigung) };
-    const passt = stand.azimut === jetzt.azimut && stand.neigung === jetzt.neigung;
-    if (!passt) vorlaeufig = true;
+  const gruppen = anteile.flatMap((a) => {
+    const stand = antworten.current.get(ausrichtungsSchluessel(a.azimut, a.neigung));
+    if (!stand) {
+      /*
+       * Für diese Ausrichtung ist noch keine Antwort da. Statt sie
+       * wegzulassen — die Anlage wäre dann sprunghaft kleiner — wird
+       * aus einer vorhandenen hochgerechnet.
+       */
+      const irgendeine = [...antworten.current.values()][0];
+      if (!irgendeine) return [];
+      vorlaeufig = true;
+      const antwort = zwischenwert(
+        irgendeine.antwort,
+        { azimut: irgendeine.azimut, neigung: irgendeine.neigung },
+        { azimut: a.azimut, neigung: a.neigung },
+      );
+      return [{ kwp: a.kwp, spezifisch: antwort.spezifisch, monate: antwort.monate }];
+    }
     if (stand.antwort.quelle === "geschaetzt") irgendwasGeschaetzt = true;
-
-    const antwort = passt
-      ? stand.antwort
-      : zwischenwert(stand.antwort, { azimut: stand.azimut, neigung: stand.neigung }, jetzt);
-
-    return [{ kwp: kwp(g), spezifisch: antwort.spezifisch, monate: antwort.monate }];
+    return [{ kwp: a.kwp, spezifisch: stand.antwort.spezifisch, monate: stand.antwort.monate }];
   });
 
   /*

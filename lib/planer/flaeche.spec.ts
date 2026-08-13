@@ -8,6 +8,7 @@ import {
   falllinie,
   FANG_STANDARD,
   fange,
+  fangeBeimZiehen,
   grundflaeche,
   imInnenbereich,
   kanteVerschieben,
@@ -407,5 +408,60 @@ describe("Wahre Kantenlängen auf dem geneigten Dach", () => {
     const a = { x: 0, y: 0 };
     const b = { x: 12, y: 0 };
     expect(planlaengeFuerDach(a, b, fall, 30, 14)).toBeCloseTo(14, 6);
+  });
+});
+
+describe("Fang beim Ziehen einer Ecke", () => {
+  const keine: Array<{ a: Meter; b: Meter }> = [];
+  const opt = { ...FANG_STANDARD };
+
+  it("zieht nur um Zentimeter gerade, nicht um Meter", () => {
+    /*
+     * Der Kern des Fehlers: Beim Zeichnen dreht der Fang den Punkt um
+     * den Bezug und behält die Länge — bei 18 m Abstand sind 4°
+     * Toleranz über einen Meter Versatz, und die Kante sprang von 18
+     * auf 21 m. Beim Ziehen wird stattdessen lotrecht projiziert.
+     */
+    const bezug = { x: 0, y: 0 };
+    const ziel = { x: 18, y: 0.1 };
+    const { punkt, hinweis } = fangeBeimZiehen(ziel, [bezug], keine, opt, 0.2);
+    expect(hinweis).toBe("rechter-winkel");
+    expect(punkt.x).toBeCloseTo(18, 6);
+    expect(punkt.y).toBeCloseTo(0, 6);
+  });
+
+  it("greift nicht, wenn der Zeiger zu weit weg ist", () => {
+    const { hinweis } = fangeBeimZiehen({ x: 18, y: 1.2 }, [{ x: 0, y: 0 }], keine, opt, 0.2);
+    expect(hinweis).not.toBe("rechter-winkel");
+  });
+
+  it("fängt gegen beide Nachbarecken", () => {
+    /*
+     * Eine Ecke gehört zu zwei Kanten. Vorher zählte nur die vorige —
+     * die andere liess sich nicht ausrichten.
+     */
+    const links = { x: 0, y: 0 };
+    const rechts = { x: 0, y: 9 };
+    const { punkt, hinweis } = fangeBeimZiehen(
+      { x: 0.08, y: 4.5 },
+      [links, rechts],
+      keine,
+      opt,
+      0.2,
+    );
+    expect(hinweis).toBe("rechter-winkel");
+    expect(punkt.x).toBeCloseTo(0, 6);
+  });
+
+  it("rastet aufs Raster, wenn keine Richtung passt", () => {
+    const { punkt, hinweis } = fangeBeimZiehen(
+      { x: 3.123, y: 4.567 },
+      [{ x: 0, y: 0 }],
+      keine,
+      { ...opt, rechterWinkel: false, parallel: false },
+      0.2,
+    );
+    expect(hinweis).toBe("raster");
+    expect(punkt.x).toBeCloseTo(3.1, 9);
   });
 });
