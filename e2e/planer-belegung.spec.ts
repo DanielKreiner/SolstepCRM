@@ -108,14 +108,14 @@ test.describe("Planer — Belegung", () => {
     await page.getByRole("button", { name: /^Entfernen: Feld \d+$/ }).click();
     await page.getByRole("button", { name: /^1 Dach/ }).click();
     await page.getByRole("button", { name: /^Fläche 1/ }).click();
-    await page.getByRole("button", { name: /Hindernis aufziehen/ }).click();
+    await page.getByRole("button", { name: /Sperrzone aufziehen/ }).click();
     const kasten = (await page.getByTestId("planer-leinwand").boundingBox())!;
     const m = { x: kasten.x + kasten.width / 2, y: kasten.y + kasten.height / 2 };
     await page.mouse.move(m.x - 40, m.y - 30);
     await page.mouse.down();
     await page.mouse.move(m.x + 40, m.y + 30, { steps: 10 });
     await page.mouse.up();
-    await expect(page.getByText(/Hindernisse \(1\)/i)).toBeVisible();
+    await expect(page.getByText(/Sperrzonen \(1\)/i)).toBeVisible();
 
     await belegen(page);
     await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(0);

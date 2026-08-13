@@ -206,20 +206,20 @@ test.describe("Planer — Zeichnen", () => {
     await zeichneRechteck(page, 140, 80);
 
     const mitte = await stelle(page, 0, 0);
-    await page.getByRole("button", { name: /Hindernis aufziehen/ }).click();
+    await page.getByRole("button", { name: /Sperrzone aufziehen/ }).click();
 
     // Kamin mitten auf dem Dach: wird angelegt.
     await page.mouse.move(mitte.x - 30, mitte.y - 20);
     await page.mouse.down();
     await page.mouse.move(mitte.x + 20, mitte.y + 30, { steps: 10 });
     await page.mouse.up();
-    await expect(page.getByText(/Hindernisse \(1\)/i)).toBeVisible();
+    await expect(page.getByText(/Sperrzonen \(1\)/i)).toBeVisible();
 
     /*
      * Und daneben: ein Kamin ausserhalb des Dachs sperrt nichts und
      * taucht in keiner Rechnung auf. Er darf nicht still entstehen.
      */
-    await page.getByRole("button", { name: /Hindernis aufziehen/ }).click();
+    await page.getByRole("button", { name: /Sperrzone aufziehen/ }).click();
     /*
      * Deutlich neben der Fläche (die reicht bis ±140/±80), aber weit
      * genug INNERHALB der Zeichenfläche: endet der Zug ausserhalb, geht
@@ -231,9 +231,9 @@ test.describe("Planer — Zeichnen", () => {
     await page.mouse.up();
 
     await expect(
-      page.getByText(/Hindernis muss auf der gewählten Dachfläche liegen/),
+      page.getByText(/Sperrzone muss auf der gewählten Dachfläche liegen/),
     ).toBeVisible();
-    await expect(page.getByText(/Hindernisse \(1\)/i)).toBeVisible();
+    await expect(page.getByText(/Sperrzonen \(1\)/i)).toBeVisible();
   });
 
   test("Plan übersteht das Neuladen", async ({ page }) => {

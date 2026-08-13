@@ -66,7 +66,16 @@ export function modulname(m: { hersteller: string; bezeichnung: string }): strin
 export function ModulSchritt(p: ModulSchrittProps) {
   const [hinweis, setHinweis] = useState<string | null>(null);
   const gewaehltesModul = p.module.find((m) => m.id === p.plan.technik.modul) ?? null;
-  const flaeche = p.plan.flaechen.find((f) => f.id === p.aktiv) ?? p.plan.flaechen[0] ?? null;
+  /*
+   * KEIN Rückfall auf die erste Fläche.
+   *
+   * Vorher belegte „Restfläche belegen" bei mehreren Dächern
+   * irgendeines — nämlich das erste in der Liste. Wer zwei Dachflächen
+   * hat, findet die Module dann dort, wo er sie nicht wollte. Ist keine
+   * gewählt, wird gefragt.
+   */
+  const flaeche = p.plan.flaechen.find((f) => f.id === p.aktiv) ?? null;
+  const mehrereFlaechen = p.plan.flaechen.length > 1;
   const gruppe = p.plan.gruppen.find((g) => g.id === p.aktiveGruppe) ?? null;
   const flaecheDerGruppe = gruppe
     ? (p.plan.flaechen.find((f) => f.id === gruppe.flaeche) ?? null)
@@ -135,6 +144,18 @@ export function ModulSchritt(p: ModulSchrittProps) {
         </div>
       )}
 
+      {/* ── Welche Fläche? ────────────────────────────────────────── */}
+      {p.schreibrecht && !flaeche && p.plan.flaechen.length > 0 ? (
+        <div className="flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-3.5">
+          <h3 className="text-[13.5px] font-bold">Welche Fläche soll belegt werden?</h3>
+          {p.plan.flaechen.map((f) => (
+            <Knopf key={f.id} art="zweit" onClick={() => p.onAktiv(f.id)}>
+              {f.name}
+            </Knopf>
+          ))}
+        </div>
+      ) : null}
+
       {/* ── Belegen ───────────────────────────────────────────────── */}
       {p.schreibrecht && flaeche ? (
         <Knopf
@@ -156,7 +177,9 @@ export function ModulSchritt(p: ModulSchrittProps) {
             p.module.length > 0 && !gewaehltesModul ? "Zuerst oben ein Modul wählen" : undefined
           }
         >
-          {p.plan.gruppen.length === 0 ? "Dach voll belegen" : "Restfläche belegen"}
+          {p.plan.gruppen.some((g) => g.flaeche === flaeche.id)
+            ? `Restfläche belegen${mehrereFlaechen ? ` (${flaeche.name})` : ""}`
+            : `Dach voll belegen${mehrereFlaechen ? ` (${flaeche.name})` : ""}`}
         </Knopf>
       ) : null}
 

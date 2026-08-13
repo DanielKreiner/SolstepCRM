@@ -257,7 +257,7 @@ export function Leinwand(p: LeinwandProps) {
      * Moment des Anfassens — sonst springt das Feld beim ersten
      * Pixel auf den absoluten Zeigerwinkel.
      */
-    | { art: "drehen"; gruppe: string; versatz: number }
+    | { art: "drehen"; gruppe: string; versatz: number; mitte: Meter }
     | { art: "erweitern"; gruppe: string; richtung: "oben" | "unten" | "links" | "rechts"; start: Meter; angewandt: number }
     | { art: "modul"; gruppe: string; reihe: number; spalte: number }
     | { art: "auswahl"; von: Meter }
@@ -746,7 +746,7 @@ export function Leinwand(p: LeinwandProps) {
         y: punkte.reduce((a, q) => a + q.y, 0) / punkte.length,
       };
       if (ziel && !punktInPolygon(mitte, ziel.punkte)) {
-        setMeldung("Das Hindernis muss auf der gewählten Dachfläche liegen.");
+        setMeldung("Die Sperrzone muss auf der gewählten Dachfläche liegen.");
         entwurf.current = [];
         setEntwurfLaenge(0);
         anstossen();
@@ -762,7 +762,7 @@ export function Leinwand(p: LeinwandProps) {
               {
                 id: naechsteId(f.hindernisse.map((h) => h.id), "h"),
                 art: "polygon",
-                name: `Hindernis ${f.hindernisse.length + 1}`,
+                name: `Sperrzone ${f.hindernisse.length + 1}`,
                 punkte,
                 abstand: 0.3,
               },
@@ -964,19 +964,43 @@ export function Leinwand(p: LeinwandProps) {
      * Drehgriff berührt: Es übernähme den Winkel des Zeigers, und der
      * ist selten der Winkel, den das Feld gerade hat.
      */
-    const drehVersatz = (gruppeId: string, bp: { x: number; y: number }): number => {
+    const drehStart = (
+      gruppeId: string,
+      bp: { x: number; y: number },
+    ): { versatz: number; mitte: Meter } => {
       const s = stand.current;
       const g = s.plan.gruppen.find((x) => x.id === gruppeId);
       const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
-      if (!g || !f) return 0;
-      const rahmen = gruppenRahmen(kamera.current, g, f);
-      if (!rahmen) return 0;
-      const mitte = {
-        x: (rahmen.links + rahmen.rechts) / 2,
-        y: (rahmen.oben + rahmen.unten) / 2,
-      };
-      const zeigerWinkel = (Math.atan2(bp.x - mitte.x, mitte.y - bp.y) * 180) / Math.PI;
-      return zeigerWinkel - g.winkel;
+      if (!g || !f) return { versatz: 0, mitte: { x: 0, y: 0 } };
+
+      /*
+       * Der Drehpunkt wird EINMAL bestimmt und in Metern gemerkt.
+       *
+       * Vorher wurde er bei jeder Bewegung aus dem umschliessenden
+       * Rechteck gerechnet — und das ändert sich beim Drehen selbst.
+       * Der Bezugspunkt wanderte also unter der Drehung weg, der
+       * gemessene Winkel zappelte, und das Feld zuckte statt zu folgen.
+       */
+      const zellen = aktiveZellen(g);
+      const punkte = zellen.flatMap((z) => modulEcken(g, f, z.reihe, z.spalte));
+      const mitte = punkte.length
+        ? {
+            x: punkte.reduce((sum, q) => sum + q.x, 0) / punkte.length,
+            y: punkte.reduce((sum, q) => sum + q.y, 0) / punkte.length,
+          }
+        : g.anker;
+
+      const m = meterZuBild(kamera.current, mitte);
+      const zeigerWinkel = (Math.atan2(bp.x - m.x, m.y - bp.y) * 180) / Math.PI;
+      /*
+       * PLUS, nicht minus: Ein positiver Gruppenwinkel dreht das Raster
+       * im Metersystem gegen den Uhrzeigersinn — und weil die
+       * Bildschirmachse nach unten zeigt, sieht man das ebenfalls gegen
+       * den Uhrzeigersinn. Wer den Griff nach rechts zieht, meint aber
+       * im Uhrzeigersinn. Das Feld drehte sich deshalb genau andersherum
+       * als die Hand.
+       */
+      return { versatz: zeigerWinkel + g.winkel, mitte };
     };
 
     const runter = (e: PointerEvent) => {
@@ -1051,6 +1075,17 @@ export function Leinwand(p: LeinwandProps) {
         s.onPlan({ ...s.plan, gruppen: [...s.plan.gruppen, neu] }, true);
         s.onAktiv(f.id);
         s.onAktiveGruppe(neu.id);
+        /*
+         * Nach dem ersten Modul zurück auf „Wählen".
+         *
+         * Sonst hängt sofort das nächste Geistermodul am Zeiger, und
+         * man setzt aus Versehen ein zweites irgendwohin. Weitergebaut
+         * wird mit den Pluszeichen — die zeigen genau dort, wo ein
+         * Modul auch wirklich anschliesst.
+         */
+        s.onWerkzeug("auswahl");
+        geisterRef.current = null;
+        setGeistAttribut(undefined);
         zieht.current = null;
         return;
       }
@@ -1135,7 +1170,7 @@ export function Leinwand(p: LeinwandProps) {
       if (t?.art === "griff") {
         zieht.current =
           t.welcher === "drehen"
-            ? { art: "drehen", gruppe: t.gruppe, versatz: drehVersatz(t.gruppe, bp) }
+            ? { art: "drehen", gruppe: t.gruppe, ...drehStart(t.gruppe, bp) }
             : t.welcher === "verschieben"
               ? { art: "schieben", gruppe: t.gruppe, letzte: bildZuMeter(kamera.current, bp) }
               : {
@@ -1333,9 +1368,8 @@ export function Leinwand(p: LeinwandProps) {
         const g = s.plan.gruppen.find((x) => x.id === z.gruppe);
         const f = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
         if (!g || !f) return;
-        const rahmen = gruppenRahmen(k, g, f);
-        if (!rahmen) return;
-        const mitteBild = { x: (rahmen.links + rahmen.rechts) / 2, y: (rahmen.oben + rahmen.unten) / 2 };
+        // Fester Drehpunkt aus dem Moment des Anfassens.
+        const mitteBild = meterZuBild(k, z.mitte);
         // Winkel des Zeigers gegen „oben" — der Drehgriff sitzt dort.
         const zeigerWinkel =
           (Math.atan2(jetzt.x - mitteBild.x, mitteBild.y - jetzt.y) * 180) / Math.PI;
@@ -1345,7 +1379,7 @@ export function Leinwand(p: LeinwandProps) {
          * und sprang beim ersten Pixel um den Betrag, um den Griff und
          * Zeiger auseinanderlagen.
          */
-        const roh = zeigerWinkel - z.versatz;
+        const roh = z.versatz - zeigerWinkel;
         // Traufparallel einrasten: der mit Abstand häufigste Fall.
         const winkel = Math.abs(roh) < 4 ? 0 : Math.round(roh * 2) / 2;
         s.onPlan(
@@ -1787,7 +1821,7 @@ export function Leinwand(p: LeinwandProps) {
       if (t?.art === "griff") {
         zieht.current =
           t.welcher === "drehen"
-            ? { art: "drehen", gruppe: t.gruppe, versatz: drehVersatz(t.gruppe, bp) }
+            ? { art: "drehen", gruppe: t.gruppe, ...drehStart(t.gruppe, bp) }
             : t.welcher === "verschieben"
               ? { art: "schieben", gruppe: t.gruppe, letzte: bildZuMeter(kamera.current, bp) }
               : {
@@ -2058,7 +2092,7 @@ export function Leinwand(p: LeinwandProps) {
             {p.werkzeug === "flaeche"
               ? "Dachfläche zeichnen"
               : p.werkzeug === "hindernis"
-                ? "Hindernis aufziehen"
+                ? "Sperrzone aufziehen"
                 : p.werkzeug === "modul"
                   ? "Modul versetzen"
                   : p.werkzeug === "string"
@@ -2077,7 +2111,7 @@ export function Leinwand(p: LeinwandProps) {
                 ? "Ersten Punkt antippen oder Enter schliesst die Fläche · Esc bricht ab"
                 : "Ecken antippen · ab drei Punkten schliessbar"
               : p.werkzeug === "hindernis"
-                ? "Rechteck über Kamin, Fenster oder Gaube ziehen"
+                ? "Rechteck über Kamin, Gaube, Fenster oder Wartungsweg ziehen"
                 : p.werkzeug === "modul"
                   ? "Modul aus dem Raster ziehen · Antippen setzt es zurück"
                   : p.werkzeug === "string"

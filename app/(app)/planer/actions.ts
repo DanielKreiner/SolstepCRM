@@ -176,6 +176,93 @@ const FOTO_TYPEN = new Set(["image/jpeg", "image/png", "image/webp"]);
 /** Drohnenaufnahmen sind gross; 25 MB decken 48-Megapixel-Bilder ab. */
 const FOTO_MAX = 25 * 1024 * 1024;
 
+/**
+ * Ziel für einen Direktupload aus dem Browser.
+ *
+ * Warum nicht mehr durch die Server Action: Die nimmt standardmässig
+ * ein Megabyte entgegen, und auf Vercel ist bei viereinhalb Schluss.
+ * Ein Drohnenfoto hat fünf bis zwölf — die Aktion antwortete mit 500,
+ * und in der gebauten Fassung stand beim Betrieb nur „Application
+ * error: a client-side exception has occurred". Ein Foto, das der
+ * Planer ausdrücklich anbietet, darf nicht an der Grösse scheitern.
+ *
+ * Deshalb: Hier entsteht nur eine signierte Adresse, hochgeladen wird
+ * direkt vom Browser zu Supabase. Der Server sieht die Datei nie.
+ */
+export async function fotoZiel(
+  projektId: string,
+  endung: string,
+): Promise<{ pfad: string; token: string } | { fehler: string }> {
+  const z1 = await zugang();
+  if (!z1.ok) return { fehler: z1.status.error ?? "Kein Zugriff." };
+
+  const id = z.string().uuid().safeParse(projektId);
+  if (!id.success) return { fehler: "Projekt nicht gefunden." };
+
+  const sauber = endung.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "jpg";
+  const pfad = `${z1.me.companyId}/${id.data}/foto.${sauber}`;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(pfad, {
+    upsert: true,
+  });
+  if (error || !data) return { fehler: "Upload konnte nicht vorbereitet werden." };
+  return { pfad: data.path, token: data.token };
+}
+
+/**
+ * Das hochgeladene Foto am Projekt vermerken.
+ *
+ * Getrennt vom Upload, weil nur diese paar Zahlen durch die Aktion
+ * gehen — nicht die Datei.
+ */
+export async function fotoVermerken(daten: {
+  id: string;
+  pfad: string;
+  breite: number;
+  hoehe: number;
+}): Promise<PlanerState> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const geprueft = z
+    .object({
+      id: z.string().uuid(),
+      pfad: z.string().min(3).max(300),
+      breite: z.number().int().min(1).max(60000),
+      hoehe: z.number().int().min(1).max(60000),
+    })
+    .safeParse(daten);
+  if (!geprueft.success) return { error: "Bildmasse fehlen.", ok: null };
+
+  /*
+   * Der Pfad muss zum eigenen Mandanten und zum Projekt gehören.
+   * Sonst liesse sich über diese Aktion ein fremdes Bild anhängen —
+   * die signierte Adresse kommt zwar von uns, die Angabe hier aber
+   * vom Browser.
+   */
+  const erwartet = `${z1.me.companyId}/${geprueft.data.id}/`;
+  if (!geprueft.data.pfad.startsWith(erwartet)) {
+    return { error: "Pfad gehört nicht zu diesem Projekt.", ok: null };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("planer_projekt")
+    .update({
+      foto_pfad: geprueft.data.pfad,
+      foto_breite: geprueft.data.breite,
+      foto_hoehe: geprueft.data.hoehe,
+      foto_meter_pro_pixel: null,
+    })
+    .eq("id", geprueft.data.id);
+
+  if (error) return { error: "Foto konnte nicht vermerkt werden.", ok: null };
+
+  revalidatePath(`/planer/${geprueft.data.id}`);
+  return { error: null, ok: "Foto übernommen. Jetzt kalibrieren." };
+}
+
 export async function fotoHochladen(_prev: PlanerState, formData: FormData): Promise<PlanerState> {
   const z1 = await zugang();
   if (!z1.ok) return z1.status;

@@ -1,7 +1,14 @@
 "use client";
 
-import { useActionState, useRef } from "react";
-import { fotoEntfernen, fotoHochladen, type PlanerState } from "@/app/(app)/planer/actions";
+import { useRouter } from "next/navigation";
+import { useActionState, useRef, useState } from "react";
+import {
+  fotoEntfernen,
+  fotoVermerken,
+  fotoZiel,
+  type PlanerState,
+} from "@/app/(app)/planer/actions";
+import { createClient } from "@/lib/supabase/client";
 import { type FotoQuelle, vorlaeufigerMassstab, type Werkzeug } from "./Leinwand";
 
 /*
@@ -26,12 +33,11 @@ export function FotoLeiste({
   werkzeug: Werkzeug;
   onWerkzeug: (w: Werkzeug) => void;
 }) {
-  const [hochStand, hochladen, laedt] = useActionState(fotoHochladen, LEER);
+  const router = useRouter();
+  const [laeuft, setLaeuft] = useState(false);
+  const [meldung, setMeldung] = useState<string | null>(null);
   const [wegStand, entfernen, entfernt] = useActionState(fotoEntfernen, LEER);
   const feld = useRef<HTMLInputElement>(null);
-  const formular = useRef<HTMLFormElement>(null);
-  const breiteFeld = useRef<HTMLInputElement>(null);
-  const hoeheFeld = useRef<HTMLInputElement>(null);
 
   /*
    * Kein eigenes window.location.reload(): die Aktionen rufen
@@ -40,11 +46,30 @@ export function FotoLeiste({
    * später — mitten in die nächste Eingabe hinein, die es dann verwarf.
    */
 
-  /** Bildmasse lesen, bevor abgeschickt wird — der Server kennt sie sonst nicht. */
+  /**
+   * Foto direkt zu Supabase laden, nicht durch die Server Action.
+   *
+   * Eine Server Action nimmt standardmässig ein Megabyte entgegen, auf
+   * Vercel ist bei viereinhalb Schluss. Ein Drohnenfoto hat fünf bis
+   * zwölf: Der Upload endete mit 500, und in der gebauten Fassung stand
+   * nur „Application error: a client-side exception has occurred" — ohne
+   * jeden Hinweis auf die Ursache.
+   *
+   * Jetzt holt der Browser eine signierte Adresse, lädt selbst hoch und
+   * meldet nur Pfad und Bildmasse zurück.
+   */
   async function gewaehlt() {
     const datei = feld.current?.files?.[0];
     if (!datei) return;
+    setMeldung(null);
+
+    if (datei.size > 25 * 1024 * 1024) {
+      setMeldung("Höchstens 25 MB. Das Foto vorher verkleinern.");
+      return;
+    }
+
     const url = URL.createObjectURL(datei);
+    setLaeuft(true);
     try {
       const bild = new Image();
       await new Promise<void>((fertig, fehler) => {
@@ -52,18 +77,42 @@ export function FotoLeiste({
         bild.onerror = () => fehler(new Error("kein Bild"));
         bild.src = url;
       });
+
+      const endung = (datei.name.split(".").pop() ?? "jpg").toLowerCase();
+      const ziel = await fotoZiel(projektId, endung);
+      if ("fehler" in ziel) {
+        setMeldung(ziel.fehler);
+        return;
+      }
+
+      const db = createClient();
+      const { error } = await db.storage
+        .from("planer-fotos")
+        .uploadToSignedUrl(ziel.pfad, ziel.token, datei, { upsert: true });
+      if (error) {
+        setMeldung(`Hochladen fehlgeschlagen: ${error.message}`);
+        return;
+      }
+
+      const stand = await fotoVermerken({
+        id: projektId,
+        pfad: ziel.pfad,
+        breite: bild.naturalWidth,
+        hoehe: bild.naturalHeight,
+      });
+      if (stand.error) {
+        setMeldung(stand.error);
+        return;
+      }
       /*
-       * Direkt in die Felder schreiben, nicht über React-State: der
-       * Zustand wäre beim Absenden womöglich noch nicht gerendert, und
-       * der Server bekäme Breite und Höhe als 0. Genau das ist sprunghaft
-       * passiert — mal ging der Upload durch, mal nicht.
+       * Neu holen: Die signierte Leseadresse entsteht serverseitig, und
+       * ohne Aktualisierung bliebe die Karte stehen.
        */
-      if (breiteFeld.current) breiteFeld.current.value = String(bild.naturalWidth);
-      if (hoeheFeld.current) hoeheFeld.current.value = String(bild.naturalHeight);
-      formular.current?.requestSubmit();
+      router.refresh();
     } catch {
-      /* Ungültige Datei — der Server lehnt sie ohnehin ab. */
+      setMeldung("Die Datei liess sich nicht als Bild lesen.");
     } finally {
+      setLaeuft(false);
       URL.revokeObjectURL(url);
     }
   }
@@ -76,23 +125,19 @@ export function FotoLeiste({
           Standard ist das Luftbild. Ein Drohnenfoto ist schärfer und aktueller — es braucht
           danach eine Kalibrierung.
         </p>
-        <form ref={formular} action={hochladen} className="mt-2.5 flex items-center gap-2">
-          <input type="hidden" name="id" value={projektId} />
-          <input ref={breiteFeld} type="hidden" name="breite" defaultValue="0" />
-          <input ref={hoeheFeld} type="hidden" name="hoehe" defaultValue="0" />
+        <div className="mt-2.5 flex items-center gap-2">
           <input
             ref={feld}
             type="file"
-            name="foto"
             accept="image/jpeg,image/png,image/webp"
             aria-label="Drohnenfoto hochladen"
             onChange={gewaehlt}
             className="w-full text-[12px] text-muted file:mr-2 file:h-9 file:rounded-[10px] file:border file:border-line file:bg-sunk file:px-3 file:text-[12.5px] file:font-semibold file:text-ink"
           />
-        </form>
-        {laedt ? <p className="mt-1.5 text-[11.5px] text-muted">lädt hoch …</p> : null}
-        {hochStand.error ? (
-          <p className="mt-1.5 text-[12px] font-semibold text-s-crit">{hochStand.error}</p>
+        </div>
+        {laeuft ? <p className="mt-1.5 text-[11.5px] text-muted">lädt hoch …</p> : null}
+        {meldung ? (
+          <p className="mt-1.5 text-[12px] font-semibold text-s-crit">{meldung}</p>
         ) : null}
       </section>
     );

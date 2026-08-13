@@ -205,7 +205,7 @@ export function DachSchritt(p: DachSchrittProps) {
 
       {flaeche && flaeche.hindernisse.length > 0 ? (
         <div className="flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-3.5">
-          <h3 className="text-[13.5px] font-bold">Hindernisse ({flaeche.hindernisse.length})</h3>
+          <h3 className="text-[13.5px] font-bold">Sperrzonen ({flaeche.hindernisse.length})</h3>
           {flaeche.hindernisse.map((h) => (
             <div key={h.id} className="flex items-center gap-2">
               <span className="min-w-0 flex-1 truncate text-[13.5px]">{h.name}</span>

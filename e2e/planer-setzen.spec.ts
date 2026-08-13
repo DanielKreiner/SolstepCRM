@@ -19,7 +19,7 @@ test.beforeEach(aufraeumen);
 test.afterAll(aufraeumen);
 
 test.describe("Planer — einzelnes Modul", () => {
-  test("Ein Klick setzt genau ein Modul, ein zweiter das nächste", async ({ page }) => {
+  test("Ein Klick setzt genau ein Modul, danach hört das Werkzeug auf", async ({ page }) => {
     await login(page, DEMO.gf);
     await page.goto("/planer/neu");
     await page.route("**/api/planer/adresse**", (r) =>
@@ -105,16 +105,20 @@ test.describe("Planer — einzelnes Modul", () => {
     await page.mouse.click(mitte.x, mitte.y);
     await expect.poll(modulzahl, { timeout: 20_000 }).toBe(1);
 
-    // Zweiter Klick daneben: das zweite Modul.
-    await page.mouse.click(mitte.x + 70, mitte.y);
-    await expect.poll(modulzahl, { timeout: 20_000 }).toBe(2);
-
     /*
-     * Und weit neben dem Dach passiert nichts — das Geisterbild sagt
-     * das vorher in Rot.
+     * Danach hört das Werkzeug auf (Wunsch vom 13.08.2026: „es soll dann
+     * aufhören und nur die + zeigen, wo welche dazu passen"). Ein
+     * zweiter Klick daneben legt also nichts an — das nächste Modul
+     * kommt über das Pluszeichen an der Kante.
      */
-    await page.mouse.click(k.x + 40, k.y + k.height - 40);
+    await expect(page.getByTestId("planer-leinwand")).not.toHaveAttribute("data-geist", /passt/);
+    await page.mouse.click(mitte.x + 70, mitte.y);
     await page.waitForTimeout(1200);
-    expect(await modulzahl()).toBe(2);
+    expect(await modulzahl(), "das Werkzeug hat nach dem ersten Modul aufgehört").toBe(1);
+
+    // Und weit neben dem Dach passiert erst recht nichts.
+    await page.mouse.click(k.x + 40, k.y + k.height - 40);
+    await page.waitForTimeout(800);
+    expect(await modulzahl()).toBe(1);
   });
 });

@@ -146,7 +146,7 @@ const WERKZEUGE: Array<{
 }> = [
   { id: "auswahl", zeichen: ZeichenZeiger, label: "Wählen", titel: "Auswählen und bearbeiten" },
   { id: "flaeche", zeichen: ZeichenFlaeche, label: "Dach", titel: "Dachfläche zeichnen" },
-  { id: "hindernis", zeichen: ZeichenHindernis, label: "Kamin", titel: "Hindernis aufziehen (Kamin, Fenster)" },
+  { id: "hindernis", zeichen: ZeichenHindernis, label: "Sperrzone", titel: "Sperrzone aufziehen — Kamin, Gaube, Fenster, Dachluke, Wartungsweg" },
   { id: "baum", zeichen: ZeichenBaum, label: "Baum", titel: "Baum setzen — kostet Ertrag durch Verschattung" },
   { id: "setzen", zeichen: ZeichenPlus, label: "Setzen", titel: "Modul setzen — das Geisterbild zeigt, wohin es kommt" },
   { id: "modul", zeichen: ZeichenModul, label: "Modul", titel: "Einzelnes Modul frei setzen oder zurückholen" },
