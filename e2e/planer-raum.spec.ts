@@ -98,16 +98,30 @@ test.describe("Planer — räumliche Ansicht", () => {
     expect(gesetzt, "ein Tipp in der Perspektive legt ein Modul an").toBe(1);
 
     /*
-     * Und derselbe Tipp auf das gesetzte Modul nimmt es wieder weg. Die
-     * Gruppe verschwindet dabei ganz, weil nichts übrig bleibt.
+     * Und der nächste Tipp daneben baut an DASSELBE Feld an
+     * (Beschwerde vom 13.08.2026: „dann ist immer ein eigenes Feld").
+     * Gesucht wird wieder über die Vorschau, nicht geraten.
      */
-    const { data: vorher } = await admin()
+    let zweites: { x: number; y: number } | null = null;
+    for (let i = 0; i < 40 && !zweites; i++) {
+      const x = ziel!.x + ((i % 4) - 2) * 22;
+      const y = ziel!.y + (Math.floor(i / 4) - 3) * 16;
+      await page.mouse.move(x, y);
+      await page.waitForTimeout(120);
+      if ((await raum.getAttribute("data-geist")) === "passt") zweites = { x, y };
+    }
+    expect(zweites, "neben dem Modul zeigt die Vorschau den nächsten Platz").not.toBeNull();
+
+    await page.mouse.click(zweites!.x, zweites!.y);
+    await expect.poll(modulzahl, { timeout: 20_000 }).toBe(2);
+
+    const { data: nachher } = await admin()
       .from("planer_projekt")
       .select("plan")
       .eq("id", id)
       .single();
-    const plan = vorher!.plan as { gruppen: Array<{ id: string }> };
-    expect(plan.gruppen).toHaveLength(1);
+    const plan = nachher!.plan as { gruppen: Array<{ id: string }> };
+    expect(plan.gruppen, "beide Module hängen an einem Feld").toHaveLength(1);
   });
 
   test("In der Perspektive lässt sich ein Modul einem String zuschlagen", async ({ page }) => {

@@ -613,6 +613,34 @@ export function naechsteZelle(
 }
 
 /**
+ * Welcher Rasterplatz liegt unter diesem Punkt?
+ *
+ * Umkehrung von `rasterMitte`. Die Rasterachsen stehen senkrecht
+ * aufeinander und sind Einheitsvektoren, deshalb reicht das
+ * Skalarprodukt — keine Matrixinversion nötig.
+ *
+ * Der Rückgabewert darf ausserhalb des Rasters liegen (negativ oder
+ * über `reihen`/`spalten`): Genau daran erkennt der Aufrufer, dass
+ * hier angebaut werden müsste.
+ */
+export function rasterIndex(
+  g: Modulgruppe,
+  f: Dachflaeche,
+  p: Meter,
+): { reihe: number; spalte: number } {
+  const a = achsen(g, f);
+  const m = planMasse(g, f);
+  const dx = p.x - g.anker.x;
+  const dy = p.y - g.anker.y;
+  const du = dx * a.quer.x + dy * a.quer.y;
+  const dv = dx * a.laengs.x + dy * a.laengs.y;
+  return {
+    reihe: Math.floor(dv / (m.laengs + g.reihenabstand)),
+    spalte: Math.floor(du / (m.quer + g.spaltenabstand)),
+  };
+}
+
+/**
  * Punkt aufs Raster fangen: liegt er nahe genug an einer Zellmitte,
  * rastet er ein (Briefing 4.2, freies Ziehen mit Snapping).
  */

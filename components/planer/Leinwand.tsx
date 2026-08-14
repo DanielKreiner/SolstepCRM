@@ -204,9 +204,19 @@ export function Leinwand(p: LeinwandProps) {
     hoehe: 0,
   });
 
+  /*
+   * Welche Sperrzone gerade angefasst ist.
+   *
+   * Bewusst kein Teil des Plans: Das ist Bildschirmzustand, keine
+   * Aussage über die Anlage. Und bewusst ein Ref neben dem State — die
+   * Ereignisbehandler werden einmal gebunden und lesen alles über
+   * `stand`.
+   */
+  const [aktivesHindernis, setAktivesHindernis] = useState<string | null>(null);
+
   /* Aktueller Stand für die Ereignisbehandler, die nur einmal gebunden werden. */
-  const stand = useRef(p);
-  stand.current = p;
+  const stand = useRef({ ...p, aktivesHindernis });
+  stand.current = { ...p, aktivesHindernis };
 
   const [anzeige, setAnzeige] = useState({ zoom: p.zoom, leiste: { meter: 10, punkte: 0 } });
   const [zeigerMeter, setZeigerMeter] = useState<Meter | null>(null);
@@ -239,6 +249,14 @@ export function Leinwand(p: LeinwandProps) {
     | { art: "ecke"; flaeche: string; index: number }
     | { art: "kante"; flaeche: string; index: number; letzte: Meter }
     | { art: "hindernis"; flaeche: string; von: Meter }
+    /*
+     * Sperrzone schieben und in der Grösse ändern. Vorher liess sie
+     * sich nur aufziehen: Wer den Kamin zwei Meter zu weit links
+     * hatte, musste ihn löschen und neu ziehen — und die Belegung
+     * gleich mit.
+     */
+    | { art: "sperrZiehen"; flaeche: string; hindernis: string; letzte: Meter }
+    | { art: "sperrEcke"; flaeche: string; hindernis: string; index: number }
     /*
      * Die ganze Dachfläche schieben. Vorher liess sie sich nur über die
      * Ecken verformen: Wer die Standardform einen Meter neben dem Haus
@@ -413,6 +431,7 @@ export function Leinwand(p: LeinwandProps) {
       kamera: k,
       aktiv: stand.current.aktiv,
       betont: null,
+      sperrzone: stand.current.aktivesHindernis,
       gruppeAktiv: stand.current.aktiveGruppe !== null,
     };
     for (const f of stand.current.plan.flaechen) zeichneFlaeche(ctx, sicht, f);
@@ -663,10 +682,35 @@ export function Leinwand(p: LeinwandProps) {
     }
 
     /*
-     * Module danach: sie liegen über den Flächen, und wer auf ein Modul
-     * tippt, meint das Modul — nicht die Fläche darunter.
+     * Sperrzonen vor den Modulen: Auf einer Sperrzone liegt definitionsgemäss
+     * kein Modul, also verdeckt sie nichts — und wer auf die Schraffur
+     * tippt, meint die Zone.
+     *
+     * Die Ecken zuerst und nur bei der gewählten Zone: Sonst fingen
+     * acht Eckgriffe von vier Zonen jeden Klick im Umkreis ab.
      */
     const zeigerM = bildZuMeter(k, bp);
+    if (s.werkzeug === "auswahl") {
+      for (const f of s.plan.flaechen) {
+        for (const h of f.hindernisse) {
+          if (h.id !== s.aktivesHindernis) continue;
+          for (let i = 0; i < h.punkte.length; i++) {
+            const b = meterZuBild(k, h.punkte[i]!);
+            if (Math.hypot(b.x - bp.x, b.y - bp.y) <= GRIFF) {
+              return { art: "sperrEcke" as const, flaeche: f.id, hindernis: h.id, index: i };
+            }
+          }
+        }
+      }
+      for (const f of s.plan.flaechen) {
+        for (const h of f.hindernisse) {
+          if (punktInPolygon(zeigerM, h.punkte)) {
+            return { art: "sperr" as const, flaeche: f.id, hindernis: h.id };
+          }
+        }
+      }
+    }
+
     for (const g of s.plan.gruppen) {
       const f = s.plan.flaechen.find((x) => x.id === g.flaeche);
       if (!f) continue;
@@ -1072,6 +1116,13 @@ export function Leinwand(p: LeinwandProps) {
       }
 
       const t = treffer(bp);
+      /*
+       * Jeder Griff woandershin lässt die Sperrzone wieder los. Sonst
+       * bliebe sie mit ihren Eckgriffen ausgewählt, während längst an
+       * einem Modul gearbeitet wird.
+       */
+      if (t?.art !== "sperr" && t?.art !== "sperrEcke") setAktivesHindernis(null);
+
       if (s.werkzeug === "string") {
         /*
          * Immer malen, auch wenn der Strich neben der Belegung beginnt.
@@ -1083,6 +1134,27 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = { art: "malen" };
         return;
       }
+      if (t?.art === "sperrEcke") {
+        setAktivesHindernis(t.hindernis);
+        zieht.current = {
+          art: "sperrEcke",
+          flaeche: t.flaeche,
+          hindernis: t.hindernis,
+          index: t.index,
+        };
+        return;
+      }
+      if (t?.art === "sperr") {
+        setAktivesHindernis(t.hindernis);
+        zieht.current = {
+          art: "sperrZiehen",
+          flaeche: t.flaeche,
+          hindernis: t.hindernis,
+          letzte: bildZuMeter(kamera.current, bp),
+        };
+        return;
+      }
+
       if (t?.art === "anbau") {
         /*
          * Ein Klick auf das Plus setzt genau ein Modul — kein Ziehen,
@@ -1248,6 +1320,77 @@ export function Leinwand(p: LeinwandProps) {
       if (z.art === "messen" && messung.current) {
         messung.current = { ...messung.current, nach: bildZuMeter(k, jetzt) };
         anstossen();
+        return;
+      }
+
+      if (z.art === "sperrZiehen") {
+        /*
+         * Die ganze Zone mitziehen. Gerechnet wird der Schritt seit der
+         * letzten Bewegung, nicht der Abstand zum Anfasspunkt: So
+         * bleibt die Zone unter dem Zeiger, auch wenn sie beim
+         * Loslassen an eine Kante gefangen wurde.
+         */
+        const m = bildZuMeter(kamera.current, jetzt);
+        const dx = m.x - z.letzte.x;
+        const dy = m.y - z.letzte.y;
+        z.letzte = m;
+        aendereFlaeche(
+          z.flaeche,
+          (f) => ({
+            ...f,
+            hindernisse: f.hindernisse.map((h) =>
+              h.id === z.hindernis
+                ? { ...h, punkte: h.punkte.map((q) => ({ x: q.x + dx, y: q.y + dy })) }
+                : h,
+            ),
+          }),
+          false,
+        );
+        return;
+      }
+
+      if (z.art === "sperrEcke") {
+        /*
+         * Eine Ecke ziehen verformt das Rechteck: Die beiden Nachbarn
+         * gehen mit, die gegenüberliegende Ecke bleibt stehen. Bei
+         * einem Vieleck mit mehr als vier Ecken wandert nur die
+         * angefasste — ein aufgezogenes Rechteck hat vier.
+         */
+        const m = bildZuMeter(kamera.current, jetzt);
+        aendereFlaeche(
+          z.flaeche,
+          (f) => ({
+            ...f,
+            hindernisse: f.hindernisse.map((h) => {
+              if (h.id !== z.hindernis) return h;
+              if (h.punkte.length !== 4) {
+                return {
+                  ...h,
+                  punkte: h.punkte.map((q, i) => (i === z.index ? m : q)),
+                };
+              }
+              const gegenueber = h.punkte[(z.index + 2) % 4]!;
+              const naechste = (z.index + 1) % 4;
+              const vorige = (z.index + 3) % 4;
+              /*
+               * Welcher Nachbar teilt sich welche Achse, hängt an der
+               * Umlaufrichtung. Statt sie zu erraten: Der Nachbar
+               * übernimmt die Koordinate, in der er der festen Ecke
+               * gleicht.
+               */
+              const punkte = h.punkte.map((q, i) => {
+                if (i === z.index) return m;
+                if (i === naechste || i === vorige) {
+                  const teiltX = Math.abs(q.x - gegenueber.x) < Math.abs(q.y - gegenueber.y);
+                  return teiltX ? { x: gegenueber.x, y: m.y } : { x: m.x, y: gegenueber.y };
+                }
+                return q;
+              });
+              return { ...h, punkte };
+            }),
+          }),
+          false,
+        );
         return;
       }
 
@@ -1659,6 +1802,30 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
+      if (z?.art === "sperrZiehen" || z?.art === "sperrEcke") {
+        zieht.current = null;
+        const f = s.plan.flaechen.find((x) => x.id === z.flaeche);
+        if (!f) return;
+
+        /*
+         * Die Belegung nachziehen: Module, die jetzt unter der Zone
+         * liegen, fallen heraus — und kommen zurück, sobald die Zone
+         * weiterwandert. Ohne das bliebe ein Modul unter der Schraffur
+         * stehen und ginge als geplant in Angebot und Ertrag ein.
+         */
+        const eigene = s.plan.gruppen.filter((g) => g.flaeche === f.id);
+        let gruppen = s.plan.gruppen;
+        for (const g of eigene) {
+          const besetzt = eigene
+            .filter((x) => x.id !== g.id)
+            .flatMap((x) => aktiveZellen(x).map((zz) => modulEcken(x, f, zz.reihe, zz.spalte)));
+          const gefuehrt = nachfuehren(g, f, besetzt);
+          gruppen = gruppen.map((x) => (x.id === g.id ? gefuehrt : x));
+        }
+        s.onPlan({ ...s.plan, gruppen }, true);
+        return;
+      }
+
       if (z?.art === "ecke" || z?.art === "kante") {
         // Jetzt erst ein Rückschritt — nicht für jede Mausbewegung.
         s.onPlan(s.plan, true);
@@ -1847,6 +2014,11 @@ export function Leinwand(p: LeinwandProps) {
     const uhr = setTimeout(() => setMeldung(null), 4000);
     return () => clearTimeout(uhr);
   }, [meldung]);
+
+  /* Die Griffe der Sperrzone gehören sofort ins Bild. */
+  useEffect(() => {
+    anstossen();
+  }, [aktivesHindernis, anstossen]);
 
   /* Werkzeugwechsel bricht einen offenen Umriss ab. */
   useEffect(() => {

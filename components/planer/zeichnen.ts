@@ -60,6 +60,8 @@ export interface Sicht {
   aktiv: string | null;
   /** Kante, über der der Zeiger gerade steht: "flaecheId:index". */
   betont: string | null;
+  /** Angefasste Sperrzone — sie bekommt Eckgriffe. */
+  sperrzone?: string | null;
   /**
    * Es wird gerade an einer Modulgruppe gearbeitet.
    *
@@ -206,8 +208,26 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
 
     pfad(ctx, k, h.punkte);
     ctx.strokeStyle = FARBEN.sperrrand;
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = h.id === s.sperrzone ? 2.6 : 1.6;
     ctx.stroke();
+
+    /*
+     * Eckgriffe nur an der angefassten Zone. Sonst lägen bei vier
+     * Zonen sechzehn Kreise auf dem Dach, und keiner davon sagt etwas
+     * über die Anlage.
+     */
+    if (h.id === s.sperrzone) {
+      for (const q of h.punkte) {
+        const b = bild(k, q);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 5.5, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.strokeStyle = FARBEN.sperrstrich;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
   }
 
   zeichneFalllinie(ctx, s, f);

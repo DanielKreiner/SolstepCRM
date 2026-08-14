@@ -224,3 +224,20 @@ in `playwright.config.ts`.
 Ohne gewählten Wechselrichter bleibt der Verlegeknopf gesperrt: Die
 Stringlänge kommt aus der Kaltspannung des Moduls und dem MPP-Fenster
 des Geräts, geraten wird sie nicht.
+
+## Setzen und Sperrzonen (13.08.2026, zweiter Durchgang)
+
+| # | Prüfung | Erwartung |
+|---|---|---|
+| S1 | In 3D neben ein bestehendes Feld tippen | Modul hängt am selben Feld, kein „Feld 2" |
+| S2 | Dasselbe in der Draufsicht mit „Modul einzeln setzen" | gleiches Ergebnis, gleiches Raster |
+| S3 | Auf ein weggetipptes Modul tippen | es kommt zurück, ohne neues Feld |
+| S4 | Auf ein vorhandenes Modul tippen (Setzen) | „Hier liegt schon ein Modul." |
+| S5 | Weit weg vom Feld tippen | jetzt erst entsteht ein neues Feld |
+| S6 | Sperrzone anfassen und ziehen | Zone wandert mit, Grösse bleibt |
+| S7 | Eckgriff der Zone ziehen | Zone wird grösser/kleiner, gegenüberliegende Ecke bleibt |
+| S8 | Zone über Module schieben | die Module darunter fallen heraus und kommen zurück, wenn sie weiterwandert |
+
+Die Vorschau zeigt beim Anschluss die Rasterlage des Nachbarfeldes,
+nicht die Zeigerposition — sonst verspricht das Geisterbild eine Lage,
+die das Setzen nicht einhält.

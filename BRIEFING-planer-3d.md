@@ -243,3 +243,34 @@ genau einem String und fliegt beim Zuschlagen aus allen anderen.
 Dazu: Die Stufe für die 3D-Textur wird auf das begrenzt, was der
 Anbieter wirklich liefert. Die Rechnung kommt bei 160 m auf 2048
 Bildpunkten auf Stufe 20 — basemap.at endet bei 19.
+
+## 9. Anschluss statt Einzelfelder, bewegliche Sperrzonen (13.08.2026)
+
+Zwei Beschwerden aus dem Betrieb.
+
+**„dann ist immer ein eigenes Feld, ich kann nicht auf dem Feld weiter
+von der 2D Ansicht, das soll alles gleich sein."** Jeder Tipp legte
+eine neue Modulgruppe an — nach fünf Modulen standen fünf Felder in
+der Liste, keines davon liess sich als Block drehen oder verkabeln.
+
+`modulSetzen` sucht jetzt zuerst einen Anschluss: Der Rasterplatz unter
+dem Punkt wird über `rasterIndex` bestimmt (Umkehrung von
+`rasterMitte`, die Achsen stehen senkrecht, also reicht das
+Skalarprodukt). Liegt er im Raster eines Feldes oder genau einen
+Schritt daneben, wird über `modulAnbauen` angebaut — dieselbe Regel,
+nach der auch die Pluszeichen arbeiten. Erst wenn kein Feld in
+Reichweite ist, entsteht ein neues. Weil beide Ansichten dieselbe
+Funktion benutzen, gilt das in der Draufsicht genauso.
+
+Die Vorschau zieht mit: Beim Anschluss zeigt sie die Rasterlage des
+Nachbarfeldes statt der Zeigerposition. Ein Geisterbild, das etwas
+anderes verspricht als das Setzen tut, ist schlimmer als keines.
+
+**„Sperrzonen soll man verschieben und kleiner etc machen können."**
+Sie liessen sich nur aufziehen. Jetzt: hineinfassen und ziehen
+verschiebt, ein Zug am Eckgriff ändert die Grösse (die
+gegenüberliegende Ecke bleibt stehen, die Nachbarn gehen mit). Nach
+dem Loslassen läuft `nachfuehren` über alle Felder der Fläche — Module
+unter der Zone fallen heraus und kommen zurück, sobald sie
+weiterwandert. Ohne das bliebe ein Modul unter der Schraffur stehen und
+ginge als geplant in Angebot und Ertrag ein.
