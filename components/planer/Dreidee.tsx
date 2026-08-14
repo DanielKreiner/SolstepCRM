@@ -130,39 +130,78 @@ function schraffur(): THREE.CanvasTexture | null {
  * benutzt wird.
  */
 function plusmarke(): THREE.CanvasTexture | null {
+  /*
+   * Grob und kontrastreich, nicht fein.
+   *
+   * Ein Modul ist auf dem Schirm gut zwanzig Bildpunkte breit. Die
+   * erste Fassung hatte einen gestrichelten Rand und eine Scheibe mit
+   * Kreuz darin — beides bei dieser Grösse ein blasser beiger Fleck.
+   * Jetzt trägt die ganze Zelle die Farbe und ein Kreuz über die volle
+   * Breite; das liest sich auch als Daumennagel.
+   */
   const c = document.createElement("canvas");
-  c.width = 64;
-  c.height = 64;
+  c.width = 128;
+  c.height = 128;
   const ctx = c.getContext("2d");
   if (!ctx) return null;
 
-  ctx.fillStyle = "rgba(232, 149, 43, 0.20)";
-  ctx.fillRect(0, 0, 64, 64);
+  ctx.fillStyle = "rgba(232, 149, 43, 0.55)";
+  ctx.fillRect(0, 0, 128, 128);
 
-  // Gestrichelter Rand wie in der Draufsicht.
-  ctx.strokeStyle = "rgba(232, 149, 43, 0.95)";
-  ctx.lineWidth = 4;
-  ctx.setLineDash([7, 5]);
-  ctx.strokeRect(2, 2, 60, 60);
-  ctx.setLineDash([]);
+  ctx.strokeStyle = "rgba(150, 86, 8, 1)";
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, 118, 118);
 
-  // Scheibe mit Kreuz in der Mitte.
-  ctx.beginPath();
-  ctx.arc(32, 32, 14, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(232, 149, 43, 0.95)";
-  ctx.fill();
   ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 18;
+  ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(32, 24);
-  ctx.lineTo(32, 40);
-  ctx.moveTo(24, 32);
-  ctx.lineTo(40, 32);
+  ctx.moveTo(64, 34);
+  ctx.lineTo(64, 94);
+  ctx.moveTo(34, 64);
+  ctx.lineTo(94, 64);
   ctx.stroke();
 
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/**
+ * Ein Viereck mit einer Textur, die GENAU EINMAL darauf liegt.
+ *
+ * Die erste Fassung rechnete die Textur-Koordinaten wie bei der
+ * Schraffur aus Metern. Die Schraffur wiederholt sich, die Marke nicht:
+ * Alles jenseits der ersten Kachel wurde auf die Randfarbe geklemmt,
+ * und aus dem Pluszeichen wurde ein gestreiftes oranges Rechteck.
+ *
+ * Hier sitzen die vier Ecken fest auf (0,0), (1,0), (1,1), (0,1) — die
+ * Reihenfolge, in der `eckenUm` sie liefert.
+ */
+function markeGeometrie(ecken: Punkt3D[]): THREE.BufferGeometry {
+  const p = ecken.map(zuWelt);
+  const uv: Array<[number, number]> = [
+    [0, 0],
+    [1, 0],
+    [1, 1],
+    [0, 1],
+  ];
+  const positionen: number[] = [];
+  const uvs: number[] = [];
+  for (const [a, b, c] of [
+    [0, 1, 2],
+    [0, 2, 3],
+  ]) {
+    for (const i of [a, b, c] as number[]) {
+      positionen.push(p[i]!.x, p[i]!.y, p[i]!.z);
+      uvs.push(...uv[i]!);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(positionen, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  g.computeVertexNormals();
+  return g;
 }
 
 /** Weltkoordinaten: x nach Osten, y nach oben, z nach Süden. */
@@ -289,6 +328,15 @@ export function Dreidee(p: DreideeProps) {
      */
     const blick = { azimut: Math.PI * 0.25, hoehe: 0.9, abstand: 45 };
     const ziel = new THREE.Vector3(0, 0, 0);
+    /*
+     * Einmal auf das Haus einstellen — danach gehört die Kamera dem
+     * Betrachter.
+     *
+     * Ein fester Abstand von 45 m zeigt bei einem Dach am Rand des
+     * Grundstücks ein daumennagelgrosses Haus irgendwo im Bild. Wer
+     * dann ein Modul setzen will, muss erst suchen und zoomen.
+     */
+    let eingestellt = false;
 
     const kameraSetzen = () => {
       const r = blick.abstand;
@@ -895,6 +943,32 @@ export function Dreidee(p: DreideeProps) {
       if (s.modus === "belegen") anbaumarken(gruppe, s);
       setAnbauZahl(plusNetze.length);
 
+      /*
+       * Beim ersten Aufbau MIT Dachfläche das Haus ins Bild rücken:
+       * Blickziel auf die Mitte der Flächen, Abstand aus ihrer
+       * Ausdehnung.
+       */
+      if (!eingestellt && s.plan.flaechen.length > 0) {
+        const punkte = s.plan.flaechen.flatMap((f) => f.punkte);
+        if (punkte.length > 0) {
+          const mx = punkte.reduce((a2, q) => a2 + q.x, 0) / punkte.length;
+          const my = punkte.reduce((a2, q) => a2 + q.y, 0) / punkte.length;
+          const weite = Math.max(
+            ...punkte.map((q) => Math.hypot(q.x - mx, q.y - my)),
+          );
+          ziel.set(mx, s.wandhoehe * 0.6, -my);
+          /*
+           * Faktor 2,2: Bei 50° Öffnungswinkel füllt ein Kreis vom
+           * Radius `weite` das Bild ungefähr bei `weite / tan(25°)`,
+           * also gut dem Doppelten. Ein Zehntel Luft bleibt, damit
+           * Wände und Boden noch mit im Bild sind.
+           */
+          blick.abstand = Math.max(14, Math.min(160, weite * 2.2));
+          kameraSetzen();
+          eingestellt = true;
+        }
+      }
+
       strangwege(gruppe, s);
     };
 
@@ -916,14 +990,9 @@ export function Dreidee(p: DreideeProps) {
             .flatMap((x) => aktiveZellen(x).map((z) => modulEcken(x, f, z.reihe, z.spalte)));
           for (const stelle of anbaustellen(g, f, besetzt)) {
             const ecken = eckenUm(rasterMitte(g, f, stelle.reihe, stelle.spalte), g, f);
-            if (ecken.length < 3) continue;
+            if (ecken.length !== 4) continue;
             const netz = new THREE.Mesh(
-              flaecheGeometrie(
-                ecken.map((q) => ({ x: q.x, y: q.y, z: hoeheAuf(f, q) + 0.06 })),
-                undefined,
-                // Eine Kachel je Modul: Das Kreuz sitzt in der Mitte.
-                Math.max(...ecken.map((q) => Math.hypot(q.x - ecken[0]!.x, q.y - ecken[0]!.y))),
-              ),
+              markeGeometrie(ecken.map((q) => ({ x: q.x, y: q.y, z: hoeheAuf(f, q) + 0.06 }))),
               new THREE.MeshBasicMaterial({
                 map: plusmuster,
                 transparent: true,

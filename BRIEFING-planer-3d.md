@@ -311,3 +311,23 @@ mehr gezeichnet; in den Daten bleiben sie als `entfernt` stehen, damit
 das Nachführen sie nicht wieder auffüllt. Und ein Feld, von dem nichts
 übrig bleibt, verschwindet — auch beim Wegtippen in der Draufsicht,
 die dafür jetzt dieselbe Funktion benutzt wie die räumliche Ansicht.
+
+### Nachtrag zur Marke (13.08.2026)
+
+Die erste Fassung sah im Bild aus wie ein gestreiftes oranges Rechteck.
+Zwei Fehler:
+
+1. Die Textur-Koordinaten kamen wie bei der Schraffur aus Metern. Die
+   Schraffur WIEDERHOLT sich, die Marke nicht — alles jenseits der
+   ersten Kachel wurde auf die Randfarbe geklemmt und über die Zelle
+   gezogen. Die Marke hat jetzt feste Eckkoordinaten (0,0) bis (1,1).
+2. Gestrichelter Rand und kleine Scheibe mit Kreuz sind bei zwanzig
+   Bildpunkten je Modul nicht zu sehen. Jetzt trägt die ganze Zelle die
+   Farbe und ein Kreuz über die volle Breite.
+
+Dabei aufgefallen: Die Kamera stand mit festen 45 m Abstand auf dem
+Nullpunkt, und ein Dach am Rand des Grundstücks war ein Daumennagel
+irgendwo im Bild. Beim ersten Aufbau mit Dachfläche rückt die Kamera
+jetzt auf die Mitte der Flächen, der Abstand kommt aus ihrer
+Ausdehnung (Faktor 2,2 bei 50° Öffnungswinkel). Danach gehört sie dem
+Betrachter — ein Neuaufbau setzt sie nicht zurück.
