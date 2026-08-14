@@ -161,6 +161,74 @@ test.describe("Planer — räumliche Ansicht", () => {
     expect(await imStrang(), "ein Tipp legt das Modul in den String").toBeGreaterThan(0);
   });
 
+  test("Die Pluszeichen bauen auch in der Perspektive an", async ({ page }) => {
+    await login(page, DEMO.gf);
+    const id = await neuesProjekt(page);
+
+    await dachSetzen(page, "Pultdach", "14", "9");
+    await page.getByRole("button", { name: /^Fläche 1/ }).click();
+    await belegen(page);
+
+    // Nicht `module`: In Next.js ist der Name gesperrt.
+    const modulzahl = async () => {
+      const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();
+      const plan = data!.plan as {
+        gruppen: Array<{ reihen: number; spalten: number; aus?: string[]; entfernt?: string[] }>;
+      };
+      return plan.gruppen.reduce(
+        (n, g) => n + g.reihen * g.spalten - new Set([...(g.aus ?? []), ...(g.entfernt ?? [])]).size,
+        0,
+      );
+    };
+
+    /*
+     * Ein Modul wegnehmen: Genau dort muss danach ein Pluszeichen
+     * stehen, und ein Tipp darauf holt es zurück.
+     */
+    await page.getByRole("button", { name: "2D", exact: true }).click();
+    const raum = page.getByTestId("planer-3d");
+    await expect(raum).toBeVisible();
+    await page.getByRole("button", { name: "Belegen", exact: true }).click();
+
+    // Der Plan wird verzögert gespeichert — erst warten, dann zählen.
+    await expect.poll(modulzahl, { timeout: 20_000 }).toBeGreaterThan(4);
+    const voll = await modulzahl();
+
+    const k = (await raum.boundingBox())!;
+    const mitte = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
+
+    /*
+     * Ein Modul wegnehmen — und zwar so, dass der Test WEISS, welcher
+     * Klick es war.
+     *
+     * Über die Modulzahl aus der Datenbank ging das nicht: Der Plan
+     * wird verzögert gespeichert, der Rückgang kam ein bis zwei Klicks
+     * später an, und der gemerkte Punkt gehörte dann zum falschen
+     * Klick. `data-anbaustellen` steht dagegen sofort am Wurzelknoten:
+     * Wo ein Modul verschwindet, entsteht eine Anbaustelle.
+     */
+    const marken = async () => Number((await raum.getAttribute("data-anbaustellen")) ?? 0);
+    const vorher = await marken();
+
+    let getroffen: { x: number; y: number } | null = null;
+    for (let i = 0; i < 30 && !getroffen; i++) {
+      const x = mitte.x + ((i % 5) - 2) * 34;
+      const y = mitte.y + (Math.floor(i / 5) - 2) * 22;
+      await page.mouse.click(x, y);
+      await page.waitForTimeout(250);
+      if ((await marken()) > vorher) getroffen = { x, y };
+    }
+    expect(getroffen, "ein Tipp nimmt ein Modul weg und hinterlässt ein Pluszeichen").not.toBeNull();
+    await expect.poll(modulzahl, { timeout: 20_000 }).toBe(voll - 1);
+
+    /*
+     * Dieselbe Stelle noch einmal: Dort steht jetzt das Pluszeichen,
+     * und es baut das Modul wieder an — genau wie in der Draufsicht.
+     */
+    await page.mouse.click(getroffen!.x, getroffen!.y);
+    await expect.poll(modulzahl, { timeout: 20_000 }).toBe(voll);
+  });
+
   test("Strings werden auf Knopfdruck verlegt", async ({ page }) => {
     await login(page, DEMO.gf);
     const id = await neuesProjekt(page);

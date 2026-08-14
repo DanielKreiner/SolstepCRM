@@ -387,17 +387,33 @@ export function zeichneMessung(ctx: CanvasRenderingContext2D, k: Kamera, von: Me
 }
 
 /** Der Projektursprung — Nullpunkt des Metersystems. */
-export function zeichneUrsprung(ctx: CanvasRenderingContext2D, k: Kamera) {
+export function zeichneUrsprung(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  /*
+   * Beim Versetzen deutlicher: Ring und längere Arme. Sonst sucht man
+   * ein zehn Bildpunkte grosses Kreuz auf einem Luftbild — der
+   * Nullpunkt ist im Alltag nebensächlich und soll erst dann auffallen,
+   * wenn es um ihn geht.
+   */
+  betont = false,
+) {
   const p = bild(k, { x: 0, y: 0 });
+  const arm = betont ? 16 : 8;
   ctx.save();
-  ctx.strokeStyle = "rgba(232, 149, 43, 0.9)";
-  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = betont ? "rgba(232, 149, 43, 1)" : "rgba(232, 149, 43, 0.9)";
+  ctx.lineWidth = betont ? 2.2 : 1.4;
   ctx.beginPath();
-  ctx.moveTo(p.x - 8, p.y);
-  ctx.lineTo(p.x + 8, p.y);
-  ctx.moveTo(p.x, p.y - 8);
-  ctx.lineTo(p.x, p.y + 8);
+  ctx.moveTo(p.x - arm, p.y);
+  ctx.lineTo(p.x + arm, p.y);
+  ctx.moveTo(p.x, p.y - arm);
+  ctx.lineTo(p.x, p.y + arm);
   ctx.stroke();
+  if (betont) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -431,8 +447,6 @@ export function zeichneGruppe(
 ) {
   // Beide Gründe zusammen: kein Platz UND weggetippt.
   const aus = leereZellen(g);
-  /* Nur diese bleiben als blasse Kästchen stehen. */
-  const weggetippt = new Set(g.entfernt ?? []);
   // Klein gezeichnete Module brauchen keinen Rand — sonst ist das Feld
   // nur noch Rand.
   const probe = modulEcken(g, f, 0, 0);
@@ -473,27 +487,17 @@ export function zeichneGruppe(
           ctx.lineWidth = 0.7;
           ctx.stroke();
         }
-      } else if (feineLinie && weggetippt.has(zellSchluessel(r, c))) {
-        /*
-         * Nur die von HAND weggetippten Zellen bleiben sichtbar: Sie
-         * sind Löcher, die jemand gemacht hat, und er soll sie
-         * wiederfinden.
-         *
-         * Zellen, in die geometrisch nichts passt (`aus`), verschwinden.
-         * Sie lagen als blasses Raster rund um das Dach und über die
-         * Nachbargrundstücke — Information, die niemand braucht und die
-         * vom Dach ablenkt. An der Rechnung ändert das nichts: Das
-         * Raster bleibt, es wird nur nicht mehr gezeichnet.
-         */
-        ctx.save();
-        ctx.setLineDash([3, 3]);
-        ctx.fillStyle = FARBEN.modulAus;
-        ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.35)";
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-        ctx.restore();
       }
+      /*
+       * Weggetippte Zellen werden GAR NICHT mehr gezeichnet.
+       *
+       * Sie standen als blasse gestrichelte Kästchen im Feld — der
+       * Betrieb hat sie „die drei Schatten" genannt und wollte sie
+       * weghaben. Zu Recht: Wer ein Modul entfernt, will dort nichts
+       * mehr sehen. Wo wieder eines hinpasst, sagt das Pluszeichen an
+       * der Kante; in den Daten bleibt die Zelle als `entfernt`
+       * stehen, damit das Nachführen sie nicht wieder auffüllt.
+       */
     }
   }
 

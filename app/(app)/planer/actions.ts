@@ -114,6 +114,50 @@ export async function ansichtMerken(daten: {
   return { ok: !error };
 }
 
+const ursprungSchema = z.object({
+  id: z.string().uuid(),
+  lat: z.number().gte(-85).lte(85),
+  lon: z.number().gte(-180).lte(180),
+  plan: z.unknown(),
+});
+
+/**
+ * Den Nullpunkt des Projekts versetzen.
+ *
+ * Weltbezug und Geometrie gehören zusammen und werden deshalb in EINEM
+ * Schreibvorgang gesetzt. Zwei getrennte Aufrufe wären eine Sekunde
+ * lang ein Projekt, dessen Dach vierzig Meter neben dem Haus liegt —
+ * und wenn der zweite scheitert, bleibt es dort.
+ */
+export async function ursprungSetzen(daten: {
+  id: string;
+  lat: number;
+  lon: number;
+  plan: unknown;
+}): Promise<{ ok: boolean }> {
+  const z1 = await zugang();
+  if (!z1.ok) return { ok: false };
+
+  const geprueft = ursprungSchema.safeParse(daten);
+  if (!geprueft.success) return { ok: false };
+
+  // Derselbe Prüfweg wie beim normalen Speichern.
+  const plan = planSchema.safeParse(geprueft.data.plan);
+  if (!plan.success) return { ok: false };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("planer_projekt")
+    .update({
+      ursprung_lat: geprueft.data.lat,
+      ursprung_lon: geprueft.data.lon,
+      plan: plan.data,
+    })
+    .eq("id", geprueft.data.id);
+
+  return { ok: !error };
+}
+
 export async function projektLoeschen(_prev: PlanerState, formData: FormData): Promise<PlanerState> {
   const z1 = await zugang();
   if (!z1.ok) return z1.status;

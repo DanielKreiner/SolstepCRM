@@ -163,6 +163,16 @@ export function ZeichenWeg(p: Props) {
   );
 }
 
+/** Fadenkreuz — der Nullpunkt des Plans. */
+export function ZeichenNullpunkt(p: Props) {
+  return (
+    <Rahmen {...p}>
+      <path d="M12 3v5M12 16v5M3 12h5M16 12h5" />
+      <circle cx="12" cy="12" r="3.2" />
+    </Rahmen>
+  );
+}
+
 /** Plus. */
 export function ZeichenPlus(p: Props) {
   return (

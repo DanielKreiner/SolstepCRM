@@ -12,6 +12,8 @@ import {
   meterZuBild,
   zoomeAn,
   ZOOM_GRENZEN,
+  zuLatLon,
+  zuMeter,
 } from "@/lib/planer/geo";
 import {
   azimutAusTraufe,
@@ -37,7 +39,7 @@ import {
   strangFarbe,
 } from "@/lib/planer/plan";
 import { strangUmschalten, strangWeg } from "@/lib/planer/strings";
-import { modulSetzen, modulVorschau } from "@/lib/planer/setzen";
+import { modulEntfernen, modulSetzen, modulVorschau } from "@/lib/planer/setzen";
 import { anbieter as anbieterZu, type AnbieterId, hoechsterZoom, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
@@ -109,7 +111,18 @@ export type Werkzeug =
   /** Auswahlrechteck ziehen und daraus eine eigene Gruppe machen. */
   | "teilen"
   /** Module dem gewählten String zuordnen — „malen" laut Briefing 5.2. */
-  | "string";
+  | "string"
+  /*
+   * Den Nullpunkt des Plans versetzen.
+   *
+   * Als eigenes Werkzeug und nicht als Griff am Fadenkreuz: Der
+   * Nullpunkt liegt mitten in der Arbeitsfläche, oft unter dem Dach.
+   * Ein Griff dort fänge Klicks ab, die dem Modul darunter gelten —
+   * und ein versehentlich versetzter Nullpunkt verschiebt die
+   * Kartenmitte, das Luftbild der räumlichen Ansicht und die
+   * Koordinaten im PDF.
+   */
+  | "nullpunkt";
 
 export interface FotoQuelle {
   url: string;
@@ -138,6 +151,14 @@ export interface LeinwandProps {
   /** Gesetzt: das Foto ersetzt die Karte (Briefing 2.3). */
   foto: FotoQuelle | null;
   onKalibriert: (meterProPixel: number, faktor: number) => void;
+  /**
+   * Nullpunkt an diese Stelle legen (in den aktuellen Meterkoordinaten).
+   *
+   * Die Leinwand rechnet nur die Stelle aus; was daraus wird — neuer
+   * Weltbezug, zurückgerechnete Geometrie, ein Schreibvorgang — gehört
+   * in den Planer, weil dort das Projekt bekannt ist.
+   */
+  onNullpunkt: (ziel: Meter) => void;
   aktiv: string | null;
   onAktiv: (id: string | null) => void;
   aktiveGruppe: string | null;
@@ -426,7 +447,7 @@ export function Leinwand(p: LeinwandProps) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, k.breite, k.hoehe);
 
-    zeichneUrsprung(ctx, k);
+    zeichneUrsprung(ctx, k, stand.current.werkzeug === "nullpunkt");
     const sicht = {
       kamera: k,
       aktiv: stand.current.aktiv,
@@ -585,8 +606,20 @@ export function Leinwand(p: LeinwandProps) {
     anstossen();
   }, [p.anbieter, anstossen]);
 
+  /*
+   * Neuer Nullpunkt — dieselbe Stelle der Welt bleibt in der Bildmitte.
+   *
+   * Die Bildmitte steht als Meterabstand zum Nullpunkt. Tauscht man
+   * ihn ohne Umrechnung aus, springt die Karte um genau den Betrag,
+   * um den der Nullpunkt versetzt wurde: Man tippt auf das Dach und
+   * schaut plötzlich auf den Nachbarn.
+   */
   useEffect(() => {
-    kamera.current.ursprung = p.ursprung;
+    const k = kamera.current;
+    if (k.ursprung.lat === p.ursprung.lat && k.ursprung.lon === p.ursprung.lon) return;
+    const weltMitte = zuLatLon(k.ursprung, k.mitte);
+    k.ursprung = p.ursprung;
+    k.mitte = zuMeter(p.ursprung, weltMitte);
     anstossen();
   }, [p.ursprung, anstossen]);
 
@@ -1101,6 +1134,17 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = { art: "hindernis", flaeche: s.aktiv, von: gefangen(bp, null) };
         return;
       }
+      if (s.werkzeug === "nullpunkt") {
+        /*
+         * Ein Klick, fertig. Kein Ziehen: Es gibt nichts aufzuziehen,
+         * und ein Zug wäre nicht von einem Schwenk zu unterscheiden.
+         */
+        s.onNullpunkt(bildZuMeter(kamera.current, bp));
+        s.onWerkzeug("auswahl");
+        zieht.current = null;
+        return;
+      }
+
       if (s.werkzeug === "flaeche") {
         // Punkte entstehen beim Loslassen — sonst legt schon ein Schwenk
         // mit zwei Fingern Ecken an.
@@ -1757,29 +1801,33 @@ export function Leinwand(p: LeinwandProps) {
 
         if (bewegt <= 6) {
           /*
-           * Tippen: Modul abschalten oder zurückholen. Es wird nicht
-           * gelöscht — die Zelle bleibt im Raster, damit man sie
-           * wiederfindet (Briefing 4.2).
+           * Tippen: Modul abschalten oder zurückholen.
+           *
+           * Dieselbe Rechnung wie in der räumlichen Ansicht — sie
+           * merkt sich die Zelle in `entfernt` (nicht in `aus`, das
+           * gehört der Geometrie und wird bei jeder Bewegung neu
+           * bestimmt) und räumt ein Feld weg, von dem nichts übrig
+           * bleibt.
            */
           const schluessel = zellSchluessel(z.reihe, z.spalte);
-          /*
-           * In `entfernt`, nicht in `aus`: `aus` gehört der Geometrie
-           * und wird bei jeder Bewegung neu bestimmt. Weggetippte
-           * Module kamen deshalb zurück, sobald jemand die Gruppe
-           * verschob oder drehte.
-           */
-          const bisher = g.entfernt ?? [];
-          const entfernt = bisher.includes(schluessel)
-            ? bisher.filter((x) => x !== schluessel)
-            : [...bisher, schluessel];
           s.onAktiveGruppe(g.id);
-          s.onPlan(
-            {
-              ...s.plan,
-              gruppen: s.plan.gruppen.map((x) => (x.id === g.id ? { ...x, entfernt } : x)),
-            },
-            true,
-          );
+          if ((g.entfernt ?? []).includes(schluessel)) {
+            s.onPlan(
+              {
+                ...s.plan,
+                gruppen: s.plan.gruppen.map((x) =>
+                  x.id === g.id
+                    ? { ...x, entfernt: (x.entfernt ?? []).filter((y) => y !== schluessel) }
+                    : x,
+                ),
+              },
+              true,
+            );
+            return;
+          }
+          const ohne = modulEntfernen(s.plan, g.id, z.reihe, z.spalte);
+          if (!ohne.gruppen.some((x) => x.id === g.id)) s.onAktiveGruppe(null);
+          s.onPlan(ohne, true);
           return;
         }
 
@@ -2196,7 +2244,9 @@ export function Leinwand(p: LeinwandProps) {
          */
         <div className="pointer-events-none absolute left-1/2 top-[58px] z-10 flex max-w-[min(520px,88%)] -translate-x-1/2 items-baseline gap-2 rounded-pill border border-pl-chrome-linie bg-pl-chrome px-3 py-1.5 backdrop-blur-md">
           <span className="shrink-0 text-[12px] font-bold text-pl-auf-dunkel">
-            {p.werkzeug === "flaeche"
+            {p.werkzeug === "nullpunkt"
+              ? "Nullpunkt versetzen"
+              : p.werkzeug === "flaeche"
               ? "Dachfläche zeichnen"
               : p.werkzeug === "hindernis"
                 ? "Sperrzone aufziehen"
@@ -2213,7 +2263,9 @@ export function Leinwand(p: LeinwandProps) {
                           : "Gegenprobe"}
           </span>
           <span className="truncate text-[11.5px] text-pl-auf-dunkel-2">
-            {p.werkzeug === "flaeche"
+            {p.werkzeug === "nullpunkt"
+              ? "Stelle antippen — die räumliche Ansicht und das Luftbild richten sich danach aus"
+              : p.werkzeug === "flaeche"
               ? entwurfLaenge >= 3
                 ? "Ersten Punkt antippen oder Enter schliesst die Fläche · Esc bricht ab"
                 : "Ecken antippen · ab drei Punkten schliessbar"

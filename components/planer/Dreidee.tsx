@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { aktiveZellen, modulEcken } from "@/lib/planer/module";
+import {
+  aktiveZellen,
+  anbaustellen,
+  eckenUm,
+  modulEcken,
+  rasterMitte,
+} from "@/lib/planer/module";
 import { falllinie } from "@/lib/planer/flaeche";
 import type { Punkt3D } from "@/lib/planer/gebaeude";
 import {
@@ -80,6 +86,8 @@ export interface DreideeProps {
   onModulWeg?: (gruppe: string, reihe: number, spalte: number) => void;
   /** Dieses Modul dem gewählten String zuschlagen oder herausnehmen. */
   onModulStrang?: (gruppe: string, reihe: number, spalte: number) => void;
+  /** An dieser Anbaustelle ein Modul anhängen. */
+  onAnbauen?: (gruppe: string, reihe: number, spalte: number) => void;
 }
 
 /**
@@ -109,6 +117,50 @@ function schraffur(): THREE.CanvasTexture | null {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/**
+ * Marke für eine Anbaustelle — dasselbe Pluszeichen wie in der
+ * Draufsicht, nur als Textur statt als Strich.
+ *
+ * Ein echtes Kreuz aus Geometrie wäre bei fünfzig Anbaustellen
+ * fünfzig weitere Netze; eine Textur ist eines, das fünfzigmal
+ * benutzt wird.
+ */
+function plusmarke(): THREE.CanvasTexture | null {
+  const c = document.createElement("canvas");
+  c.width = 64;
+  c.height = 64;
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.fillStyle = "rgba(232, 149, 43, 0.20)";
+  ctx.fillRect(0, 0, 64, 64);
+
+  // Gestrichelter Rand wie in der Draufsicht.
+  ctx.strokeStyle = "rgba(232, 149, 43, 0.95)";
+  ctx.lineWidth = 4;
+  ctx.setLineDash([7, 5]);
+  ctx.strokeRect(2, 2, 60, 60);
+  ctx.setLineDash([]);
+
+  // Scheibe mit Kreuz in der Mitte.
+  ctx.beginPath();
+  ctx.arc(32, 32, 14, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(232, 149, 43, 0.95)";
+  ctx.fill();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(32, 24);
+  ctx.lineTo(32, 40);
+  ctx.moveTo(24, 32);
+  ctx.lineTo(40, 32);
+  ctx.stroke();
+
+  const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
@@ -183,6 +235,12 @@ export function Dreidee(p: DreideeProps) {
    * steht da, was los ist.
    */
   const [bildFehlt, setBildFehlt] = useState(false);
+  /*
+   * Wie viele Pluszeichen gerade in der Szene stehen. Sie liegen im
+   * WebGL-Bild und sind von aussen sonst nicht zu zählen — ohne diese
+   * Angabe liesse sich nicht prüfen, ob sie überhaupt entstehen.
+   */
+  const [anbauZahl, setAnbauZahl] = useState(0);
   const stand = useRef(p);
   stand.current = p;
   /*
@@ -351,10 +409,22 @@ export function Dreidee(p: DreideeProps) {
     const gemeint = (
       e: PointerEvent,
     ):
+      | { art: "plus"; gruppe: string; reihe: number; spalte: number }
       | { art: "modul"; gruppe: string; reihe: number; spalte: number }
       | { art: "dach"; punkt: Meter }
       | null => {
       zeigerStrahl(e);
+      /*
+       * Pluszeichen zuerst: Sie liegen über der Dachhaut und meinen
+       * genau einen Rasterplatz. Ohne den Vorrang träfe der Strahl das
+       * Dach darunter, und das Modul landete auf der freien Fläche
+       * statt am Feld — dasselbe Vorrecht haben sie in der Draufsicht.
+       */
+      const aufPlus = strahl.intersectObjects(plusNetze, false)[0];
+      if (aufPlus) {
+        const d = aufPlus.object.userData as { gruppe: string; reihe: number; spalte: number };
+        return { art: "plus", gruppe: d.gruppe, reihe: d.reihe, spalte: d.spalte };
+      }
       const aufModul = strahl.intersectObjects(modulNetze, false)[0];
       if (aufModul) {
         const d = aufModul.object.userData as { gruppe: string; reihe: number; spalte: number };
@@ -382,6 +452,10 @@ export function Dreidee(p: DreideeProps) {
       }
       const ziel2 = gemeint(e);
       if (!ziel2 || ziel2.art !== "dach") {
+        /*
+         * Über einem Pluszeichen kein Geisterbild: Das Pluszeichen
+         * sagt selbst schon, wohin das Modul kommt.
+         */
         geistWeg();
         return;
       }
@@ -426,7 +500,8 @@ export function Dreidee(p: DreideeProps) {
         return;
       }
 
-      if (ziel2.art === "modul") s.onModulWeg?.(ziel2.gruppe, ziel2.reihe, ziel2.spalte);
+      if (ziel2.art === "plus") s.onAnbauen?.(ziel2.gruppe, ziel2.reihe, ziel2.spalte);
+      else if (ziel2.art === "modul") s.onModulWeg?.(ziel2.gruppe, ziel2.reihe, ziel2.spalte);
       else s.onSetzen?.(ziel2.punkt);
     };
 
@@ -446,6 +521,7 @@ export function Dreidee(p: DreideeProps) {
      */
     const KARTENSEITE = 160;
     const sperrmuster = schraffur();
+    const plusmuster = plusmarke();
     let karte: THREE.CanvasTexture | null = null;
     let karteSchluessel = "";
 
@@ -579,6 +655,8 @@ export function Dreidee(p: DreideeProps) {
     /* Was der Strahlwurf treffen darf. */
     const dachNetze: THREE.Mesh[] = [];
     const modulNetze: THREE.Mesh[] = [];
+    /** Anbaustellen — dieselben Pluszeichen wie in der Draufsicht. */
+    const plusNetze: THREE.Mesh[] = [];
     let geist: THREE.Mesh | null = null;
 
     /* ── Szene aus dem Plan aufbauen ──────────────────────────── */
@@ -587,6 +665,7 @@ export function Dreidee(p: DreideeProps) {
       gruppe.clear();
       dachNetze.length = 0;
       modulNetze.length = 0;
+      plusNetze.length = 0;
       geist = null;
 
       const textur = karteBauen(s);
@@ -808,7 +887,56 @@ export function Dreidee(p: DreideeProps) {
         }
       }
 
+      /*
+       * Anbaustellen. Nur im Belegen-Modus: Wer nur schaut, will kein
+       * Dach voller Pluszeichen sehen — genau wie in der Draufsicht,
+       * wo sie an der gewählten Gruppe hängen.
+       */
+      if (s.modus === "belegen") anbaumarken(gruppe, s);
+      setAnbauZahl(plusNetze.length);
+
       strangwege(gruppe, s);
+    };
+
+    /**
+     * Die Pluszeichen an den Kanten der Felder.
+     *
+     * Gerechnet wird mit `anbaustellen` aus `lib/planer/module.ts` —
+     * dieselbe Liste, die die Draufsicht zeichnet und die auch das
+     * Setzen benutzt. Was hier zu sehen ist, ist damit genau das, was
+     * ein Tipp auch tut.
+     */
+    const anbaumarken = (ziel3: THREE.Group, s: DreideeProps) => {
+      if (!plusmuster) return;
+      for (const f of s.plan.flaechen) {
+        const eigene = s.plan.gruppen.filter((g) => g.flaeche === f.id);
+        for (const g of eigene) {
+          const besetzt = eigene
+            .filter((x) => x.id !== g.id)
+            .flatMap((x) => aktiveZellen(x).map((z) => modulEcken(x, f, z.reihe, z.spalte)));
+          for (const stelle of anbaustellen(g, f, besetzt)) {
+            const ecken = eckenUm(rasterMitte(g, f, stelle.reihe, stelle.spalte), g, f);
+            if (ecken.length < 3) continue;
+            const netz = new THREE.Mesh(
+              flaecheGeometrie(
+                ecken.map((q) => ({ x: q.x, y: q.y, z: hoeheAuf(f, q) + 0.06 })),
+                undefined,
+                // Eine Kachel je Modul: Das Kreuz sitzt in der Mitte.
+                Math.max(...ecken.map((q) => Math.hypot(q.x - ecken[0]!.x, q.y - ecken[0]!.y))),
+              ),
+              new THREE.MeshBasicMaterial({
+                map: plusmuster,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+              }),
+            );
+            netz.userData = { gruppe: g.id, reihe: stelle.reihe, spalte: stelle.spalte, plus: true };
+            plusNetze.push(netz);
+            ziel3.add(netz);
+          }
+        }
+      }
     };
 
     /**
@@ -944,6 +1072,12 @@ export function Dreidee(p: DreideeProps) {
      * blau, und es sah aus, als hätte der Knopf nichts getan.
      */
     s: p.plan.strings,
+    /*
+     * Der Modus gehört ins Abbild: Die Pluszeichen erscheinen nur im
+     * Belegen-Modus, und ohne ihn stünde das Dach nach dem Umschalten
+     * unverändert da.
+     */
+    m: p.modus ?? "ansehen",
     w: p.wandhoehe,
     u: p.ueberstand,
     /*
@@ -968,6 +1102,7 @@ export function Dreidee(p: DreideeProps) {
       data-testid="planer-3d"
       data-geist={geistAttribut}
       data-luftbild={bildFehlt ? "fehlt" : "da"}
+      data-anbaustellen={anbauZahl}
       className="relative h-full w-full"
     >
       <div ref={halter} className="absolute inset-0" />

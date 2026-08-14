@@ -274,3 +274,40 @@ dem Loslassen läuft `nachfuehren` über alle Felder der Fläche — Module
 unter der Zone fallen heraus und kommen zurück, sobald sie
 weiterwandert. Ohne das bliebe ein Modul unter der Schraffur stehen und
 ginge als geplant in Angebot und Ertrag ein.
+
+## 10. Nullpunkt, Pluszeichen in 3D, keine Schattenkästchen (13.08.2026)
+
+**Nullpunkt versetzen** („gib mich auch was, dass ich diesen viewpunkt
+verschieben kann"). Das orange Fadenkreuz ist der Nullpunkt des
+lokalen Metersystems. Gesetzt wird er beim Anlegen aus der Adresse —
+und die trifft die Hausnummer, nicht das Dach; bei einem Hof liegen
+dazwischen leicht vierzig Meter. An ihm hängen die Mitte der
+räumlichen Ansicht, der 160-Meter-Ausschnitt des Luftbilds und die
+Koordinaten in PDF und Übergabe.
+
+Neues Werkzeug „Nullpunkt" in Schritt 1: Stelle antippen, fertig.
+`ursprungVersetzen` rechnet den neuen Weltbezug UND die ganze Geometrie
+zurück — Flächen, Sperrzonen, Anker, frei gesetzte Module, Bäume —,
+damit das Haus dort stehen bleibt, wo es steht. Gespeichert wird beides
+in einem Schreibvorgang (`ursprungSetzen`); zwei getrennte wären ein
+Zwischenzustand, in dem das Dach vierzig Meter neben dem Haus liegt.
+Die Zeichenfläche rechnet ihre Bildmitte mit um, sonst springt die
+Karte um genau den versetzten Betrag.
+
+Als Werkzeug und nicht als Griff am Kreuz: Der Nullpunkt liegt mitten
+in der Arbeitsfläche, oft unter dem Dach. Ein Griff dort fänge Klicks
+ab, die dem Modul darunter gelten.
+
+**Pluszeichen in 3D** („in der 3d ansicht mag ich auch diese + zeichen
+haben gleich wie in der 2d ansicht"). Dieselbe Liste aus
+`anbaustellen`, die auch die Draufsicht zeichnet, als Textur auf der
+Dachebene — nur im Belegen-Modus, und beim Strahlwurf vor Modul und
+Dach. Ein Tipp ruft `modulAnbauen`, also genau das, was das Pluszeichen
+verspricht.
+
+**Keine Schattenkästchen mehr.** Weggetippte Zellen standen als blasse
+gestrichelte Kästchen im Feld („die drei Schatten"). Sie werden nicht
+mehr gezeichnet; in den Daten bleiben sie als `entfernt` stehen, damit
+das Nachführen sie nicht wieder auffüllt. Und ein Feld, von dem nichts
+übrig bleibt, verschwindet — auch beim Wegtippen in der Draufsicht,
+die dafür jetzt dieselbe Funktion benutzt wie die räumliche Ansicht.

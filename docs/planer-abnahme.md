@@ -241,3 +241,16 @@ des Geräts, geraten wird sie nicht.
 Die Vorschau zeigt beim Anschluss die Rasterlage des Nachbarfeldes,
 nicht die Zeigerposition — sonst verspricht das Geisterbild eine Lage,
 die das Setzen nicht einhält.
+
+## Nullpunkt und Pluszeichen (13.08.2026, dritter Durchgang)
+
+| # | Prüfung | Erwartung |
+|---|---|---|
+| N1 | Werkzeug „Nullpunkt", Stelle antippen | Fadenkreuz sitzt dort, Karte springt nicht, Dach bleibt liegen |
+| N2 | Danach 3D öffnen | Haus steht in der Mitte, Luftbild ringsum |
+| N3 | Projekt neu laden | Nullpunkt und Geometrie unverändert |
+| P1 | 3D, „Belegen", Modul antippen | Modul weg, an seiner Stelle ein Pluszeichen |
+| P2 | Auf das Pluszeichen tippen | Modul kommt zurück, kein neues Feld |
+| P3 | „Ansehen" wählen | keine Pluszeichen mehr im Bild |
+| E1 | Module wegtippen | keine blassen Kästchen, nur die Pluszeichen an der Kante |
+| E2 | Letztes Modul eines Feldes wegtippen | Feld verschwindet aus der Liste |

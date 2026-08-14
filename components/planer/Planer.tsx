@@ -10,6 +10,7 @@ import {
   ZeichenFlaeche,
   ZeichenHindernis,
   ZeichenMessen,
+  ZeichenNullpunkt,
   ZeichenModul,
   ZeichenPlus,
   ZeichenString,
@@ -39,6 +40,7 @@ import {
 } from "./WirtschaftPanel";
 import {
   ansichtMerken,
+  ursprungSetzen,
   fotoKalibrieren,
   planSpeichern,
   vorschauSichern,
@@ -52,8 +54,9 @@ import {
 } from "@/lib/planer/anbieter";
 import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
-import { anzahlModule, kwp } from "@/lib/planer/module";
+import { anzahlModule, kwp, modulAnbauen } from "@/lib/planer/module";
 import { modulEntfernen, modulSetzen } from "@/lib/planer/setzen";
+import { ursprungVersetzen } from "@/lib/planer/ursprung";
 import { strangUmschalten } from "@/lib/planer/strings";
 import { num } from "@/lib/format";
 import { modulSchluessel, type Plan } from "@/lib/planer/plan";
@@ -155,6 +158,12 @@ const WERKZEUGE: Array<{
   { id: "teilen", zeichen: ZeichenTeilen, label: "Teilen", titel: "Teil der Gruppe als eigenes Feld abtrennen" },
   { id: "string", zeichen: ZeichenString, label: "String", titel: "Module dem gewählten String zuordnen" },
   { id: "messen", zeichen: ZeichenMessen, label: "Messen", titel: "Strecke messen" },
+  {
+    id: "nullpunkt",
+    zeichen: ZeichenNullpunkt,
+    label: "Nullpunkt",
+    titel: "Nullpunkt versetzen — Mitte der räumlichen Ansicht und des Luftbilds",
+  },
 ];
 
 /*
@@ -171,7 +180,7 @@ const WERKZEUGE: Array<{
  * dorthin steht als Satz auf der Zeichenfläche.
  */
 const WERKZEUGE_JE_PHASE: Record<1 | 2 | 3 | 4 | 5, Werkzeug[]> = {
-  1: ["auswahl", "flaeche", "hindernis", "baum", "setzen", "modul", "teilen", "messen"],
+  1: ["auswahl", "flaeche", "hindernis", "baum", "setzen", "modul", "teilen", "messen", "nullpunkt"],
   2: ["auswahl", "setzen", "modul", "teilen", "messen"],
   3: ["auswahl", "string", "messen"],
   4: ["auswahl"],
@@ -233,6 +242,12 @@ export function Planer({
   const [fang, setFang] = useState<FangOptionen>(FANG_STANDARD);
   const [gemerkt, setGemerkt] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
   const [mitte, setMitte] = useState<Meter>({ x: 0, y: 0 });
+  /*
+   * Der Nullpunkt liegt im Zustand, nicht nur in den Projektdaten: Er
+   * lässt sich versetzen, und die Karte muss dem sofort folgen — ohne
+   * die Seite neu zu laden, mitten im Planen.
+   */
+  const [ursprung, setUrsprung] = useState(projekt.ursprung);
   const [panelOffen, setPanelOffen] = useState(true);
   /*
    * Zähler fürs Einpassen der Karte. Hochzählen heisst: alle
@@ -522,7 +537,7 @@ export function Planer({
    * Neigungsregler rechnet er solange aus dem letzten Wert hoch und
    * markiert das mit einer Tilde.
    */
-  const ertrag = useErtrag(plan, projekt.ursprung, vorgabe.verlustProzent, plan.gebaeude.wandhoehe);
+  const ertrag = useErtrag(plan, ursprung, vorgabe.verlustProzent, plan.gebaeude.wandhoehe);
 
   const gewaehlterSpeicher = geraete.speicher.find((sp) => sp.id === plan.technik.speicher);
   const speicherKwh = gewaehlterSpeicher ? Number(gewaehlterSpeicher.nutzbar_kwh) : 0;
@@ -788,7 +803,7 @@ export function Planer({
           <div className="relative min-w-0 flex-1 bg-pl-flaeche">
             <Dreidee
               plan={plan}
-              ursprung={projekt.ursprung}
+              ursprung={ursprung}
               anbieter={anbieter}
               /*
                 * Nur für die Kachelauswahl: Breite und Höhe geben den
@@ -796,7 +811,7 @@ export function Planer({
                 * fester Wert reicht — die räumliche Ansicht hat ihre
                 * eigene Kamera.
                 */
-              kamera={{ ursprung: projekt.ursprung, zoom, mitte, breite: 1024, hoehe: 1024 }}
+              kamera={{ ursprung, zoom, mitte, breite: 1024, hoehe: 1024 }}
               wandhoehe={plan.gebaeude.wandhoehe}
               ueberstand={plan.gebaeude.ueberstand}
               schatten={ertrag.schattenJeModul}
@@ -815,6 +830,24 @@ export function Planer({
               }}
               onModulWeg={(g, reihe, spalte) => {
                 onPlan(modulEntfernen(plan, g, reihe, spalte), true);
+                setRaumMeldung(null);
+              }}
+              onAnbauen={(g, reihe, spalte) => {
+                /*
+                 * Dieselbe Rechnung wie hinter den Pluszeichen der
+                 * Draufsicht: `modulAnbauen` lässt das Raster um genau
+                 * eine Zelle wachsen und schaltet alles ab, was dabei
+                 * sonst noch entstünde.
+                 */
+                const g2 = plan.gruppen.find((x) => x.id === g);
+                const f2 = g2 ? plan.flaechen.find((x) => x.id === g2.flaeche) : null;
+                if (!g2 || !f2) return;
+                const erweitert = modulAnbauen(g2, f2, { reihe, spalte });
+                onPlan(
+                  { ...plan, gruppen: plan.gruppen.map((x) => (x.id === g ? erweitert : x)) },
+                  true,
+                );
+                setAktiveGruppe(g);
                 setRaumMeldung(null);
               }}
               onModulStrang={(g, reihe, spalte) => {
@@ -992,7 +1025,7 @@ export function Planer({
         <div ref={zeichenflaeche} className="relative min-w-0 flex-1 bg-pl-flaeche">
           {foto || verfuegbar(anbieter) ? (
             <Leinwand
-              ursprung={projekt.ursprung}
+              ursprung={ursprung}
               anbieter={anbieter}
               zoom={zoom}
               plan={plan}
@@ -1003,6 +1036,25 @@ export function Planer({
               fang={fang}
               foto={foto}
               onKalibriert={onKalibriert}
+              onNullpunkt={(ziel) => {
+                /*
+                 * Weltbezug UND Geometrie in einem Zug: Der Plan wird
+                 * um denselben Betrag zurückgerechnet, damit das Haus
+                 * dort stehen bleibt, wo es steht. Gespeichert wird
+                 * beides zusammen — zwei getrennte Schreibvorgänge
+                 * wären ein Zwischenzustand, in dem das Dach vierzig
+                 * Meter neben dem Haus liegt.
+                 */
+                const versetzt = ursprungVersetzen(plan, ursprung, ziel);
+                setUrsprung(versetzt.ursprung);
+                onPlan(versetzt.plan, true);
+                void ursprungSetzen({
+                  id: projekt.id,
+                  lat: versetzt.ursprung.lat,
+                  lon: versetzt.ursprung.lon,
+                  plan: versetzt.plan,
+                });
+              }}
               aktiv={aktiv}
               onAktiv={setAktiv}
               aktiveGruppe={aktiveGruppe}
@@ -1222,7 +1274,7 @@ export function Planer({
                     onAktiveGruppe={setAktiveGruppe}
                     onPlan={onPlan}
                     module={geraete.module}
-                    breitengrad={projekt.ursprung.lat}
+                    breitengrad={ursprung.lat}
                     schreibrecht={schreibrecht}
                     werkzeug={werkzeug}
                     onWerkzeug={setWerkzeug}
