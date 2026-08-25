@@ -82,6 +82,71 @@ function gedreht(punkte: Meter[], um: number): Meter[] {
 }
 
 /**
+ * Die Firstlinie über diesem Umriss.
+ *
+ * Eine Stelle für drei Zwecke: Zeichnen, Greifen und das Erzeugen der
+ * Teilflächen. Liefen die auseinander, säße der Griff woanders, als
+ * der First zu sehen ist — und ein Zug daran verschöbe etwas anderes,
+ * als man anfasst.
+ *
+ * `null`, wo es keinen First gibt (Flach-, Pult- und Zeltdach).
+ */
+export function firstLinie(
+  umriss: Meter[],
+  form: Dachform,
+  vorgaben: Dachvorgaben,
+): { a: Meter; b: Meter } | null {
+  if (umriss.length !== 4) return null;
+  if (form !== "sattel" && form !== "walm" && form !== "kruppelwalm") return null;
+
+  const p = flaecheMitVorzeichen(umriss) < 0 ? [...umriss].reverse() : [...umriss];
+  const q = gedreht(p, vorgaben.richtung);
+  const [a, b, c, d] = q as [Meter, Meter, Meter, Meter];
+
+  const versatz = Math.max(-0.8, Math.min(0.8, vorgaben.firstVersatz ?? 0));
+  const t = 0.5 + versatz / 2;
+  const f1 = mitteVon(b, c, t);
+  const f2 = mitteVon(a, d, t);
+  if (form === "sattel") return { a: f2, b: f1 };
+
+  const anteil = Math.max(0.05, Math.min(1, vorgaben.walmAnteil ?? 1));
+  const firstLaenge = Math.hypot(f1.x - f2.x, f1.y - f2.y);
+  const tiefe = (Math.hypot(b.x - a.x, b.y - a.y) + Math.hypot(d.x - c.x, d.y - c.y)) / 2;
+  const rueck = Math.min(0.45, ((tiefe / 2) * anteil) / Math.max(0.001, firstLaenge));
+  return { a: mitteVon(f2, f1, rueck), b: mitteVon(f2, f1, 1 - rueck) };
+}
+
+/**
+ * Wie weit der First von der Mitte weg müsste, damit er durch diesen
+ * Punkt läuft — als Anteil, wie ihn `firstVersatz` erwartet.
+ *
+ * Gerechnet wird die Verschiebung QUER zum First: Ein Zug in
+ * Firstrichtung soll nichts tun, sonst rutscht das Dach beim kleinsten
+ * seitlichen Wackeln.
+ */
+export function firstVersatzFuer(umriss: Meter[], richtung: 0 | 1, ziel: Meter): number {
+  if (umriss.length !== 4) return 0;
+  const p = flaecheMitVorzeichen(umriss) < 0 ? [...umriss].reverse() : [...umriss];
+  const q = gedreht(p, richtung);
+  const [a, b, c, d] = q as [Meter, Meter, Meter, Meter];
+
+  /*
+   * Die beiden Kanten, auf denen die Firstenden gleiten (b→c und a→d).
+   * Der Anteil ergibt sich aus der Projektion des Zeigers auf eine
+   * davon — beide sind gleich lang parametrisiert.
+   */
+  const mitteAlt = mitteVon(mitteVon(b, c, 0.5), mitteVon(a, d, 0.5), 0.5);
+  const richtungQuer = { x: mitteVon(b, c, 1).x - mitteVon(b, c, 0).x, y: mitteVon(b, c, 1).y - mitteVon(b, c, 0).y };
+  const laenge = Math.hypot(richtungQuer.x, richtungQuer.y);
+  if (laenge < 0.001) return 0;
+
+  const e = { x: richtungQuer.x / laenge, y: richtungQuer.y / laenge };
+  const weg = (ziel.x - mitteAlt.x) * e.x + (ziel.y - mitteAlt.y) * e.y;
+  // `t` läuft von 0 bis 1 über die Kante; der Versatz ist das Doppelte.
+  return Math.max(-0.8, Math.min(0.8, (weg / laenge) * 2));
+}
+
+/**
  * Die Flächen eines Dachs über diesem Umriss.
  *
  * Vier Ecken sind die Voraussetzung für alles ausser Flach- und

@@ -40,6 +40,7 @@ import {
 import { strangUmschalten, strangWeg } from "@/lib/planer/strings";
 import { modulEntfernen, modulSetzen, modulVorschau } from "@/lib/planer/setzen";
 import { bauAnwenden, bauAusUmriss } from "@/lib/planer/bau";
+import { firstLinie, firstVersatzFuer } from "@/lib/planer/dachformen";
 import { anbieter as anbieterZu, type AnbieterId, hoechsterZoom, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
@@ -73,6 +74,8 @@ import {
   zeichneAnbaustellen,
   zeichneStrangwege,
   zeichneUmriss,
+  zeichneFirst,
+  firstGriff,
   zeichneAuswahl,
   zeichneGruppe,
   zeichneGeistermodul,
@@ -121,7 +124,14 @@ export type Werkzeug =
    * Kartenmitte, das Luftbild der räumlichen Ansicht und die
    * Koordinaten im PDF.
    */
-  | "nullpunkt";
+  | "nullpunkt"
+  /*
+   * Gaube aufziehen. Technisch dasselbe wie eine Sperrzone — sie
+   * sperrt Dachfläche —, in der Aussage aber etwas anderes: Hier ist
+   * nicht nur nichts zu belegen, hier steht etwas. Deshalb ein eigenes
+   * Werkzeug und eine eigene Darstellung.
+   */
+  | "gaube";
 
 export interface FotoQuelle {
   url: string;
@@ -283,6 +293,8 @@ export function Leinwand(p: LeinwandProps) {
      * werden, wandert beim Ziehen das ganze Dach mit.
      */
     | { art: "bauEcke"; bau: string; index: number }
+    /* Der First selbst: quer ziehen verschiebt ihn. */
+    | { art: "first"; bau: string }
     /*
      * Die ganze Dachfläche schieben. Vorher liess sie sich nur über die
      * Ecken verformen: Wer die Standardform einen Meter neben dem Haus
@@ -466,13 +478,42 @@ export function Leinwand(p: LeinwandProps) {
      * Sattel und Walm zeigen sie, wo das Haus aufhört.
      */
     for (const b of stand.current.plan.bauten) {
-      const gehoert = stand.current.plan.flaechen.some(
-        (f) => f.bau === b.id && f.id === stand.current.aktiv,
-      );
+      /*
+       * Ein Haus ohne Dachflächen wird nicht gezeichnet. Es sollte
+       * keines geben — Löschen nimmt beides —, aber ein Plan aus einer
+       * älteren Fassung kann eines enthalten, und eine gestrichelte
+       * Linie ohne zugehörige Zeile in der Liste ist genau der Rest,
+       * über den sich der Betrieb beschwert hat.
+       */
+      const eigene = stand.current.plan.flaechen.filter((f) => f.bau === b.id);
+      if (eigene.length === 0) continue;
+      const gehoert = eigene.some((f) => f.id === stand.current.aktiv);
       zeichneUmriss(ctx, k, b.umriss, gehoert && stand.current.bearbeitbar.flaechen);
     }
 
     for (const f of stand.current.plan.flaechen) zeichneFlaeche(ctx, sicht, f);
+
+    /*
+     * Der First mit seinem Griff — nur solange am Dach gearbeitet wird.
+     * In der Belegung wäre er eine weitere Linie über den Modulen, an
+     * der man aus Versehen zieht.
+     */
+    if (stand.current.bearbeitbar.flaechen) {
+      for (const b of stand.current.plan.bauten) {
+        if (!stand.current.plan.flaechen.some((f) => f.bau === b.id)) continue;
+        const linie = firstLinie(b.umriss, b.form, {
+          neigung: b.neigung,
+          richtung: b.richtung,
+          walmAnteil: b.walmAnteil,
+          firstVersatz: b.firstVersatz,
+        });
+        if (!linie) continue;
+        const gehoert = stand.current.plan.flaechen.some(
+          (f) => f.bau === b.id && f.id === stand.current.aktiv,
+        );
+        zeichneFirst(ctx, k, linie, gehoert);
+      }
+    }
 
     // Module über die Flächen — sie liegen ja auch darauf.
     /*
@@ -682,6 +723,15 @@ export function Leinwand(p: LeinwandProps) {
 
   /* ── Treffer ─────────────────────────────────────────────────── */
 
+  /** Gehören zwei Flächen zum selben Haus? */
+  const selbesHaus = useCallback((a: string | null, b: string | null) => {
+    if (!a || !b) return false;
+    const s = stand.current;
+    const fa = s.plan.flaechen.find((f) => f.id === a);
+    const fb = s.plan.flaechen.find((f) => f.id === b);
+    return Boolean(fa?.bau && fa.bau === fb?.bau);
+  }, []);
+
   const treffer = useCallback((bp: { x: number; y: number }) => {
     const k = kamera.current;
     const s = stand.current;
@@ -787,6 +837,18 @@ export function Leinwand(p: LeinwandProps) {
      */
     if (s.bearbeitbar.flaechen) {
       for (const b of s.plan.bauten) {
+        const linie = firstLinie(b.umriss, b.form, {
+          neigung: b.neigung,
+          richtung: b.richtung,
+          walmAnteil: b.walmAnteil,
+          firstVersatz: b.firstVersatz,
+        });
+        if (linie) {
+          const g = firstGriff(k, linie);
+          if (Math.hypot(g.x - bp.x, g.y - bp.y) <= GRIFF + 3) {
+            return { art: "first" as const, bau: b.id };
+          }
+        }
         for (let i = 0; i < b.umriss.length; i++) {
           const bild2 = meterZuBild(k, b.umriss[i]!);
           if (Math.hypot(bild2.x - bp.x, bild2.y - bp.y) <= GRIFF) {
@@ -796,7 +858,13 @@ export function Leinwand(p: LeinwandProps) {
       }
     }
 
-    if (aktive && s.bearbeitbar.flaechen) {
+    /*
+     * Ecken einer ERZEUGTEN Dachfläche sind tabu: Sie gehören zur
+     * Dachform, nicht zum Betrieb. Wer eine Firstecke einzeln zöge,
+     * hätte danach ein Satteldach, dessen Hälften sich nicht mehr
+     * treffen. Zu ziehen gibt es die Hausecken und den First.
+     */
+    if (aktive && s.bearbeitbar.flaechen && !aktive.bau) {
       for (let i = 0; i < aktive.punkte.length; i++) {
         const b = meterZuBild(k, aktive.punkte[i]!);
         if (Math.hypot(b.x - bp.x, b.y - bp.y) <= GRIFF) {
@@ -812,7 +880,7 @@ export function Leinwand(p: LeinwandProps) {
      * wird. Sonst öffnete ein Klick neben dem Feld eine Eingabe, deren
      * Pille gar nicht auf dem Bild steht.
      */
-    if (s.bearbeitbar.flaechen && aktive && !s.aktiveGruppe) {
+    if (s.bearbeitbar.flaechen && aktive && !aktive.bau && !s.aktiveGruppe) {
       for (const kante of kanten(aktive.punkte)) {
         const m = masszahlOrt(k, aktive.punkte, kante.a, kante.b);
         const p1 = meterZuBild(k, kante.a);
@@ -826,6 +894,7 @@ export function Leinwand(p: LeinwandProps) {
 
     if (s.bearbeitbar.flaechen)
     for (const f of s.plan.flaechen) {
+      if (f.bau) continue;
       for (const kante of kanten(f.punkte)) {
         const nah = meterZuBild(k, naechsterAufStrecke(bildZuMeter(k, bp), kante.a, kante.b));
         if (Math.hypot(nah.x - bp.x, nah.y - bp.y) <= GRIFF) {
@@ -864,7 +933,8 @@ export function Leinwand(p: LeinwandProps) {
       return;
     }
 
-    if (s.werkzeug === "hindernis") {
+    if (s.werkzeug === "hindernis" || s.werkzeug === "gaube") {
+      const gaube = s.werkzeug === "gaube";
       const ziel = s.plan.flaechen.find((f) => f.id === s.aktiv);
       /*
        * Ein Kamin neben dem Dach ist keine Angabe, sondern ein Versehen:
@@ -876,7 +946,11 @@ export function Leinwand(p: LeinwandProps) {
         y: punkte.reduce((a, q) => a + q.y, 0) / punkte.length,
       };
       if (ziel && !punktInPolygon(mitte, ziel.punkte)) {
-        setMeldung("Die Sperrzone muss auf der gewählten Dachfläche liegen.");
+        setMeldung(
+          gaube
+            ? "Die Gaube muss auf der gewählten Dachfläche liegen."
+            : "Die Sperrzone muss auf der gewählten Dachfläche liegen.",
+        );
         entwurf.current = [];
         setEntwurfLaenge(0);
         anstossen();
@@ -891,10 +965,13 @@ export function Leinwand(p: LeinwandProps) {
               ...f.hindernisse,
               {
                 id: naechsteId(f.hindernisse.map((h) => h.id), "h"),
-                art: "polygon",
-                name: `Sperrzone ${f.hindernisse.length + 1}`,
+                art: gaube ? ("gaube" as const) : ("polygon" as const),
+                name: gaube
+                  ? `Gaube ${f.hindernisse.filter((h) => h.art === "gaube").length + 1}`
+                  : `Sperrzone ${f.hindernisse.filter((h) => h.art !== "gaube").length + 1}`,
                 punkte,
                 abstand: 0.3,
+                ...(gaube ? { hoehe: 1.2 } : {}),
               },
             ],
           }),
@@ -1153,7 +1230,7 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = null;
         return;
       }
-      if (s.werkzeug === "hindernis" && s.aktiv) {
+      if ((s.werkzeug === "hindernis" || s.werkzeug === "gaube") && s.aktiv) {
         zieht.current = { art: "hindernis", flaeche: s.aktiv, von: gefangen(bp, null) };
         return;
       }
@@ -1199,6 +1276,10 @@ export function Leinwand(p: LeinwandProps) {
          */
         if (t?.art === "modul") malenAnStrang(t.gruppe, t.reihe, t.spalte);
         zieht.current = { art: "malen" };
+        return;
+      }
+      if (t?.art === "first") {
+        zieht.current = { art: "first", bau: t.bau };
         return;
       }
       if (t?.art === "bauEcke") {
@@ -1286,12 +1367,16 @@ export function Leinwand(p: LeinwandProps) {
         t?.art === "flaeche" &&
         s.bearbeitbar.flaechen &&
         s.werkzeug === "auswahl" &&
-        s.aktiv === t.flaeche
+        (s.aktiv === t.flaeche || selbesHaus(s.aktiv, t.flaeche))
       ) {
         /*
          * In der GEWÄHLTEN Fläche zieht man sie; in einer anderen wählt
          * man sie erst aus. Sonst verschöbe der erste Klick auf ein
          * fremdes Dach dieses gleich mit.
+         *
+         * Bei einem Haus zählt jede seiner Dachflächen als dieselbe
+         * Sache: Wer die Dachhälfte gegenüber anfasst, meint dasselbe
+         * Haus — und geschoben wird ohnehin das ganze.
          */
         zieht.current = {
           art: "flaecheZiehen",
@@ -1391,6 +1476,15 @@ export function Leinwand(p: LeinwandProps) {
       if (z.art === "messen" && messung.current) {
         messung.current = { ...messung.current, nach: bildZuMeter(k, jetzt) };
         anstossen();
+        return;
+      }
+
+      if (z.art === "first") {
+        const b = s.plan.bauten.find((x) => x.id === z.bau);
+        if (!b) return;
+        const ziel2 = bildZuMeter(kamera.current, jetzt);
+        const firstVersatz = firstVersatzFuer(b.umriss, b.richtung, ziel2);
+        s.onPlan(bauAnwenden(s.plan, { ...b, firstVersatz }), false);
         return;
       }
 
@@ -1629,46 +1723,82 @@ export function Leinwand(p: LeinwandProps) {
         const um = { x: jetztM.x - z.letzte.x, y: jetztM.y - z.letzte.y };
         z.letzte = jetztM;
 
+        const gezogen = s.plan.flaechen.find((f) => f.id === z.flaeche);
         /*
-         * Alles, was auf dem Dach liegt, wandert mit: Hindernisse und
-         * Modulfelder. Bliebe die Belegung stehen, läge sie nach dem
-         * Verschieben neben dem Haus — und `nachfuehren` würde sie beim
-         * nächsten Anfassen wegwerfen.
+         * Gehört die Fläche zu einem Haus, wandert das GANZE Haus.
+         *
+         * Sonst liesse sich eine Dachhälfte einzeln wegschieben, und
+         * aus dem Satteldach würden zwei Flächen, die sich nicht mehr
+         * am First treffen — genau das ist im Betrieb passiert. Eine
+         * erzeugte Teilfläche ist kein eigenes Ding: Sie ist ein Stück
+         * Dach.
          */
+        const bau = gezogen?.bau
+          ? s.plan.bauten.find((x) => x.id === gezogen.bau) ?? null
+          : null;
+
+        /** Alles auf DIESEN Flächen mitnehmen. */
+        const betroffen = new Set(
+          bau
+            ? s.plan.flaechen.filter((f) => f.bau === bau.id).map((f) => f.id)
+            : [z.flaeche],
+        );
+
+        const verschoben = {
+          ...s.plan,
+          flaechen: s.plan.flaechen.map((f) =>
+            betroffen.has(f.id)
+              ? {
+                  ...f,
+                  punkte: f.punkte.map((pp) => ({ x: pp.x + um.x, y: pp.y + um.y })),
+                  hindernisse: f.hindernisse.map((h) => ({
+                    ...h,
+                    punkte: h.punkte.map((pp) => ({ x: pp.x + um.x, y: pp.y + um.y })),
+                  })),
+                }
+              : f,
+          ),
+          gruppen: s.plan.gruppen.map((g) =>
+            betroffen.has(g.flaeche)
+              ? {
+                  ...g,
+                  anker: { x: g.anker.x + um.x, y: g.anker.y + um.y },
+                  frei: Object.fromEntries(
+                    Object.entries(g.frei).map(([schluessel, p]) => [
+                      schluessel,
+                      { x: p.x + um.x, y: p.y + um.y },
+                    ]),
+                  ),
+                }
+              : g,
+          ),
+        };
+
+        if (!bau) {
+          s.onPlan(verschoben, false);
+          return;
+        }
+
+        /*
+         * Beim Haus wandert der Umriss mit, und die Dachflächen werden
+         * daraus neu gerechnet. Die Sperrzonen und Modulfelder sind
+         * oben schon verschoben; `flaechenFuerBau` übernimmt sie von
+         * der bisherigen Teilfläche und behält damit die neue Lage.
+         */
+        const umriss = bau.umriss.map((pp) => ({ x: pp.x + um.x, y: pp.y + um.y }));
         s.onPlan(
-          {
-            ...s.plan,
-            flaechen: s.plan.flaechen.map((f) =>
-              f.id === z.flaeche
-                ? {
-                    ...f,
-                    punkte: f.punkte.map((pp) => ({ x: pp.x + um.x, y: pp.y + um.y })),
-                    hindernisse: f.hindernisse.map((h) => ({
-                      ...h,
-                      punkte: h.punkte.map((pp) => ({ x: pp.x + um.x, y: pp.y + um.y })),
-                    })),
-                  }
-                : f,
-            ),
-            gruppen: s.plan.gruppen.map((g) =>
-              g.flaeche === z.flaeche
-                ? {
-                    ...g,
-                    anker: { x: g.anker.x + um.x, y: g.anker.y + um.y },
-                    frei: Object.fromEntries(
-                      Object.entries(g.frei).map(([schluessel, p]) => [
-                        schluessel,
-                        { x: p.x + um.x, y: p.y + um.y },
-                      ]),
-                    ),
-                  }
-                : g,
-            ),
-          },
+          bauAnwenden(
+            {
+              ...verschoben,
+              bauten: verschoben.bauten.map((x) => (x.id === bau.id ? { ...x, umriss } : x)),
+            },
+            { ...bau, umriss },
+          ),
           false,
         );
         return;
       }
+
 
       if (z.art === "kante") {
         const jetztM = bildZuMeter(k, jetzt);
@@ -1920,7 +2050,7 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
-      if (z?.art === "bauEcke") {
+      if (z?.art === "first" || z?.art === "bauEcke") {
         // Jetzt erst ein Rückschritt — nicht für jede Mausbewegung.
         s.onPlan(s.plan, true);
         zieht.current = null;
@@ -2299,6 +2429,8 @@ export function Leinwand(p: LeinwandProps) {
           <span className="shrink-0 text-[12px] font-bold text-pl-auf-dunkel">
             {p.werkzeug === "nullpunkt"
               ? "Nullpunkt versetzen"
+              : p.werkzeug === "gaube"
+              ? "Gaube aufziehen"
               : p.werkzeug === "flaeche"
               ? "Dachfläche zeichnen"
               : p.werkzeug === "hindernis"
@@ -2318,6 +2450,8 @@ export function Leinwand(p: LeinwandProps) {
           <span className="truncate text-[11.5px] text-pl-auf-dunkel-2">
             {p.werkzeug === "nullpunkt"
               ? "Stelle antippen — die räumliche Ansicht und das Luftbild richten sich danach aus"
+              : p.werkzeug === "gaube"
+              ? "Rechteck über die Gaube ziehen — sie sperrt die Fläche und steht in der 3D-Ansicht"
               : p.werkzeug === "flaeche"
               ? entwurfLaenge >= 3
                 ? "Ersten Punkt antippen oder Enter schliesst die Fläche · Esc bricht ab"

@@ -267,3 +267,14 @@ die das Setzen nicht einhält.
 | D6 | Zurück auf „Flachdach" | eine Fläche ohne Neigung; Felder auf weggefallenen Flächen werden gemeldet |
 | D7 | An einer Hausecke ziehen | Umriss und alle Dachflächen wandern zusammen |
 | D8 | Schieber „First aus der Mitte" | die Seiten werden ungleich, die Gesamtfläche bleibt |
+
+## Gaube und First (13.08.2026, fünfter Durchgang)
+
+| # | Prüfung | Erwartung |
+|---|---|---|
+| G1 | Werkzeug „Gaube", Rechteck aufs Dach ziehen | heller Aufbau mit eigenem First, in der Liste als „Gaube 1" |
+| G2 | 3D öffnen | die Gaube steht als Körper auf dem Dach |
+| G3 | Gaube über Module schieben | die Module darunter fallen heraus |
+| G4 | Satteldach, Griff am First quer ziehen | First wandert, beide Hälften bleiben verbunden |
+| G5 | In eine Dachhälfte fassen und ziehen | das ganze Haus wandert, die Form bleibt |
+| G6 | An einer Ecke der Teilfläche ziehen | nicht möglich — nur Hausecken und First sind greifbar |

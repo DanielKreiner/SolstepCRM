@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flaechenAusUmriss } from "./dachformen";
+import { firstLinie, firstVersatzFuer, flaechenAusUmriss } from "./dachformen";
 import { grundflaeche } from "./flaeche";
 import type { Meter } from "./geo";
 
@@ -133,5 +133,57 @@ describe("flaechenAusUmriss", () => {
     const teile = flaechenAusUmriss(fuenf, "walm", { neigung: 30, richtung: 0 });
     expect(teile).toHaveLength(1);
     expect(grundflaeche(teile[0]!.punkte)).toBeCloseTo(grundflaeche(fuenf), 6);
+  });
+});
+
+describe("firstLinie", () => {
+  it("liegt beim Satteldach in der Mitte", () => {
+    const l = flaechenAusUmriss(RECHTECK, "sattel", { neigung: 30, richtung: 0 });
+    expect(l).toHaveLength(2);
+    const first = firstLinie(RECHTECK, "sattel", { neigung: 30, richtung: 0 })!;
+    expect(first.a.y).toBeCloseTo(4, 6);
+    expect(first.b.y).toBeCloseTo(4, 6);
+  });
+
+  it("wandert mit dem Versatz", () => {
+    const mittig = firstLinie(RECHTECK, "sattel", { neigung: 30, richtung: 0 })!;
+    const weg = firstLinie(RECHTECK, "sattel", { neigung: 30, richtung: 0, firstVersatz: 0.5 })!;
+    expect(weg.a.y).toBeGreaterThan(mittig.a.y);
+  });
+
+  it("ist beim Walmdach kürzer als beim Satteldach", () => {
+    const laenge = (l: { a: Meter; b: Meter }) => Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y);
+    const sattel = firstLinie(RECHTECK, "sattel", { neigung: 30, richtung: 0 })!;
+    const walm = firstLinie(RECHTECK, "walm", { neigung: 30, richtung: 0 })!;
+    expect(laenge(walm)).toBeLessThan(laenge(sattel));
+  });
+
+  it("gibt es bei Flach-, Pult- und Zeltdach nicht", () => {
+    for (const form of ["flach", "pult", "zelt"] as const) {
+      expect(firstLinie(RECHTECK, form, { neigung: 30, richtung: 0 })).toBeNull();
+    }
+  });
+});
+
+describe("firstVersatzFuer", () => {
+  it("gibt null in der Mitte", () => {
+    expect(firstVersatzFuer(RECHTECK, 0, { x: 6, y: 4 })).toBeCloseTo(0, 6);
+  });
+
+  it("rechnet einen Punkt weiter oben in einen positiven Versatz um", () => {
+    const v = firstVersatzFuer(RECHTECK, 0, { x: 6, y: 6 });
+    expect(v).toBeGreaterThan(0);
+    // Und der First landet danach wirklich dort.
+    const first = firstLinie(RECHTECK, "sattel", { neigung: 30, richtung: 0, firstVersatz: v })!;
+    expect(first.a.y).toBeCloseTo(6, 6);
+  });
+
+  it("ignoriert eine Bewegung längs des Firsts", () => {
+    expect(firstVersatzFuer(RECHTECK, 0, { x: 11, y: 4 })).toBeCloseTo(0, 6);
+  });
+
+  it("bleibt in den Grenzen", () => {
+    expect(firstVersatzFuer(RECHTECK, 0, { x: 6, y: 99 })).toBeLessThanOrEqual(0.8);
+    expect(firstVersatzFuer(RECHTECK, 0, { x: 6, y: -99 })).toBeGreaterThanOrEqual(-0.8);
   });
 });

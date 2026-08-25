@@ -10,6 +10,7 @@ import {
   ZeichenFlaeche,
   ZeichenHindernis,
   ZeichenMessen,
+  ZeichenGaube,
   ZeichenNullpunkt,
   ZeichenModul,
   ZeichenPlus,
@@ -152,6 +153,7 @@ const WERKZEUGE: Array<{
   { id: "auswahl", zeichen: ZeichenZeiger, label: "Wählen", titel: "Auswählen und bearbeiten" },
   { id: "flaeche", zeichen: ZeichenFlaeche, label: "Dach", titel: "Dachfläche zeichnen" },
   { id: "hindernis", zeichen: ZeichenHindernis, label: "Sperrzone", titel: "Sperrzone aufziehen — Kamin, Gaube, Fenster, Dachluke, Wartungsweg" },
+  { id: "gaube", zeichen: ZeichenGaube, label: "Gaube", titel: "Gaube aufziehen — sperrt die Fläche und steht im Bild" },
   { id: "baum", zeichen: ZeichenBaum, label: "Baum", titel: "Baum setzen — kostet Ertrag durch Verschattung" },
   { id: "setzen", zeichen: ZeichenPlus, label: "Setzen", titel: "Modul setzen — das Geisterbild zeigt, wohin es kommt" },
   { id: "modul", zeichen: ZeichenModul, label: "Modul", titel: "Einzelnes Modul frei setzen oder zurückholen" },
@@ -180,7 +182,7 @@ const WERKZEUGE: Array<{
  * dorthin steht als Satz auf der Zeichenfläche.
  */
 const WERKZEUGE_JE_PHASE: Record<1 | 2 | 3 | 4 | 5, Werkzeug[]> = {
-  1: ["auswahl", "flaeche", "hindernis", "baum", "setzen", "modul", "teilen", "messen", "nullpunkt"],
+  1: ["auswahl", "flaeche", "hindernis", "gaube", "baum", "setzen", "modul", "teilen", "messen", "nullpunkt"],
   2: ["auswahl", "setzen", "modul", "teilen", "messen"],
   3: ["auswahl", "string", "messen"],
   4: ["auswahl"],

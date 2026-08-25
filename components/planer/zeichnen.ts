@@ -15,6 +15,7 @@ import {
   versatzNachInnen,
   wahreKantenlaenge,
   type Dachflaeche,
+  type Hindernis,
 } from "@/lib/planer/flaeche";
 import { type Kamera, meterZuBild, type Meter } from "@/lib/planer/geo";
 import {
@@ -43,6 +44,9 @@ export const FARBEN = {
    * auf jedem Untergrund.
    */
   sperrflaeche: "rgba(232, 176, 43, 0.30)",
+  /* Gaube: ein Baukörper, kein Verbot — deshalb Grau statt Gelb. */
+  gaube: "rgba(228, 224, 216, 0.88)",
+  gaubeRand: "rgba(60, 54, 48, 0.9)",
   sperrstrich: "rgba(196, 132, 12, 0.85)",
   sperrrand: "rgba(232, 176, 43, 0.95)",
   warnung: "#d2543f",
@@ -170,8 +174,12 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
     ctx.restore();
   }
 
-  // Sperrzonen mit Sperrsaum.
+  // Sperrzonen mit Sperrsaum, Gauben als Aufbau.
   for (const h of f.hindernisse) {
+    if (h.art === "gaube") {
+      zeichneGaube(ctx, k, h, h.id === s.sperrzone);
+      continue;
+    }
     ctx.save();
     ctx.setLineDash([4, 3]);
     pfad(ctx, k, versatzNachInnen(h.punkte, -h.abstand));
@@ -1058,6 +1066,148 @@ export function zeichneUmriss(
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.strokeStyle = FARBEN.akzentDunkel;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+
+/**
+ * Die Firstlinie mit ihrem Griff.
+ *
+ * Kräftig weiss auf dem Dach, in der Mitte ein Griff mit Doppelpfeil
+ * quer zum First — dieselbe Geste wie in Reonic: anfassen, quer
+ * ziehen, das ganze Dach rechnet sich mit.
+ */
+export function zeichneFirst(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  linie: { a: Meter; b: Meter },
+  mitGriff: boolean,
+) {
+  const a = bild(k, linie.a);
+  const b = bild(k, linie.b);
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.strokeStyle = "rgba(12, 14, 20, 0.55)";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+
+  if (!mitGriff) return;
+
+  const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(m.x, m.y, 11, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = FARBEN.akzentDunkel;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  /*
+   * Der Doppelpfeil zeigt QUER zum First — in die Richtung, in die er
+   * sich bewegen lässt. Ein Pfeil längs wäre eine Einladung zu einer
+   * Bewegung, die nichts tut.
+   */
+  const laenge = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const q = { x: -(b.y - a.y) / laenge, y: (b.x - a.x) / laenge };
+  ctx.strokeStyle = FARBEN.akzentDunkel;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(m.x - q.x * 6, m.y - q.y * 6);
+  ctx.lineTo(m.x + q.x * 6, m.y + q.y * 6);
+  ctx.stroke();
+  for (const s2 of [1, -1]) {
+    const spitze2 = { x: m.x + q.x * 6 * s2, y: m.y + q.y * 6 * s2 };
+    ctx.beginPath();
+    ctx.moveTo(spitze2.x - q.y * 3 - q.x * 3 * s2, spitze2.y + q.x * 3 - q.y * 3 * s2);
+    ctx.lineTo(spitze2.x, spitze2.y);
+    ctx.lineTo(spitze2.x + q.y * 3 - q.x * 3 * s2, spitze2.y - q.x * 3 - q.y * 3 * s2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Wo der Firstgriff auf dem Bild sitzt — für die Trefferprüfung. */
+export function firstGriff(k: Kamera, linie: { a: Meter; b: Meter }) {
+  const a = bild(k, linie.a);
+  const b = bild(k, linie.b);
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+
+/**
+ * Eine Gaube in der Draufsicht.
+ *
+ * Kein gelbes Verbotsmuster: Eine Gaube ist ein Bauteil, das dasteht.
+ * Deshalb hell gefüllt wie ein Dachaufbau, mit einer Linie in der
+ * Mitte für ihren eigenen First — daran erkennt man sie im Luftbild
+ * auch dann, wenn sie klein ist.
+ */
+export function zeichneGaube(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  h: Hindernis,
+  betont: boolean,
+) {
+  if (h.punkte.length < 3) return;
+
+  ctx.save();
+  pfad(ctx, k, h.punkte);
+  ctx.fillStyle = FARBEN.gaube;
+  ctx.fill();
+  ctx.strokeStyle = FARBEN.gaubeRand;
+  ctx.lineWidth = betont ? 2.4 : 1.6;
+  ctx.stroke();
+  ctx.restore();
+
+  /*
+   * Der First der Gaube: die Verbindung der Mitten zweier
+   * gegenüberliegender Kanten. Bei einem aufgezogenen Rechteck sind
+   * das die kurzen Seiten, und die Linie läuft längs — so, wie eine
+   * Schleppgaube auch gebaut ist.
+   */
+  if (h.punkte.length === 4) {
+    const a = h.punkte[0]!;
+    const b = h.punkte[1]!;
+    const c = h.punkte[2]!;
+    const d = h.punkte[3]!;
+    const lang = Math.hypot(b.x - a.x, b.y - a.y) >= Math.hypot(c.x - b.x, c.y - b.y);
+    const m1 = lang
+      ? { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2 }
+      : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const m2 = lang
+      ? { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 }
+      : { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2 };
+    const p1 = bild(k, m1);
+    const p2 = bild(k, m2);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.strokeStyle = FARBEN.gaubeRand;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if (!betont) return;
+  for (const q of h.punkte) {
+    const b = bild(k, q);
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 5.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.strokeStyle = FARBEN.gaubeRand;
     ctx.lineWidth = 2;
     ctx.stroke();
   }

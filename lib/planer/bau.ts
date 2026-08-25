@@ -103,3 +103,32 @@ export function bauZu(plan: Plan, flaecheId: string | null): Bau | null {
   if (!f?.bau) return null;
   return plan.bauten.find((b) => b.id === f.bau) ?? null;
 }
+
+/**
+ * Ein Haus löschen — mit allem, was daran hängt.
+ *
+ * Ausgelöst durch eine Beobachtung aus dem Betrieb: „wenn ich ein Dach
+ * lösche, bleibt vom vorherigen die orangen Linien". Genau so war es —
+ * die Dachfläche verschwand, der Umriss blieb als gestrichelte Linie
+ * auf dem Luftbild stehen, und niemand konnte ihn noch anfassen, weil
+ * die Liste im Panel leer war.
+ *
+ * Eine Teilfläche einzeln zu löschen gibt es nicht: Wer die eine
+ * Hälfte eines Satteldachs wegnimmt, meint das Dach.
+ */
+export function bauLoeschen(plan: Plan, bauId: string): Plan {
+  const weg = new Set(plan.flaechen.filter((f) => f.bau === bauId).map((f) => f.id));
+  const gruppen = plan.gruppen.filter((g) => !weg.has(g.flaeche));
+  const gruppenIds = new Set(gruppen.map((g) => g.id));
+
+  return {
+    ...plan,
+    bauten: plan.bauten.filter((b) => b.id !== bauId),
+    flaechen: plan.flaechen.filter((f) => f.bau !== bauId),
+    gruppen,
+    strings: plan.strings.map((s) => ({
+      ...s,
+      module: s.module.filter((m) => gruppenIds.has(m.slice(0, Math.max(0, m.lastIndexOf("/"))))),
+    })),
+  };
+}

@@ -11,7 +11,7 @@ import {
 } from "@/lib/planer/flaeche";
 import type { Meter } from "@/lib/planer/geo";
 import { type Bau, type Dachform, DACHFORMEN, dachformFlaechen, type Plan } from "@/lib/planer/plan";
-import { bauAnwendenMitHinweis, bauZu } from "@/lib/planer/bau";
+import { bauAnwendenMitHinweis, bauLoeschen, bauZu } from "@/lib/planer/bau";
 import { DACHTYPEN } from "@/lib/planer/dachformen";
 import { Frage, Knopf, Listenzeile, Mehr, Stand, Wahlkarte, Zahlfeld } from "./Bausteine";
 import { ZeichenFlaeche, ZeichenRechteck } from "./Zeichen";
@@ -161,15 +161,22 @@ export function DachSchritt(p: DachSchrittProps) {
                 {...(p.schreibrecht
                   ? {
                       onWeg: () => {
-                        p.onPlan(
-                          {
-                            ...p.plan,
-                            flaechen: p.plan.flaechen.filter((x) => x.id !== f.id),
-                            gruppen: p.plan.gruppen.filter((g) => g.flaeche !== f.id),
-                          },
-                          true,
-                        );
-                        if (p.aktiv === f.id) p.onAktiv(null);
+                        /*
+                         * Gehört die Fläche zu einem Haus, geht das
+                         * ganze Haus — samt Umriss. Sonst blieb die
+                         * gestrichelte Linie auf dem Luftbild stehen,
+                         * ohne dass es dazu noch eine Zeile in der
+                         * Liste gab.
+                         */
+                        const naechster = f.bau
+                          ? bauLoeschen(p.plan, f.bau)
+                          : {
+                              ...p.plan,
+                              flaechen: p.plan.flaechen.filter((x) => x.id !== f.id),
+                              gruppen: p.plan.gruppen.filter((g) => g.flaeche !== f.id),
+                            };
+                        p.onPlan(naechster, true);
+                        if (p.aktiv === f.id) p.onAktiv(naechster.flaechen[0]?.id ?? null);
                       },
                     }
                   : {})}

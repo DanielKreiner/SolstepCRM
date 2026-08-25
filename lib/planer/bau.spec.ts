@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bauAnwendenMitHinweis, bauAusUmriss, bauZu } from "./bau";
+import { bauAnwendenMitHinweis, bauAusUmriss, bauLoeschen, bauZu } from "./bau";
 import { leererPlan, type Plan } from "./plan";
 import { grundflaeche } from "./flaeche";
 import type { Meter } from "./geo";
@@ -184,5 +184,50 @@ describe("bauZu", () => {
     const { plan, bau } = bauAusUmriss(leererPlan(), UMRISS);
     expect(bauZu(plan, plan.flaechen[0]!.id)?.id).toBe(bau.id);
     expect(bauZu(plan, "f-gibtsnicht")).toBeNull();
+  });
+});
+
+describe("bauLoeschen", () => {
+  it("nimmt Umriss, Flächen und Belegung mit", () => {
+    const { plan, bau } = bauAusUmriss(leererPlan(), UMRISS);
+    const { plan: walm } = bauAnwendenMitHinweis(plan, { ...bau, form: "walm" });
+    const mitFeld: Plan = {
+      ...walm,
+      gruppen: [
+        {
+          id: "g1",
+          name: "Feld 1",
+          flaeche: walm.flaechen[0]!.id,
+          typ: { breite: 1.134, hoehe: 1.762, wp: 440, bezeichnung: "Modul" },
+          ausrichtung: "hoch",
+          reihenabstand: 0.02,
+          spaltenabstand: 0.02,
+          winkel: 0,
+          anker: { x: 1, y: 1 },
+          spalten: 1,
+          reihen: 1,
+          aus: [],
+          entfernt: [],
+          frei: {},
+          aufstaenderung: null,
+        },
+      ],
+      strings: [{ id: "s1", name: "String 1", mppt: 0, module: ["g1/0:0"] }],
+    } as unknown as Plan;
+
+    const leer = bauLoeschen(mitFeld, bau.id);
+    expect(leer.bauten, "kein Umriss bleibt zurück").toHaveLength(0);
+    expect(leer.flaechen).toHaveLength(0);
+    expect(leer.gruppen).toHaveLength(0);
+    expect(leer.strings[0]!.module).toEqual([]);
+  });
+
+  it("lässt ein zweites Haus stehen", () => {
+    const erst = bauAusUmriss(leererPlan(), UMRISS);
+    const zweit = bauAusUmriss(erst.plan, UMRISS.map((q) => ({ x: q.x + 30, y: q.y })));
+    const leer = bauLoeschen(zweit.plan, erst.bau.id);
+    expect(leer.bauten).toHaveLength(1);
+    expect(leer.bauten[0]!.id).toBe(zweit.bau.id);
+    expect(leer.flaechen).toHaveLength(1);
   });
 });

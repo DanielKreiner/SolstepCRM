@@ -385,3 +385,41 @@ meint das Haus, nicht eine der vier Flächen.
 Was noch fehlt: die Gauben aus dem Reonic-Bild (dort zieht man sie aufs
 Dach) und ein Griff für den First direkt auf der Karte — bisher wandert
 er über den Schieber. Beides ist der nächste Schritt, nicht Teil davon.
+
+## 12. Gaube, Firstgriff, und das Haus bleibt zusammen (13.08.2026)
+
+**Das Haus bleibt zusammen.** Zuerst gemeldet: „wenn ich das dach
+schiebe, kann ich es überall hinschieben und das andere dach geht nicht
+mit". Stimmte — eine erzeugte Dachhälfte liess sich einzeln
+wegschieben, und aus dem Satteldach wurden zwei Flächen, die sich am
+First nicht mehr trafen. Eine Teilfläche ist kein eigenes Ding, sie ist
+ein Stück Dach:
+
+- In eine Fläche mit `bau` zu fassen und zu ziehen verschiebt das GANZE
+  Haus — Umriss, alle Teilflächen, Sperrzonen und Modulfelder.
+- Jede Fläche desselben Hauses zählt dabei als dieselbe Sache: Wer die
+  Hälfte gegenüber anfasst, meint dasselbe Haus.
+- Ecken, Kanten und Kantenmasse einer erzeugten Fläche sind nicht mehr
+  greifbar. Sie gehören der Dachform, nicht dem Betrieb. Zu ziehen gibt
+  es die Hausecken und den First.
+
+**Firstgriff.** Die Firstlinie wird gezeichnet (weiss auf dunklem Grund)
+und trägt in der Mitte einen Griff mit Doppelpfeil QUER zum First — in
+die Richtung, in die er sich bewegen lässt. Ein Zug daran ändert
+`firstVersatz`, die Flächen werden neu gerechnet, die Gesamtfläche
+bleibt. `firstLinie` und `firstVersatzFuer` stehen in
+`dachformen.ts` und werden von Zeichnen, Greifen und Erzeugen
+gemeinsam benutzt — liefen die auseinander, säße der Griff woanders,
+als der First zu sehen ist.
+
+**Gaube.** Eigenes Werkzeug in Schritt 1, aufgezogen wie eine
+Sperrzone. Technisch IST sie eine: Sie sperrt Dachfläche, und die
+Belegung weicht ihr aus — dieselbe geprüfte Mechanik, kein zweiter Weg.
+In der Aussage ist sie etwas anderes, und das sieht man: hell gefüllt
+mit eigenem First statt gelber Schraffur, in der räumlichen Ansicht ein
+Körper mit Wänden und Deckel statt einer Markierung auf der Dachhaut.
+
+Was sie NICHT tut: Schatten werfen. Der Ertrag rechnet die Verschattung
+aus Bäumen und Nachbargebäuden; eine Gaube auf derselben Fläche ist
+dort noch nicht drin. Lieber eine Lücke, die dasteht, als eine Zahl,
+die so tut als ob.

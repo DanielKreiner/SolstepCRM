@@ -163,6 +163,15 @@ export function ZeichenWeg(p: Props) {
   );
 }
 
+/** Gaube: ein Aufbau mit eigenem Dach. */
+export function ZeichenGaube(p: Props) {
+  return (
+    <Rahmen {...p}>
+      <path d="M3 19h18M6 19v-6l6-4 6 4v6M10 19v-4h4v4" />
+    </Rahmen>
+  );
+}
+
 /** Fadenkreuz — der Nullpunkt des Plans. */
 export function ZeichenNullpunkt(p: Props) {
   return (

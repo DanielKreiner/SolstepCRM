@@ -859,6 +859,48 @@ export function Dreidee(p: DreideeProps) {
          */
         for (const h of f.hindernisse) {
           if (h.punkte.length < 3) continue;
+
+          /*
+           * Eine Gaube steht auf dem Dach, sie liegt nicht darauf.
+           * Deshalb ein Körper mit Wänden und einem eigenen Deckel —
+           * die Schraffur einer Sperrzone wäre hier eine Falschaussage.
+           */
+          if (h.art === "gaube") {
+            const hoch = h.hoehe ?? 1.2;
+            for (let i = 0; i < h.punkte.length; i++) {
+              const q1 = h.punkte[i]!;
+              const q2 = h.punkte[(i + 1) % h.punkte.length]!;
+              gruppe.add(
+                new THREE.Mesh(
+                  flaecheGeometrie([
+                    { x: q1.x, y: q1.y, z: hoeheAn(q1) },
+                    { x: q2.x, y: q2.y, z: hoeheAn(q2) },
+                    { x: q2.x, y: q2.y, z: hoeheAn(q2) + hoch },
+                    { x: q1.x, y: q1.y, z: hoeheAn(q1) + hoch },
+                  ]),
+                  new THREE.MeshLambertMaterial({ color: 0xe4e0d8, side: THREE.DoubleSide }),
+                ),
+              );
+            }
+            gruppe.add(
+              new THREE.Mesh(
+                flaecheGeometrie(
+                  h.punkte.map((q) => ({ x: q.x, y: q.y, z: hoeheAn(q) + hoch })),
+                ),
+                new THREE.MeshLambertMaterial({ color: 0x9c8f80, side: THREE.DoubleSide }),
+              ),
+            );
+            gruppe.add(
+              new THREE.LineLoop(
+                new THREE.BufferGeometry().setFromPoints(
+                  h.punkte.map((q) => new THREE.Vector3(q.x, hoeheAn(q) + hoch + 0.01, -q.y)),
+                ),
+                new THREE.LineBasicMaterial({ color: 0x3c3630 }),
+              ),
+            );
+            continue;
+          }
+
           gruppe.add(
             new THREE.Mesh(
               flaecheGeometrie(

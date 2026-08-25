@@ -14,12 +14,15 @@ import type { Meter } from "./geo";
 
 export interface Hindernis {
   id: string;
-  art: "rechteck" | "polygon";
+  /** `gaube` sperrt genauso, wird aber als Aufbau gezeichnet. */
+  art: "rechteck" | "polygon" | "gaube";
   /** Bezeichnung, z. B. „Kamin" — frei. */
   name: string;
   punkte: Meter[];
   /** Sperrsaum ringsum in Metern. */
   abstand: number;
+  /** Nur bei der Gaube: Höhe über der Dachhaut. */
+  hoehe?: number;
 }
 
 export interface Dachflaeche {

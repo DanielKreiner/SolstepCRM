@@ -22,10 +22,18 @@ const meterSchema = z.object({ x: z.number().finite(), y: z.number().finite() })
 
 const hindernisSchema = z.object({
   id: z.string(),
-  art: z.enum(["rechteck", "polygon"]),
+  /*
+   * `gaube` ist keine dritte Zeichenart, sondern eine andere Aussage
+   * über dieselbe Fläche: Hier ist nicht nur nichts zu belegen, hier
+   * steht etwas. Für die Belegung zählt beides gleich; im Bild und in
+   * der räumlichen Ansicht sieht man den Unterschied.
+   */
+  art: z.enum(["rechteck", "polygon", "gaube"]),
   name: z.string().default(""),
   punkte: z.array(meterSchema).min(3),
   abstand: z.number().min(0).max(5).default(0.3),
+  /** Nur bei der Gaube: wie hoch sie über der Dachhaut steht. */
+  hoehe: z.number().min(0.2).max(5).default(1.2),
 });
 
 const flaecheSchema = z.object({
