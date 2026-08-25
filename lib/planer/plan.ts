@@ -37,7 +37,37 @@ const flaecheSchema = z.object({
   traufe: z.number().int().nullable().default(null),
   randabstand: z.number().min(0).max(5).default(0.3),
   hindernisse: z.array(hindernisSchema).default([]),
+  /** Aus welchem Baukörper diese Fläche erzeugt wurde. */
+  bau: z.string().nullable().default(null),
+  /** Die wievielte Teilfläche dieses Baukörpers — für die Wiedererkennung. */
+  teil: z.number().int().nullable().default(null),
 });
+
+/*
+ * Ein Baukörper: der gezeichnete Umriss plus die Angabe, was für ein
+ * Dach darauf sitzt (Wunsch vom 13.08.2026, Reonic-Vorbild).
+ *
+ * Der Umriss bleibt erhalten, wenn der Dachtyp wechselt — genau
+ * darum geht es: einmal das Haus umfahren, dann die Form durchprobieren.
+ * Die Dachflächen sind daraus erzeugt und tragen `bau` und `teil`,
+ * damit beim Umschalten dieselbe Fläche wieder dieselbe Kennung
+ * bekommt und die Belegung darauf stehen bleibt.
+ */
+const bauSchema = z.object({
+  id: z.string(),
+  name: z.string().default("Haus"),
+  umriss: z.array(meterSchema).min(3),
+  form: z.enum(["flach", "pult", "sattel", "walm", "kruppelwalm", "zelt"]).default("flach"),
+  neigung: z.number().min(0).max(75).default(30),
+  /** Welches Kantenpaar der First begleitet — „Schräge Seiten tauschen". */
+  richtung: z.union([z.literal(0), z.literal(1)]).default(0),
+  /** Wie weit die Walmflächen hereinreichen (Anteil). */
+  walmAnteil: z.number().min(0.05).max(1).default(1),
+  /** Wie weit der First aus der Mitte wandert (Anteil, −0,8 bis 0,8). */
+  firstVersatz: z.number().min(-0.8).max(0.8).default(0),
+});
+
+export type Bau = z.infer<typeof bauSchema>;
 
 const modultypSchema = z.object({
   breite: z.number().positive().max(5),
@@ -162,6 +192,7 @@ const objektSchema = z.object({
 
 export const planSchema = z.object({
   version: z.number().default(PLAN_VERSION),
+  bauten: z.array(bauSchema).default([]),
   flaechen: z.array(flaecheSchema).default([]),
   gruppen: z.array(gruppeSchema).default([]),
   strings: z.array(strangSchema).default([]),
@@ -199,6 +230,7 @@ export interface Technik {
 
 export type Plan = {
   version: number;
+  bauten: Bau[];
   flaechen: Dachflaeche[];
   gruppen: Modulgruppe[];
   strings: Strang[];
@@ -211,6 +243,7 @@ export type Plan = {
 export function leererPlan(): Plan {
   return {
     version: PLAN_VERSION,
+    bauten: [],
     flaechen: [],
     gruppen: [],
     strings: [],

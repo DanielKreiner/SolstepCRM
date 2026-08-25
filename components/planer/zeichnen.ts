@@ -1024,3 +1024,41 @@ export function zeichneStrangwege(
     ctx.restore();
   }
 }
+
+/**
+ * Der Umriss eines Baukörpers.
+ *
+ * Er liegt unter den Dachflächen und ist im Alltag nur eine dünne
+ * gestrichelte Linie. Sichtbar muss er trotzdem sein: An SEINEN Ecken
+ * wird gezogen, nicht an denen der erzeugten Teilflächen — und wer das
+ * nicht sieht, zieht am Falschen.
+ */
+export function zeichneUmriss(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  umriss: Meter[],
+  /** Gehört zur gewählten Fläche: dann mit Eckgriffen. */
+  betont: boolean,
+) {
+  if (umriss.length < 3) return;
+
+  ctx.save();
+  pfad(ctx, k, umriss);
+  ctx.setLineDash([7, 5]);
+  ctx.strokeStyle = betont ? "rgba(232, 149, 43, 0.95)" : "rgba(232, 149, 43, 0.5)";
+  ctx.lineWidth = betont ? 1.8 : 1.2;
+  ctx.stroke();
+  ctx.restore();
+
+  if (!betont) return;
+  for (const q of umriss) {
+    const b = bild(k, q);
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 5.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.strokeStyle = FARBEN.akzentDunkel;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}

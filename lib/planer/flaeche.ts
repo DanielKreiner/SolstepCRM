@@ -38,6 +38,16 @@ export interface Dachflaeche {
   /** Randabstand in Metern; definiert die belegbare Innenfläche. */
   randabstand: number;
   hindernisse: Hindernis[];
+  /**
+   * Aus welchem Baukörper diese Fläche erzeugt wurde, und die
+   * wievielte Teilfläche sie ist.
+   *
+   * Beides null bei einer frei gezeichneten Fläche. Steht ein Bau
+   * dahinter, wird die Fläche beim Wechsel des Dachtyps neu berechnet —
+   * und `teil` sorgt dafür, dass dabei dieselbe Kennung herauskommt.
+   */
+  bau?: string | null;
+  teil?: number | null;
 }
 
 /*

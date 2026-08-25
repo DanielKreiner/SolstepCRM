@@ -331,3 +331,57 @@ irgendwo im Bild. Beim ersten Aufbau mit Dachfläche rückt die Kamera
 jetzt auf die Mitte der Flächen, der Abstand kommt aus ihrer
 Ausdehnung (Faktor 2,2 bei 50° Öffnungswinkel). Danach gehört sie dem
 Betrachter — ein Neuaufbau setzt sie nicht zurück.
+
+## 11. Umriss und Dachtyp — der Reonic-Weg (13.08.2026)
+
+Daniel hat fünf Bilder aus Reonic geschickt: Man fährt einmal das Haus
+ab, dann steht ein Menü „Dach-Typ" da — Walmdach, Satteldach,
+Krüppelwalmdach, Flachdach —, und mit einem Klick sitzt das Dach. Zieht
+man an einer Hausecke, wandert alles mit. „Wieder wie für ein Kind
+lösbar."
+
+Umgesetzt in drei Teilen:
+
+**`lib/planer/dachformen.ts` — Geometrie.** `flaechenAusUmriss(umriss,
+form, vorgaben)` erzeugt die Teilflächen. Gerechnet wird auf dem
+gezeichneten Umriss selbst, NICHT auf einem umschliessenden Rechteck:
+Ein Haus steht selten achsparallel, und die Ecken, die jemand gesetzt
+hat, sind die Ecken, die er meint. Der First ist die Verbindung der
+Mitten zweier gegenüberliegender Kanten — bei einem schiefen Haus läuft
+er genauso schief, und das ist richtig. Walm und Krüppelwalm rücken die
+Firstenden ein; der Anteil unterscheidet die beiden. Prüfstein in den
+Tests: Die Grundflächen der Teile zusammen sind genau die Grundfläche
+des Umrisses. Fehlt ein Stück oder liegt eines doppelt, fällt es auf.
+
+**`lib/planer/bau.ts` — was beim Wechsel passiert.** Der Umriss bleibt,
+die Flächen werden neu gerechnet. Ihre Kennungen sind stabil
+(`b1-0`, `b1-1`, …), deshalb überlebt eine Belegung den Wechsel von
+Sattel auf Walm. Was wegfällt — beim Wechsel auf Flachdach die Flächen
+1 bis 3 —, nimmt seine Modulfelder mit; das steht dann als Satz im
+Panel, statt still zu geschehen. Randabstand und Sperrzonen der ersten
+Teilfläche bleiben ebenfalls: Wer den Kamin eingezeichnet hat, will ihn
+nicht nach jedem Umschalten neu ziehen.
+
+**Oberfläche.** „Selbst zeichnen" legt jetzt einen Baukörper an, kein
+blosses Vieleck — als Pultdach mit 30 Grad und der Traufe auf der
+längsten Kante, also genau die eine Fläche, die vorher entstand. Wer
+nichts weiter tut, hat dasselbe wie bisher.
+
+Der erste Anlauf hat hier Flachdach vorbelegt, „weil eine gezeichnete
+Fläche ja erst mal flach ist". Das war falsch und ist im Testlauf
+aufgefallen: Aus 2732 m² Dachfläche wurden 2366 — der Ertrag hätte ohne
+ein Wort die Neigung verloren. Eine Vorbelegung, die stillschweigend
+rechnet, ist schlimmer als eine, die man einmal umstellt. Darüber steht die Karte „Dach-Typ" mit sechs Formen,
+„Schräge Seiten tauschen" und, hinter „Dach feiner einstellen",
+Neigung, Firstversatz und Walmtiefe.
+
+Der Umriss wird als gestrichelte Linie gezeichnet und ist an seinen
+Ecken anfassbar. Ein Zug dort ändert den Umriss und rechnet die
+Dachflächen sofort neu — das ist das „es verschiebt sich alles gleich"
+aus dem Wunsch. Die Ecken des Umrisses haben beim Treffer Vorrang vor
+denen der Teilflächen: Wer bei einem Walmdach an der Hausecke zieht,
+meint das Haus, nicht eine der vier Flächen.
+
+Was noch fehlt: die Gauben aus dem Reonic-Bild (dort zieht man sie aufs
+Dach) und ein Griff für den First direkt auf der Karte — bisher wandert
+er über den Schieber. Beides ist der nächste Schritt, nicht Teil davon.

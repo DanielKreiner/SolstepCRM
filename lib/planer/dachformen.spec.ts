@@ -1,0 +1,137 @@
+import { describe, expect, it } from "vitest";
+import { flaechenAusUmriss } from "./dachformen";
+import { grundflaeche } from "./flaeche";
+import type { Meter } from "./geo";
+
+/*
+ * Dach aus dem Umriss (Wunsch vom 13.08.2026: „da zeichnet man ein
+ * Dach komplett und zieht dann die Gaube vom Dach bzw. beim Walmdach
+ * alles hin, und es verschiebt sich alles gleich").
+ *
+ * Die Probe, die alles zusammenhält: Die Teilflächen müssen den
+ * Umriss vollständig und überschneidungsfrei ausfüllen. Ihre
+ * Grundflächen zusammen sind also genau die Grundfläche des Umrisses —
+ * fehlt ein Stück oder liegt eines doppelt, fällt es hier auf.
+ */
+
+const RECHTECK: Meter[] = [
+  { x: 0, y: 0 },
+  { x: 12, y: 0 },
+  { x: 12, y: 8 },
+  { x: 0, y: 8 },
+];
+
+/** Schief und gedreht — so sieht ein von Hand gezogenes Haus aus. */
+const SCHIEF: Meter[] = [
+  { x: 1, y: 0 },
+  { x: 13, y: 1.5 },
+  { x: 12, y: 9 },
+  { x: -0.5, y: 7 },
+];
+
+function summe(teile: Array<{ punkte: Meter[] }>): number {
+  return teile.reduce((s, t) => s + grundflaeche(t.punkte), 0);
+}
+
+describe("flaechenAusUmriss", () => {
+  it("Flachdach ist der Umriss selbst, ohne Neigung", () => {
+    const teile = flaechenAusUmriss(RECHTECK, "flach", { neigung: 30, richtung: 0 });
+    expect(teile).toHaveLength(1);
+    expect(teile[0]!.neigung).toBe(0);
+    expect(teile[0]!.traufe).toBeNull();
+    expect(grundflaeche(teile[0]!.punkte)).toBeCloseTo(96, 6);
+  });
+
+  it("Pultdach ist eine geneigte Fläche mit Traufe an Kante 0", () => {
+    const teile = flaechenAusUmriss(RECHTECK, "pult", { neigung: 22, richtung: 0 });
+    expect(teile).toHaveLength(1);
+    expect(teile[0]!.traufe).toBe(0);
+    expect(teile[0]!.neigung).toBe(22);
+  });
+
+  it("Satteldach ergibt zwei Hälften, die den Umriss füllen", () => {
+    const teile = flaechenAusUmriss(RECHTECK, "sattel", { neigung: 30, richtung: 0 });
+    expect(teile).toHaveLength(2);
+    expect(summe(teile)).toBeCloseTo(96, 6);
+    // Beide Hälften gleich gross, solange der First mittig liegt.
+    expect(grundflaeche(teile[0]!.punkte)).toBeCloseTo(grundflaeche(teile[1]!.punkte), 6);
+  });
+
+  it("Der Firstversatz macht ungleiche Seiten — ohne Fläche zu verlieren", () => {
+    const teile = flaechenAusUmriss(RECHTECK, "sattel", {
+      neigung: 30,
+      richtung: 0,
+      firstVersatz: 0.5,
+    });
+    expect(summe(teile)).toBeCloseTo(96, 6);
+    expect(grundflaeche(teile[0]!.punkte)).toBeGreaterThan(grundflaeche(teile[1]!.punkte));
+  });
+
+  it("Walmdach ergibt zwei Trapeze und zwei Dreiecke, die den Umriss füllen", () => {
+    const teile = flaechenAusUmriss(RECHTECK, "walm", { neigung: 35, richtung: 0 });
+    expect(teile).toHaveLength(4);
+    expect(summe(teile)).toBeCloseTo(96, 6);
+    expect(teile[2]!.punkte).toHaveLength(3);
+    expect(teile[3]!.punkte).toHaveLength(3);
+  });
+
+  it("Krüppelwalm schneidet weniger ab als der volle Walm", () => {
+    const walm = flaechenAusUmriss(RECHTECK, "walm", { neigung: 35, richtung: 0 });
+    const kruppel = flaechenAusUmriss(RECHTECK, "kruppelwalm", { neigung: 35, richtung: 0 });
+    expect(summe(kruppel)).toBeCloseTo(96, 6);
+    // Die Walmdreiecke sind kleiner, die Hauptflächen entsprechend grösser.
+    expect(grundflaeche(kruppel[2]!.punkte)).toBeLessThan(grundflaeche(walm[2]!.punkte));
+    expect(grundflaeche(kruppel[0]!.punkte)).toBeGreaterThan(grundflaeche(walm[0]!.punkte));
+  });
+
+  it("Zeltdach ergibt vier Dreiecke auf einen Punkt", () => {
+    const teile = flaechenAusUmriss(RECHTECK, "zelt", { neigung: 40, richtung: 0 });
+    expect(teile).toHaveLength(4);
+    expect(teile.every((t) => t.punkte.length === 3)).toBe(true);
+    expect(summe(teile)).toBeCloseTo(96, 6);
+  });
+
+  it("Richtung 1 dreht den First um 90 Grad (Schräge Seiten tauschen)", () => {
+    const quer = flaechenAusUmriss(RECHTECK, "sattel", { neigung: 30, richtung: 0 });
+    const laengs = flaechenAusUmriss(RECHTECK, "sattel", { neigung: 30, richtung: 1 });
+    expect(summe(laengs)).toBeCloseTo(96, 6);
+
+    /*
+     * Bei einem symmetrischen Rechteck sind beide Hälften in jedem Fall
+     * gleich gross — der Unterschied liegt in der RICHTUNG. Verglichen
+     * wird deshalb die Traufkante: Sie steht danach quer zu vorher.
+     */
+    const richtungVon = (t: { punkte: Meter[] }) => {
+      const a = t.punkte[0]!;
+      const b = t.punkte[1]!;
+      return Math.atan2(b.y - a.y, b.x - a.x);
+    };
+    const dreh = Math.abs(richtungVon(quer[0]!) - richtungVon(laengs[0]!));
+    expect(Math.min(dreh, Math.PI - dreh)).toBeCloseTo(Math.PI / 2, 3);
+  });
+
+  it("funktioniert auch über einem schiefen Haus", () => {
+    const roh = grundflaeche(SCHIEF);
+    for (const form of ["sattel", "walm", "kruppelwalm", "zelt"] as const) {
+      const teile = flaechenAusUmriss(SCHIEF, form, { neigung: 30, richtung: 0 });
+      expect(summe(teile), form).toBeCloseTo(roh, 6);
+    }
+  });
+
+  it("dreht einen im Uhrzeigersinn gezeichneten Umriss um", () => {
+    const anders = [...RECHTECK].reverse();
+    const teile = flaechenAusUmriss(anders, "sattel", { neigung: 30, richtung: 0 });
+    expect(summe(teile)).toBeCloseTo(96, 6);
+  });
+
+  it("gibt bei zu wenig Punkten nichts zurück", () => {
+    expect(flaechenAusUmriss([{ x: 0, y: 0 }], "sattel", { neigung: 30, richtung: 0 })).toEqual([]);
+  });
+
+  it("macht aus einem Fünfeck ein Pultdach statt Unsinn", () => {
+    const fuenf: Meter[] = [...RECHTECK, { x: -3, y: 4 }];
+    const teile = flaechenAusUmriss(fuenf, "walm", { neigung: 30, richtung: 0 });
+    expect(teile).toHaveLength(1);
+    expect(grundflaeche(teile[0]!.punkte)).toBeCloseTo(grundflaeche(fuenf), 6);
+  });
+});

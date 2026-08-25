@@ -254,3 +254,16 @@ die das Setzen nicht einhält.
 | P3 | „Ansehen" wählen | keine Pluszeichen mehr im Bild |
 | E1 | Module wegtippen | keine blassen Kästchen, nur die Pluszeichen an der Kante |
 | E2 | Letztes Modul eines Feldes wegtippen | Feld verschwindet aus der Liste |
+
+## Umriss und Dachtyp (13.08.2026, vierter Durchgang)
+
+| # | Prüfung | Erwartung |
+|---|---|---|
+| D1 | „Selbst zeichnen", vier Ecken, Enter | eine Fläche, Karte „Dach-Typ" mit Flachdach aktiv |
+| D2 | „Satteldach" | zwei Flächen, First in der Mitte, Umriss unverändert |
+| D3 | „Walmdach" | vier Flächen, zwei Trapeze und zwei Dreiecke |
+| D4 | „Krüppelwalmdach" | wie Walm, aber die Dreiecke reichen weniger weit herein |
+| D5 | „Schräge Seiten tauschen" | First steht quer zu vorher |
+| D6 | Zurück auf „Flachdach" | eine Fläche ohne Neigung; Felder auf weggefallenen Flächen werden gemeldet |
+| D7 | An einer Hausecke ziehen | Umriss und alle Dachflächen wandern zusammen |
+| D8 | Schieber „First aus der Mitte" | die Seiten werden ungleich, die Gesamtfläche bleibt |

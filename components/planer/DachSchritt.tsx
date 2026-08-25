@@ -10,7 +10,9 @@ import {
   laenge,
 } from "@/lib/planer/flaeche";
 import type { Meter } from "@/lib/planer/geo";
-import { type Dachform, DACHFORMEN, dachformFlaechen, type Plan } from "@/lib/planer/plan";
+import { type Bau, type Dachform, DACHFORMEN, dachformFlaechen, type Plan } from "@/lib/planer/plan";
+import { bauAnwendenMitHinweis, bauZu } from "@/lib/planer/bau";
+import { DACHTYPEN } from "@/lib/planer/dachformen";
 import { Frage, Knopf, Listenzeile, Mehr, Stand, Wahlkarte, Zahlfeld } from "./Bausteine";
 import { ZeichenFlaeche, ZeichenRechteck } from "./Zeichen";
 import type { Werkzeug } from "./Leinwand";
@@ -46,6 +48,12 @@ export interface DachSchrittProps {
 export function DachSchritt(p: DachSchrittProps) {
   const flaeche = p.plan.flaechen.find((f) => f.id === p.aktiv) ?? null;
   const [formOffen, setFormOffen] = useState(false);
+  /*
+   * Der Baukörper hinter der gewählten Fläche. Gibt es ihn, steht der
+   * Dachtyp zur Wahl — der Umriss bleibt dabei stehen.
+   */
+  const bau = bauZu(p.plan, p.aktiv) ?? p.plan.bauten[0] ?? null;
+  const [dachHinweis, setDachHinweis] = useState<string | null>(null);
 
   const gesamt = p.plan.flaechen.reduce((s, f) => s + dachflaeche(f.punkte, f.neigung), 0);
 
@@ -114,6 +122,27 @@ export function DachSchritt(p: DachSchrittProps) {
               { label: "Fläche gesamt", wert: `${gesamt.toFixed(1).replace(".", ",")} m²` },
             ]}
           />
+
+          {bau && p.schreibrecht ? (
+            <Dachtypwahl
+              bau={bau}
+              onBau={(naechster) => {
+                const { plan, hinweis } = bauAnwendenMitHinweis(p.plan, naechster);
+                p.onPlan(plan, true);
+                setDachHinweis(hinweis);
+                /*
+                 * Auf die erste Teilfläche springen. Nach einem Wechsel
+                 * von Walm auf Flach gibt es die vorher gewählte Fläche
+                 * womöglich nicht mehr, und das Panel darunter wäre
+                 * leer.
+                 */
+                if (!plan.flaechen.some((f) => f.id === p.aktiv)) {
+                  p.onAktiv(plan.flaechen.find((f) => f.bau === naechster.id)?.id ?? null);
+                }
+              }}
+              hinweis={dachHinweis}
+            />
+          ) : null}
 
           <div className="flex flex-col gap-2">
             {p.plan.flaechen.map((f) => (
@@ -501,4 +530,122 @@ function Umgebung({
 function himmelsrichtung(azimut: number): string {
   const namen = ["Nord", "Nordost", "Ost", "Südost", "Süd", "Südwest", "West", "Nordwest"];
   return namen[Math.round((((azimut % 360) + 360) % 360) / 45) % 8]!;
+}
+
+
+/**
+ * Der Dachtyp über einem gezeichneten Umriss.
+ *
+ * Die Reihenfolge ist nicht alphabetisch, sondern nach Häufigkeit:
+ * Satteldach, Walmdach, Krüppelwalm — danach der Rest. Wer ein
+ * Einfamilienhaus plant, findet seinen Fall in der ersten Zeile.
+ *
+ * Was selten gebraucht wird — Neigung, Firstversatz, wie weit der Walm
+ * hereinreicht — liegt hinter „Mehr einstellen". Beim Öffnen steht
+ * hier nur die Frage, was für ein Dach es ist.
+ */
+function Dachtypwahl({
+  bau,
+  onBau,
+  hinweis,
+}: {
+  bau: Bau;
+  onBau: (b: Bau) => void;
+  hinweis: string | null;
+}) {
+  const mitFirst = bau.form === "sattel" || bau.form === "walm" || bau.form === "kruppelwalm";
+  const mitWalm = bau.form === "walm" || bau.form === "kruppelwalm";
+
+  return (
+    <section className="flex flex-col gap-2.5 rounded-[14px] border border-line bg-surface p-3.5">
+      <h3 className="text-[14px] font-bold">Dach-Typ</h3>
+
+      <div className="grid grid-cols-2 gap-2">
+        {DACHTYPEN.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onBau({ ...bau, form: t.id })}
+            aria-pressed={bau.form === t.id}
+            title={t.hinweis}
+            className={[
+              "flex h-[46px] items-center justify-center rounded-[12px] border px-2 text-[13.5px] font-semibold transition-colors",
+              bau.form === t.id
+                ? "border-accent bg-accent-sunk text-ink"
+                : "border-line bg-surface text-muted hover:border-accent hover:text-ink",
+            ].join(" ")}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {mitFirst ? (
+        <button
+          type="button"
+          onClick={() => onBau({ ...bau, richtung: bau.richtung === 0 ? 1 : 0 })}
+          className="flex h-11 items-center justify-center gap-2 rounded-[12px] border border-line bg-surface px-3 text-[13.5px] font-semibold transition-colors hover:border-accent"
+        >
+          <span aria-hidden>⇄</span> Schräge Seiten tauschen
+        </button>
+      ) : null}
+
+      {hinweis ? <p className="text-[11.5px] leading-[1.45] text-s-crit">{hinweis}</p> : null}
+
+      <Mehr titel="Dach feiner einstellen">
+        {bau.form !== "flach" ? (
+          <Zahlfeld
+            label="Neigung"
+            wert={bau.neigung}
+            einheit="°"
+            min={0}
+            max={75}
+            onWert={(v) => onBau({ ...bau, neigung: v })}
+          />
+        ) : null}
+        {mitFirst ? (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[12.5px] font-semibold text-muted">
+              First aus der Mitte{" "}
+              <span className="num tabular-nums">
+                {(bau.firstVersatz * 100).toFixed(0)} %
+              </span>
+            </span>
+            <input
+              type="range"
+              min={-80}
+              max={80}
+              step={5}
+              value={Math.round(bau.firstVersatz * 100)}
+              aria-label="First aus der Mitte"
+              onChange={(e) => onBau({ ...bau, firstVersatz: Number(e.target.value) / 100 })}
+              className="h-11 w-full accent-accent"
+            />
+          </label>
+        ) : null}
+        {mitWalm ? (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[12.5px] font-semibold text-muted">
+              Walm reicht herein{" "}
+              <span className="num tabular-nums">{(bau.walmAnteil * 100).toFixed(0)} %</span>
+            </span>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              step={5}
+              value={Math.round(bau.walmAnteil * 100)}
+              aria-label="Walm reicht herein"
+              onChange={(e) => onBau({ ...bau, walmAnteil: Number(e.target.value) / 100 })}
+              className="h-11 w-full accent-accent"
+            />
+          </label>
+        ) : null}
+        <p className="text-[11.5px] leading-[1.45] text-muted">
+          Der Umriss bleibt bei jedem Wechsel stehen. Wer die Ecken verschieben will, zieht sie
+          auf der Karte — das Dach rechnet sich mit.
+        </p>
+      </Mehr>
+    </section>
+  );
 }

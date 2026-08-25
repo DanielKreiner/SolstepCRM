@@ -16,7 +16,6 @@ import {
   zuMeter,
 } from "@/lib/planer/geo";
 import {
-  azimutAusTraufe,
   fangeBeimZiehen,
   type Dachflaeche,
   type FangOptionen,
@@ -40,6 +39,7 @@ import {
 } from "@/lib/planer/plan";
 import { strangUmschalten, strangWeg } from "@/lib/planer/strings";
 import { modulEntfernen, modulSetzen, modulVorschau } from "@/lib/planer/setzen";
+import { bauAnwenden, bauAusUmriss } from "@/lib/planer/bau";
 import { anbieter as anbieterZu, type AnbieterId, hoechsterZoom, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
@@ -48,9 +48,7 @@ import {
   erweitere,
   fangeAufRaster,
   insRasterZurueck,
-  einzelnesModul,
   modulEcken,
-  modulLage,
   modulMitte,
   modulPasst,
   nachfuehren,
@@ -74,6 +72,7 @@ import {
   zeichneObjekte,
   zeichneAnbaustellen,
   zeichneStrangwege,
+  zeichneUmriss,
   zeichneAuswahl,
   zeichneGruppe,
   zeichneGeistermodul,
@@ -279,6 +278,12 @@ export function Leinwand(p: LeinwandProps) {
     | { art: "sperrZiehen"; flaeche: string; hindernis: string; letzte: Meter }
     | { art: "sperrEcke"; flaeche: string; hindernis: string; index: number }
     /*
+     * Eine Ecke des Baukörpers. Sie gehört nicht einer Dachfläche,
+     * sondern dem Umriss — und weil die Flächen daraus gerechnet
+     * werden, wandert beim Ziehen das ganze Dach mit.
+     */
+    | { art: "bauEcke"; bau: string; index: number }
+    /*
      * Die ganze Dachfläche schieben. Vorher liess sie sich nur über die
      * Ecken verformen: Wer die Standardform einen Meter neben dem Haus
      * gesetzt hatte, musste vier Ecken einzeln nachziehen und hatte
@@ -455,6 +460,18 @@ export function Leinwand(p: LeinwandProps) {
       sperrzone: stand.current.aktivesHindernis,
       gruppeAktiv: stand.current.aktiveGruppe !== null,
     };
+    /*
+     * Umrisse unter die Dachflächen. Sie sind bei einem Flachdach
+     * deckungsgleich mit der Fläche und fallen dann nicht auf; bei
+     * Sattel und Walm zeigen sie, wo das Haus aufhört.
+     */
+    for (const b of stand.current.plan.bauten) {
+      const gehoert = stand.current.plan.flaechen.some(
+        (f) => f.bau === b.id && f.id === stand.current.aktiv,
+      );
+      zeichneUmriss(ctx, k, b.umriss, gehoert && stand.current.bearbeitbar.flaechen);
+    }
+
     for (const f of stand.current.plan.flaechen) zeichneFlaeche(ctx, sicht, f);
 
     // Module über die Flächen — sie liegen ja auch darauf.
@@ -762,6 +779,23 @@ export function Leinwand(p: LeinwandProps) {
      * verschöbe ein Fehlgriff beim Belegen die Dachkante, und die
      * fertige Planung wäre still verrutscht.
      */
+    /*
+     * Ecken des Baukörpers zuerst: Sie liegen auf denselben Stellen wie
+     * die Ecken der erzeugten Dachflächen, meinen aber mehr — den
+     * ganzen Umriss. Wer bei einem Walmdach an der Hausecke zieht, will
+     * das Haus ändern, nicht eine der vier Teilflächen.
+     */
+    if (s.bearbeitbar.flaechen) {
+      for (const b of s.plan.bauten) {
+        for (let i = 0; i < b.umriss.length; i++) {
+          const bild2 = meterZuBild(k, b.umriss[i]!);
+          if (Math.hypot(bild2.x - bp.x, bild2.y - bp.y) <= GRIFF) {
+            return { art: "bauEcke" as const, bau: b.id, index: i };
+          }
+        }
+      }
+    }
+
     if (aktive && s.bearbeitbar.flaechen) {
       for (let i = 0; i < aktive.punkte.length; i++) {
         const b = meterZuBild(k, aktive.punkte[i]!);
@@ -868,32 +902,21 @@ export function Leinwand(p: LeinwandProps) {
         );
       }
     } else {
-      const id = naechsteId(s.plan.flaechen.map((f) => f.id), "f");
       /*
-       * Traufe auf die längste Kante vorbelegen. Bei einem Satteldach,
-       * einem Pultdach und den allermeisten Grundrissen ist die Traufe
-       * die lange Kante — und ohne Traufe gäbe es weder Falllinie noch
-       * Azimut, also müsste der Nutzer erst im Panel etwas einstellen,
-       * bevor die Fläche irgendetwas aussagt. Ändern kann er es dort
-       * weiterhin.
+       * Der gezeichnete Umriss wird ein BAUKÖRPER, nicht bloss eine
+       * Fläche (Wunsch vom 13.08.2026, Reonic-Vorbild): einmal das Haus
+       * umfahren, dann im Panel den Dachtyp wählen. Als Ausgangspunkt
+       * steht dort ein Flachdach — also genau die eine Fläche, die
+       * vorher beim Zeichnen entstand. Wer nichts weiter tut, hat
+       * dasselbe wie bisher.
        */
-      const laengste = kanten(punkte).reduce(
-        (best, k) => (laenge(k.a, k.b) > laenge(best.a, best.b) ? k : best),
-        kanten(punkte)[0]!,
-      );
-      const neue: Dachflaeche = {
-        id,
-        name: naechsterFlaechenName(s.plan.flaechen),
+      const { plan: naechster, bau } = bauAusUmriss(
+        s.plan,
         punkte,
-        neigung: 30,
-        azimut: 180,
-        traufe: laengste.i,
-        randabstand: 0.3,
-        hindernisse: [],
-      };
-      neue.azimut = azimutAusTraufe(neue) ?? 180;
-      s.onPlan({ ...s.plan, flaechen: [...s.plan.flaechen, neue] }, true);
-      s.onAktiv(id);
+        naechsterFlaechenName(s.plan.flaechen),
+      );
+      s.onPlan(naechster, true);
+      s.onAktiv(`${bau.id}-0`);
     }
 
     entwurf.current = [];
@@ -1178,6 +1201,10 @@ export function Leinwand(p: LeinwandProps) {
         zieht.current = { art: "malen" };
         return;
       }
+      if (t?.art === "bauEcke") {
+        zieht.current = { art: "bauEcke", bau: t.bau, index: t.index };
+        return;
+      }
       if (t?.art === "sperrEcke") {
         setAktivesHindernis(t.hindernis);
         zieht.current = {
@@ -1364,6 +1391,25 @@ export function Leinwand(p: LeinwandProps) {
       if (z.art === "messen" && messung.current) {
         messung.current = { ...messung.current, nach: bildZuMeter(k, jetzt) };
         anstossen();
+        return;
+      }
+
+      if (z.art === "bauEcke") {
+        /*
+         * Die Ecke wandert im UMRISS, danach werden die Dachflächen neu
+         * gerechnet. Deshalb verschiebt sich beim Walmdach der First
+         * mit, und die vier Teilflächen bleiben ein Dach — statt vier
+         * Flächen, die man einzeln nachziehen müsste.
+         */
+        const b = s.plan.bauten.find((x) => x.id === z.bau);
+        if (!b) return;
+        const nachbarn = [
+          b.umriss[(z.index + b.umriss.length - 1) % b.umriss.length]!,
+          b.umriss[(z.index + 1) % b.umriss.length]!,
+        ];
+        const ziel2 = gefangenBeimZiehen(jetzt, nachbarn);
+        const umriss = b.umriss.map((q, i) => (i === z.index ? ziel2 : q));
+        s.onPlan(bauAnwenden({ ...s.plan, bauten: s.plan.bauten.map((x) => (x.id === b.id ? { ...x, umriss } : x)) }, { ...b, umriss }), false);
         return;
       }
 
@@ -1871,6 +1917,13 @@ export function Leinwand(p: LeinwandProps) {
           gruppen = gruppen.map((x) => (x.id === g.id ? gefuehrt : x));
         }
         s.onPlan({ ...s.plan, gruppen }, true);
+        return;
+      }
+
+      if (z?.art === "bauEcke") {
+        // Jetzt erst ein Rückschritt — nicht für jede Mausbewegung.
+        s.onPlan(s.plan, true);
+        zieht.current = null;
         return;
       }
 
