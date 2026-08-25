@@ -237,12 +237,39 @@ export function pruefe(e: PruefEingabe): PruefErgebnis {
 
     const strom = dran.reduce((sum, s) => sum + (s.typen[0]?.impp ?? 0), 0);
     if (strom > mppt.iMax) {
-      befunde.push({
-        schwere: "fehler",
-        text:
-          `MPPT ${i + 1}: ${dran.length} parallele Strings ergeben ${ampere(strom)} — ` +
-          `zulässig sind ${ampere(mppt.iMax)}. Einen String auf einen freien MPPT legen.`,
-      });
+      /*
+       * Ein einzelner String ist etwas anderes als zwei parallele.
+       *
+       * Bei EINEM String ist der Strom der eines Moduls. Heutige
+       * Module liegen bei 13 bis 14 A, viele Eingänge bei 11 bis
+       * 13,5 A — der Wechselrichter regelt dann bei seinem Grenzwert
+       * ab, und es fehlen an den besten Tagen ein paar Prozent. Das
+       * ist gebaute Praxis und kein Fehler.
+       *
+       * Der bisherige Text hat obendrein Unsinn geraten: „Einen String
+       * auf einen freien MPPT legen" — bei einem einzigen String gibt
+       * es nichts zu verlegen. Genau daran ist im Betrieb aufgefallen,
+       * dass die Regel für diesen Fall nicht passt.
+       *
+       * Ab zwei parallelen Strings bleibt es ein Fehler: Dort IST die
+       * Verteilung die Lösung.
+       */
+      befunde.push(
+        dran.length === 1
+          ? {
+              schwere: "hinweis",
+              text:
+                `MPPT ${i + 1}: Der String liefert ${ampere(strom)}, der Eingang nimmt ` +
+                `${ampere(mppt.iMax)}. Der Wechselrichter begrenzt — an wenigen Spitzentagen ` +
+                `gehen ein paar Prozent verloren, gebaut wird das so.`,
+            }
+          : {
+              schwere: "fehler",
+              text:
+                `MPPT ${i + 1}: ${dran.length} parallele Strings ergeben ${ampere(strom)} — ` +
+                `zulässig sind ${ampere(mppt.iMax)}. Einen String auf einen freien MPPT legen.`,
+            },
+      );
     }
 
     if (dran.length > mppt.maxStrings) {

@@ -462,3 +462,46 @@ Draufsicht (14 % Akzentfläche, gestrichelter Rand, Scheibe mit weissem
 Kreuz). Zweimal daneben gelegen — erst zu fein, dann ein oranger Block
 —, beide Male aus demselben Grund: Hier wurde etwas Eigenes erfunden,
 statt die Werte zu nehmen, die auf der Karte schon stehen.
+
+## 14. Autarkie, Speicher, Strompruefung, Dachrichtung (13.08.2026)
+
+**„Wie geht eine Autarkie von 99 % ohne Speicher? Da ist die Nacht
+nicht drin."** Sie ging gar nicht — das Modell deckelte den
+Eigenverbrauch bei 99 % des VERBRAUCHS. Bei einer Anlage, die deutlich
+mehr erzeugt als das Haus braucht, kam damit rechnerisch fast
+Vollversorgung heraus, obwohl mittags eingespeist und nachts bezogen
+wird.
+
+Gerechnet wird jetzt umgekehrt: zuerst die Autarkie, daraus der
+Eigenverbrauch. Ohne Speicher läuft sie gegen 44 % — mehr geht nicht,
+weil nachts und im Winter nichts erzeugt wird —, mit Speicher gegen
+85 %. Die Stützwerte sind die gängigen Faustzahlen (rund 30 % bei
+Erzeugung gleich Verbrauch, rund 50 % mit 1 kWh Speicher je 1000 kWh
+Verbrauch). Beide Grössen kommen aus derselben Rechnung und können
+sich nicht mehr widersprechen.
+
+Der Preis der Ehrlichkeit: Die Amortisation im Beispielhaus wandert von
+10,9 auf 14,8 Jahre. Eingespeister Strom bringt eben acht statt
+achtundzwanzig Cent.
+
+**Speicher eintippen.** Fünf Knöpfe (ohne, 5, 10, 15, 20 kWh) und ein
+Feld für eine eigene Grösse. Die getippte Zahl hat Vorrang vor dem
+gewählten Gerät: Im Erstgespräch steht „zehn Kilowattstunden" fest,
+lange bevor jemand ein Gerät aussucht.
+
+**„MPPT 1: 1 parallele Strings ergeben 13,1 A — zulässig sind 11 A."**
+Der Hinweis kam immer und war in sich widersprüchlich: Bei EINEM String
+riet er, „einen String auf einen freien MPPT zu legen". Bei einem
+einzigen String ist der Strom der eines Moduls; heutige Module liegen
+bei 13 bis 14 A, viele Eingänge bei 11 bis 13,5 A. Der Wechselrichter
+regelt dann ab, und es fehlen an wenigen Spitzentagen ein paar Prozent
+— gebaute Praxis, kein Fehler. Ab zwei parallelen Strings bleibt es
+einer, denn dort IST die Verteilung die Lösung.
+
+**„Ist verkehrt rum."** Das Satteldach fiel in der räumlichen Ansicht
+zum First hin ab. `falllinie` zeigt BERGAB, und beide Stellen, die
+damit rechneten, hatten das Vorzeichen verdreht — die räumliche
+Ansicht und die Verschattungsrechnung. In der Ansicht sah man es
+sofort, in der Verschattung nicht: Dort wurden Module am First zu tief
+angesetzt, ein Baum verschattete auf dem Papier mehr als im Feld. Die
+Formel steht jetzt einmal in `hoeheAufFlaeche`.

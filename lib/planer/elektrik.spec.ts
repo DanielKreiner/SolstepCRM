@@ -262,3 +262,72 @@ describe("Auslegungstemperatur", () => {
     );
   });
 });
+
+describe("Strom je MPPT", () => {
+  const modul: ModulElektrik = {
+    bezeichnung: "Modul 465",
+    wp: 465,
+    uoc: 41.1,
+    umpp: 34.7,
+    isc: 14.3,
+    impp: 13.4,
+    tkUoc: -0.25,
+  };
+
+  const wr: Wechselrichter = {
+    bezeichnung: "WR",
+    hybrid: false,
+    maxDc: 1000,
+    acNenn: 5,
+    mppt: [
+      { uMin: 140, uMax: 980, iMax: 11, maxStrings: 2 },
+      { uMin: 140, uMax: 980, iMax: 11, maxStrings: 2 },
+    ],
+  };
+
+  function string(id: string, mppt: number, module: number): PvString {
+    return {
+      id,
+      name: id,
+      mppt,
+      module: Array.from({ length: module }, (_, i) => `g1/0:${i}`),
+      typen: [modul],
+    };
+  }
+
+  it("ist bei EINEM String über dem Eingangsstrom nur ein Hinweis", () => {
+    /*
+     * Beschwerde aus dem Betrieb (13.08.2026): „das kommt immer, ist
+     * aber nicht so, das muss normal funktionieren". Ein 13,4-A-Modul
+     * auf einem 11-A-Eingang ist gebaute Praxis — der Wechselrichter
+     * begrenzt.
+     */
+    const e = pruefe({ strings: [string("s1", 0, 12)], wechselrichter: wr, ohneString: 0 });
+    const treffer = e.befunde.filter((b) => b.text.includes("MPPT 1"));
+    expect(treffer).toHaveLength(1);
+    expect(treffer[0]!.schwere).toBe("hinweis");
+    expect(treffer[0]!.text, "kein unmöglicher Rat").not.toMatch(/freien MPPT/);
+  });
+
+  it("bleibt bei ZWEI parallelen Strings ein Fehler", () => {
+    const e = pruefe({
+      strings: [string("s1", 0, 12), string("s2", 0, 12)],
+      wechselrichter: wr,
+      ohneString: 0,
+    });
+    const treffer = e.befunde.filter((b) => b.text.includes("MPPT 1") && b.text.includes("parallele"));
+    expect(treffer).toHaveLength(1);
+    expect(treffer[0]!.schwere).toBe("fehler");
+    expect(treffer[0]!.text).toMatch(/freien MPPT/);
+  });
+
+  it("sagt nichts, solange der Strom passt", () => {
+    const klein: ModulElektrik = { ...modul, impp: 10.2, isc: 10.9 };
+    const e = pruefe({
+      strings: [{ ...string("s1", 0, 12), typen: [klein] }],
+      wechselrichter: wr,
+      ohneString: 0,
+    });
+    expect(e.befunde.filter((b) => b.text.includes("Eingang nimmt"))).toHaveLength(0);
+  });
+});

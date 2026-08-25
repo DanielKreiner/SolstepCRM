@@ -40,6 +40,23 @@ export const MODELL = {
   /** Obergrenze ohne Speicher: nachts erzeugt kein Dach Strom. */
   evMax: 0.55,
   /**
+   * Autarkie ohne Speicher: Sättigungswert und Steigung.
+   *
+   * 44 % ist die Grenze, gegen die ein Dach ohne Speicher läuft — mehr
+   * geht nicht, weil nachts und im Winter nichts erzeugt wird. Die
+   * Steigung 1,1 trifft die Faustzahl „30 % bei Erzeugung gleich
+   * Verbrauch".
+   */
+  autarkieOhne: 0.44,
+  autarkieSteigung: 1.1,
+  /** Was ein Speicher zusätzlich holt, und wie schnell er sättigt. */
+  speicherPlus: 0.42,
+  speicherSteigung: 0.7,
+  /** Ohne Speicher ist bei knapp der Hälfte Schluss. */
+  autarkieDeckel: 0.46,
+  /** Mit Speicher bleibt der Winter — 85 % ist die Grenze. */
+  autarkieDeckelMitSpeicher: 0.85,
+  /**
    * Was ein Speicher zusätzlich in den Eigenverbrauch holt, wenn er
    * mindestens einen Tagesverbrauch fasst. Kleinere Speicher wirken
    * anteilig.
@@ -47,11 +64,6 @@ export const MODELL = {
   evSpeicherPlus: 0.27,
   /** Auch mit grossem Speicher bleibt ein Rest Netzbezug (Winter). */
   evMaxMitSpeicher: 0.82,
-  /**
-   * Selbst bei perfekter Deckung bleibt ein Rest Netzbezug — kein
-   * Haushalt deckt 100 % aus der eigenen Anlage.
-   */
-  autarkieDeckel: 0.99,
   /** Strompreissteigerung pro Jahr, Vorbelegung (Tenant-einstellbar). */
   strompreisSteigerung: 0.02,
   /** Betrachtungszeitraum der Kurve. */
@@ -110,30 +122,73 @@ function begrenze(wert: number, unten: number, oben: number): number {
 }
 
 /**
- * Eigenverbrauchsquote — welcher Anteil des erzeugten Stroms im Haus
- * bleibt, statt ins Netz zu gehen.
+ * Autarkie — welcher Anteil des Verbrauchs vom eigenen Dach kommt.
  *
- * Ohne Speicher hängt sie am Verhältnis Verbrauch zu Ertrag: Wer viel
- * verbraucht, findet für mehr des eigenen Stroms Verwendung. Ein
- * Speicher hebt sie an, aber nur so weit, wie er überhaupt einen
- * Tagesverbrauch fasst — ein 5-kWh-Speicher bringt einem Haushalt mit
- * 30 kWh Tagesverbrauch wenig.
+ * Das ist die Grösse, die der Kunde fragt, und die Grösse, an der das
+ * Modell vorher gescheitert ist: Es deckelte den Eigenverbrauch bei
+ * 99 % des Verbrauchs, und weil eine grosse Anlage rechnerisch fast
+ * alles decken kann, kam „99 % Autarkie" heraus — ohne Speicher.
+ * Aus dem Betrieb kam die richtige Frage: „wie geht eine Autarkie von
+ * 99 % ohne Speicher? Da ist die Nacht nicht drin."
+ *
+ * Genau darum geht es. Ohne Speicher ist die Autarkie NICHT durch die
+ * Jahressumme begrenzt, sondern durch die Gleichzeitigkeit: Nachts und
+ * im Winter erzeugt das Dach nichts, und was mittags zu viel ist,
+ * geht ins Netz. Ein doppelt so grosses Dach hebt sie kaum noch, weil
+ * der Überschuss zur Mittagszeit anfällt.
+ *
+ * Das Modell bildet das mit einer Sättigungskurve ab. Die Stützwerte
+ * stammen aus den gängigen Faustzahlen für einen Haushalt in
+ * Mitteleuropa (HTW Berlin, Fraunhofer ISE):
+ *
+ * | Erzeugung/Verbrauch | ohne Speicher | 1 kWh/1000 kWh | 2 kWh/1000 kWh |
+ * |---|---|---|---|
+ * | 1  | rund 30 % | rund 50 % | rund 60 % |
+ * | 2  | rund 39 % | rund 60 % | rund 71 % |
+ * | 3  | rund 42 % | rund 63 % | rund 74 % |
+ *
+ * Es bleibt ein Jahresmodell — für ein Erstgespräch die richtige
+ * Grössenordnung, für die Netzanmeldung nicht. Genau so steht es auch
+ * unter der Auswertung.
+ */
+export function autarkie(ertragKwh: number, verbrauchKwh: number, speicherKwh: number): number {
+  if (ertragKwh <= 0 || verbrauchKwh <= 0) return 0;
+
+  const verhaeltnis = ertragKwh / verbrauchKwh;
+  const ohne = MODELL.autarkieOhne * (1 - Math.exp(-MODELL.autarkieSteigung * verhaeltnis));
+  if (speicherKwh <= 0) return Math.min(MODELL.autarkieDeckel, ohne);
+
+  /*
+   * Die Speichergrösse wird auf den Verbrauch bezogen, nicht absolut:
+   * Zehn Kilowattstunden sind für einen Zwei-Personen-Haushalt viel
+   * und für einen Betrieb mit Wärmepumpe wenig.
+   */
+  const jeTausend = speicherKwh / (verbrauchKwh / 1000);
+  const zusatz = MODELL.speicherPlus * (1 - Math.exp(-MODELL.speicherSteigung * jeTausend));
+
+  /*
+   * Ein Speicher kann nur speichern, was übrig ist. Bei einer Anlage,
+   * die über das Jahr weniger erzeugt als das Haus braucht, bringt er
+   * entsprechend weniger — darüber nicht mehr, denn im Sommer ist auch
+   * bei ausgeglichener Jahressumme reichlich Überschuss da.
+   */
+  const ueberschuss = Math.min(1, verhaeltnis);
+  return Math.min(MODELL.autarkieDeckelMitSpeicher, ohne + zusatz * ueberschuss);
+}
+
+/**
+ * Eigenverbrauchsquote — welcher Anteil des ERZEUGTEN Stroms im Haus
+ * bleibt.
+ *
+ * Sie folgt aus der Autarkie und ist keine eigene Annahme mehr: Was im
+ * Haus bleibt, ist Autarkie mal Verbrauch; als Quote bezogen auf den
+ * Ertrag. Vorher wurden beide getrennt geschätzt und konnten sich
+ * widersprechen.
  */
 export function evQuote(ertragKwh: number, verbrauchKwh: number, speicherKwh: number): number {
   if (ertragKwh <= 0 || verbrauchKwh <= 0) return 0;
-
-  const deckung = Math.min(1, verbrauchKwh / ertragKwh);
-  const ohne = begrenze(
-    MODELL.evSockel + MODELL.evSteigung * deckung,
-    MODELL.evMin,
-    MODELL.evMax,
-  );
-  if (speicherKwh <= 0) return ohne;
-
-  // Speichergrösse im Verhältnis zum Tagesverbrauch.
-  const tagesverbrauch = verbrauchKwh / 365;
-  const fSp = Math.min(1, speicherKwh / tagesverbrauch);
-  return Math.min(MODELL.evMaxMitSpeicher, ohne + MODELL.evSpeicherPlus * fSp);
+  const eigen = autarkie(ertragKwh, verbrauchKwh, speicherKwh) * verbrauchKwh;
+  return Math.min(1, eigen / ertragKwh);
 }
 
 /**
@@ -144,13 +199,14 @@ export function evQuote(ertragKwh: number, verbrauchKwh: number, speicherKwh: nu
  * steigt. Alles andere wäre schöngerechnet.
  */
 export function rechne(e: WirtschaftEingaben): WirtschaftErgebnis {
-  const quote = evQuote(e.ertragKwh, e.verbrauchKwh, e.speicherKwh);
-
-  const eigenverbrauch = Math.min(
-    e.ertragKwh * quote,
-    e.verbrauchKwh * MODELL.autarkieDeckel,
-  );
-  const autarkie = e.verbrauchKwh > 0 ? eigenverbrauch / e.verbrauchKwh : 0;
+  /*
+   * Zuerst die Autarkie, daraus der Eigenverbrauch — nicht umgekehrt.
+   * Beides getrennt zu schätzen führte zu Zahlen, die sich
+   * widersprachen: 99 % Autarkie bei 35 % Eigenverbrauchsquote.
+   */
+  const anteil = autarkie(e.ertragKwh, e.verbrauchKwh, e.speicherKwh);
+  const eigenverbrauch = Math.min(e.verbrauchKwh * anteil, e.ertragKwh);
+  const quote = e.ertragKwh > 0 ? eigenverbrauch / e.ertragKwh : 0;
   const einspeisung = Math.max(0, e.ertragKwh - eigenverbrauch);
 
   const ersparnisJahr1 = eigenverbrauch * e.strompreis + einspeisung * e.verguetung;
@@ -178,7 +234,7 @@ export function rechne(e: WirtschaftEingaben): WirtschaftErgebnis {
   return {
     evQuote: quote,
     eigenverbrauchKwh: eigenverbrauch,
-    autarkie,
+    autarkie: anteil,
     einspeisungKwh: einspeisung,
     ersparnisJahr1,
     investition,

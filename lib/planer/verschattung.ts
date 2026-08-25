@@ -20,7 +20,7 @@
  */
 
 import type { Meter } from "./geo";
-import { falllinie, punktInPolygon } from "./flaeche";
+import { hoeheAufFlaeche, punktInPolygon } from "./flaeche";
 import { aktiveZellen, modulMitte } from "./module";
 import type { Plan } from "./plan";
 import { sonnenrichtung, sonnenstand, stichpunkte } from "./sonne";
@@ -263,13 +263,16 @@ export function anlagenVerschattung(
   for (const g of plan.gruppen) {
     const f = plan.flaechen.find((x) => x.id === g.flaeche);
     if (!f) continue;
-    const fall = falllinie(f);
-    const steig = Math.tan((f.neigung * Math.PI) / 180);
-    const a = f.traufe !== null ? f.punkte[f.traufe % f.punkte.length]! : f.punkte[0]!;
     for (const z of aktiveZellen(g)) {
       const m = modulMitte(g, f, z.reihe, z.spalte);
-      const hoehe =
-        hoeheUeberGelaende + (fall ? ((m.x - a.x) * fall.x + (m.y - a.y) * fall.y) * steig : 0);
+      /*
+       * Dieselbe Formel wie in der räumlichen Ansicht — und seit dem
+       * 13.08.2026 mit dem richtigen Vorzeichen: Der First liegt HÖHER
+       * als die Traufe. Vorher rechnete diese Stelle die Module am
+       * First zu tief an, und ein Baum verschattete auf dem Papier
+       * mehr, als er im Feld verschattet.
+       */
+      const hoehe = hoeheAufFlaeche(f, m, hoeheUeberGelaende);
       punkte.push({ schluessel: `${g.id}/${z.reihe}:${z.spalte}`, mitte: { ...m, z: hoehe } });
     }
   }

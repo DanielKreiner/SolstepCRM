@@ -217,6 +217,63 @@ export function WirtschaftPanel({
         </p>
       ) : null}
 
+      {/* ── Speicher ────────────────────────────────────────────── */}
+      <section className="rounded-[14px] border border-line bg-surface p-3.5">
+        <div className="flex items-baseline">
+          <label htmlFor={`${kennung}-speicher`} className="text-[13px] font-semibold text-muted">
+            Speicher
+          </label>
+          <span className="num ml-auto text-[19px] font-extrabold tabular-nums">
+            {speicherKwh > 0 ? `${num(Math.round(speicherKwh * 10) / 10)} kWh` : "keiner"}
+          </span>
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {[0, 5, 10, 15, 20].map((kwh) => (
+            <button
+              key={kwh}
+              type="button"
+              disabled={!schreibrecht}
+              onClick={() =>
+                setze({ speicherKwh: kwh === 0 ? 0 : kwh, mitSpeicher: kwh > 0 })
+              }
+              aria-pressed={Math.abs(speicherKwh - kwh) < 0.05}
+              className={[
+                "num h-10 rounded-[10px] border px-3 text-[13px] font-semibold tabular-nums transition-colors",
+                Math.abs(speicherKwh - kwh) < 0.05
+                  ? "border-accent bg-accent-sunk text-ink"
+                  : "border-line bg-surface text-muted hover:border-accent hover:text-ink",
+              ].join(" ")}
+            >
+              {kwh === 0 ? "ohne" : `${kwh} kWh`}
+            </button>
+          ))}
+        </div>
+
+        <input
+          id={`${kennung}-speicher`}
+          type="number"
+          min={0}
+          max={200}
+          step={0.5}
+          disabled={!schreibrecht}
+          aria-label="Speicher in kWh"
+          value={speicherKwh || ""}
+          placeholder="eigene Grösse in kWh"
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (!Number.isFinite(v) || v < 0 || v > 200) return;
+            setze({ speicherKwh: v, mitSpeicher: v > 0 });
+          }}
+          className="num mt-2 h-[52px] w-full rounded-[14px] border border-line bg-surface px-3.5 text-[16px] font-bold tabular-nums outline-none focus:border-accent disabled:opacity-50"
+        />
+
+        <p className="mt-2 text-[11.5px] leading-[1.45] text-muted">
+          Ohne Speicher deckt ein Dach rund ein Drittel des Verbrauchs — nachts erzeugt es
+          nichts. Der Speicher hebt die Autarkie, je nach Grösse im Verhältnis zum Verbrauch.
+        </p>
+      </section>
+
       {/* ── Region ──────────────────────────────────────────────── */}
       {regionen.length > 0 ? (
         <section className="rounded-[14px] border border-line bg-surface p-3.5">

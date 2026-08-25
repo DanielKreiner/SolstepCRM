@@ -561,6 +561,32 @@ export function falllinie(flaeche: Dachflaeche): Meter | null {
  * Kompassrichtung eines Vektors: 0 = Nord, 90 = Ost, 180 = Süd.
  * Achtung, das ist nicht atan2(y, x) — dort läge 0 im Osten.
  */
+/**
+ * Höhe eines Punktes auf einer Dachfläche.
+ *
+ * `traufhoehe` ist die Höhe der Traufkante über dem Gelände; von dort
+ * steigt das Dach zur Gegenseite an.
+ *
+ * Die Richtung ist der ganze Punkt: `falllinie` zeigt BERGAB, aus der
+ * Fläche heraus. Wer den Abstand zur Traufe mit ihr multipliziert,
+ * bekommt ein Dach, das zum First hin FÄLLT. Genau das stand an zwei
+ * Stellen im Code — in der räumlichen Ansicht (dort sah man es an
+ * einem Satteldach sofort: „ist verkehrt rum") und in der
+ * Verschattungsrechnung, wo es niemandem auffiel, weil eine
+ * Modulreihe am First dadurch zu tief angesetzt wurde.
+ *
+ * Deshalb steht die Formel jetzt hier, einmal.
+ */
+export function hoeheAufFlaeche(f: Dachflaeche, q: Meter, traufhoehe: number): number {
+  const fall = falllinie(f);
+  if (!fall) return traufhoehe;
+  const a = f.punkte[(f.traufe ?? 0) % f.punkte.length]!;
+  const steig = Math.tan((f.neigung * Math.PI) / 180);
+  // Bergauf ist der Falllinie entgegengesetzt.
+  const bergauf = -((q.x - a.x) * fall.x + (q.y - a.y) * fall.y);
+  return traufhoehe + bergauf * steig;
+}
+
 export function azimutVon(richtung: Meter): number {
   const grad = (Math.atan2(richtung.x, richtung.y) * 180) / Math.PI;
   return (grad + 360) % 360;

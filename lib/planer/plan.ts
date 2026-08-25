@@ -156,6 +156,14 @@ const wirtschaftSchema = z.object({
   region: z.string().nullable().default(null),
   /** Ob die Rechnung mit Speicher gezeigt wird. */
   mitSpeicher: z.boolean().default(false),
+  /**
+   * Nutzbare Speichergrösse in kWh, von Hand eingetragen.
+   *
+   * `null` heisst: Es gilt, was am gewählten Speichergerät steht. Wer
+   * eine Zahl tippt, hat Vorrang — im Erstgespräch steht die Grösse
+   * fest, bevor das Gerät ausgesucht ist.
+   */
+  speicherKwh: z.number().min(0).max(200).nullable().default(null),
 });
 
 /*
@@ -216,6 +224,7 @@ export const planSchema = z.object({
     foerderung: null,
     region: null,
     mitSpeicher: false,
+    speicherKwh: null,
   }),
 });
 
@@ -267,6 +276,7 @@ export function leererPlan(): Plan {
       foerderung: null,
       region: null,
       mitSpeicher: false,
+      speicherKwh: null,
     },
   };
 }

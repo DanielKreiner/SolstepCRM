@@ -6,6 +6,7 @@ import {
   richtpreis,
   verbrauchAusChips,
   type WirtschaftEingaben,
+  autarkie,
 } from "./wirtschaft";
 
 /*
@@ -31,51 +32,56 @@ describe("Wirtschaftlichkeit ohne Speicher", () => {
     const r = rechne(HAUS);
 
     /*
-     *   Deckung  = min(1, 4500 / 9500)          = 0,473684
-     *   EV-Quote = 0,22 + 0,38 · 0,473684       = 0,40
+     * Gerechnet wird ab der AUTARKIE, nicht ab einer geschätzten
+     * Eigenverbrauchsquote:
+     *
+     *   Verhältnis = 9500 / 4500                     = 2,1111
+     *   Autarkie   = 0,44 · (1 − e^(−1,1 · 2,1111))  = 0,39684
      */
-    expect(r.evQuote).toBeCloseTo(0.4, 6);
+    expect(r.autarkie).toBeCloseTo(0.39686, 4);
 
-    //   Eigenverbrauch = min(9500 · 0,40 ; 4500 · 0,99) = min(3800 ; 4455) = 3800
-    expect(r.eigenverbrauchKwh).toBeCloseTo(3800, 6);
+    //   Eigenverbrauch = 4500 · 0,39684 = 1785,8 kWh
+    expect(r.eigenverbrauchKwh).toBeCloseTo(1785.85, 1);
 
-    //   Autarkie = 3800 / 4500 = 0,84444
-    expect(r.autarkie).toBeCloseTo(0.844444, 5);
+    //   EV-Quote = 1785,8 / 9500 = 0,188
+    expect(r.evQuote).toBeCloseTo(0.18798, 4);
 
-    //   Einspeisung = 9500 − 3800 = 5700
-    expect(r.einspeisungKwh).toBeCloseTo(5700, 6);
+    //   Einspeisung = 9500 − 1785,8 = 7714,2
+    expect(r.einspeisungKwh).toBeCloseTo(7714.15, 1);
 
-    //   Ersparnis = 3800 · 0,28 + 5700 · 0,08 = 1064 + 456 = 1520 €
-    expect(r.ersparnisJahr1).toBeCloseTo(1520, 6);
+    //   Ersparnis = 1785,8 · 0,28 + 7714,2 · 0,08 = 500,0 + 617,1 = 1117,2 €
+    expect(r.ersparnisJahr1).toBeCloseTo(1117.17, 1);
 
     //   Investition = 18000 − 1500 = 16500 €
     expect(r.investition).toBeCloseTo(16500, 6);
 
-    //   Amortisation = 16500 / 1520 = 10,855 Jahre
-    expect(r.amortisationJahre).toBeCloseTo(10.855263, 5);
+    //   Amortisation = 16500 / 1117,2 = 14,77 Jahre
+    expect(r.amortisationJahre).toBeCloseTo(14.77, 2);
   });
 
   it("führt die 20-Jahre-Kurve mit steigendem Strompreis", () => {
     const r = rechne(HAUS);
     expect(r.kurve).toHaveLength(MODELL.jahre);
 
-    //   Jahr 1: 1520 − 16500 = −14980
-    expect(r.kurve[0]).toBeCloseTo(-14980, 6);
+    //   Jahr 1: 1117,17 − 16500 = −15382,83
+    expect(r.kurve[0]).toBeCloseTo(-15382.83, 1);
 
     /*
      * Jahr 2 rechnet den gesparten Netzstrom mit 0,28 · 1,02 = 0,2856:
-     *   3800 · 0,2856 + 456 = 1541,28
-     *   kumuliert 3061,28 → 3061,28 − 16500 = −13438,72
+     *   1785,85 · 0,2856 + 617,13 = 1127,17
+     *   kumuliert 2244,34 → 2244,34 − 16500 = −14255,66
      */
-    expect(r.kurve[1]).toBeCloseTo(-13438.72, 4);
+    expect(r.kurve[1]).toBeCloseTo(-14255.66, 1);
 
     /*
-     * Break-even mit Steigerung: nach 10 Jahren sind 16.210 € kumuliert
-     * (noch unter der Investition), nach 11 Jahren 17.963 €.
+     * Break-even im 14. Jahr. Er liegt später als vorher — das ist der
+     * Preis der ehrlicheren Autarkierechnung: Ohne Speicher bleibt
+     * weniger Strom im Haus, und eingespeister Strom bringt acht statt
+     * achtundzwanzig Cent.
      */
-    expect(r.breakEvenJahr).toBe(11);
-    expect(r.kurve[9]).toBeLessThan(0);
-    expect(r.kurve[10]).toBeGreaterThan(0);
+    expect(r.breakEvenJahr).toBe(14);
+    expect(r.kurve[12]).toBeLessThan(0);
+    expect(r.kurve[13]).toBeGreaterThan(0);
   });
 
   it("lässt die Einspeisevergütung NICHT mitsteigen", () => {
@@ -96,25 +102,21 @@ describe("Wirtschaftlichkeit ohne Speicher", () => {
 describe("Wirtschaftlichkeit mit Speicher", () => {
   const mitSpeicher: WirtschaftEingaben = { ...HAUS, speicherKwh: 10 };
 
-  it("hebt die EV-Quote anteilig zur Speichergrösse", () => {
+  it("hebt die Autarkie nach Speichergrösse je 1000 kWh Verbrauch", () => {
     /*
-     *   Tagesverbrauch = 4500 / 365 = 12,329 kWh
-     *   f_sp     = min(1, 10 / 12,329)      = 0,81111
-     *   EV-Quote = 0,40 + 0,27 · 0,81111    = 0,619
+     *   je 1000 kWh = 10 / 4,5                      = 2,2222
+     *   Zusatz      = 0,42 · (1 − e^(−0,7 · 2,2222)) = 0,33144
+     *   Autarkie    = 0,39684 + 0,33144 · 1          = 0,72828
      */
-    expect(evQuote(9500, 4500, 10)).toBeCloseTo(0.619, 6);
+    expect(autarkie(9500, 4500, 10)).toBeCloseTo(0.72821, 4);
   });
 
-  it("deckelt den Eigenverbrauch beim Verbrauch — man kann nicht mehr nutzen, als man braucht", () => {
+  it("nutzt nie mehr, als das Haus braucht", () => {
     const r = rechne(mitSpeicher);
-    //   min(9500 · 0,619 ; 4455) = min(5880,5 ; 4455) = 4455
-    expect(r.eigenverbrauchKwh).toBeCloseTo(4455, 6);
-    expect(r.autarkie).toBeCloseTo(0.99, 6);
-
-    //   Ersparnis = 4455 · 0,28 + (9500 − 4455) · 0,08 = 1247,4 + 403,6 = 1651
-    expect(r.ersparnisJahr1).toBeCloseTo(1651, 6);
-    //   16500 / 1651 = 9,994 Jahre
-    expect(r.amortisationJahre).toBeCloseTo(9.99394, 4);
+    //   4500 · 0,72828 = 3277,3 kWh
+    expect(r.eigenverbrauchKwh).toBeCloseTo(3276.92, 1);
+    expect(r.eigenverbrauchKwh).toBeLessThanOrEqual(HAUS.verbrauchKwh);
+    expect(r.autarkie).toBeLessThan(0.85);
   });
 
   it("verändert Quote, Autarkie und Amortisation konsistent (Abnahmetest 18)", () => {
@@ -139,15 +141,18 @@ describe("Wirtschaftlichkeit mit Speicher", () => {
   });
 
   it("bringt ein kleiner Speicher bei grossem Verbrauch wenig", () => {
-    // 5 kWh Speicher, 30 kWh Tagesverbrauch → f_sp = 5/30 = 0,1667.
-    const gross = evQuote(12000, 11000, 5);
-    const klein = evQuote(12000, 11000, 0);
-    expect(gross - klein).toBeCloseTo(MODELL.evSpeicherPlus * (5 / (11000 / 365)), 5);
-    expect(gross - klein).toBeLessThan(0.05);
+    /*
+     * 5 kWh bei 11 000 kWh Jahresverbrauch sind 0,45 kWh je 1000 —
+     * das hebt die Autarkie um gut zehn Punkte, nicht um dreissig.
+     */
+    const mit = autarkie(12000, 11000, 5);
+    const ohne = autarkie(12000, 11000, 0);
+    expect(mit - ohne).toBeGreaterThan(0.05);
+    expect(mit - ohne).toBeLessThan(0.15);
   });
 
   it("hält die Obergrenze auch bei riesigem Speicher", () => {
-    expect(evQuote(9500, 9000, 200)).toBeLessThanOrEqual(MODELL.evMaxMitSpeicher);
+    expect(autarkie(9500, 9000, 200)).toBeLessThanOrEqual(MODELL.autarkieDeckelMitSpeicher);
   });
 });
 
@@ -165,29 +170,37 @@ describe("Randfälle", () => {
     expect(ohneVerbrauch.autarkie).toBe(0);
   });
 
-  it("hält die Quotengrenzen ein", () => {
-    // Winzige Anlage, riesiger Verbrauch: Deckung 1 → 0,22 + 0,38 = 0,60,
-    // gedeckelt auf 0,55.
-    expect(evQuote(1000, 20000, 0)).toBeCloseTo(MODELL.evMax, 6);
+  it("hält die Grenzen der Autarkie ein", () => {
+    /*
+     * Winzige Anlage, riesiger Verbrauch: Die Autarkie ist klein — was
+     * erzeugt wird, wird zwar fast vollständig gebraucht, deckt aber
+     * kaum etwas ab.
+     */
+    expect(autarkie(1000, 20000, 0)).toBeLessThan(0.05);
+    expect(evQuote(1000, 20000, 0)).toBeGreaterThan(0.4);
 
     /*
-     * Die Untergrenze greift beim heutigen Sockel nie: 0,22 liegt schon
-     * über 0,20, und die Steigung addiert nur dazu. Sie ist eine
-     * Absicherung für den Fall, dass jemand den Sockel senkt — hier
-     * festgehalten, damit die Kalibrierung nicht am falschen Ende dreht.
+     * Riesenanlage über winzigem Verbrauch: Ohne Speicher ist bei
+     * 44 % Schluss — nachts erzeugt kein Dach Strom, und daran ändert
+     * die Anlagengrösse nichts. GENAU das war der gemeldete Fehler:
+     * Vorher kamen hier 99 % heraus.
      */
-    const riesenanlage = evQuote(50000, 500, 0);
-    expect(riesenanlage).toBeGreaterThanOrEqual(MODELL.evMin);
-    expect(riesenanlage).toBeCloseTo(0.2238, 4);
+    expect(autarkie(50000, 500, 0)).toBeCloseTo(MODELL.autarkieOhne, 3);
+    expect(autarkie(50000, 500, 0)).toBeLessThan(0.5);
   });
 
-  it("bleibt in jedem Fall im Band zwischen Unter- und Obergrenze", () => {
+  it("bleibt in jedem Fall unter den Obergrenzen", () => {
     for (const ertrag of [500, 5000, 50000]) {
       for (const verbrauch of [500, 4500, 30000]) {
         for (const speicher of [0, 5, 30]) {
+          const a = autarkie(ertrag, verbrauch, speicher);
+          expect(a).toBeGreaterThanOrEqual(0);
+          expect(a).toBeLessThanOrEqual(
+            speicher > 0 ? MODELL.autarkieDeckelMitSpeicher : MODELL.autarkieDeckel,
+          );
           const q = evQuote(ertrag, verbrauch, speicher);
-          expect(q).toBeGreaterThanOrEqual(MODELL.evMin);
-          expect(q).toBeLessThanOrEqual(MODELL.evMaxMitSpeicher);
+          expect(q).toBeGreaterThanOrEqual(0);
+          expect(q).toBeLessThanOrEqual(1);
         }
       }
     }

@@ -542,7 +542,14 @@ export function Planer({
   const ertrag = useErtrag(plan, ursprung, vorgabe.verlustProzent, plan.gebaeude.wandhoehe);
 
   const gewaehlterSpeicher = geraete.speicher.find((sp) => sp.id === plan.technik.speicher);
-  const speicherKwh = gewaehlterSpeicher ? Number(gewaehlterSpeicher.nutzbar_kwh) : 0;
+  /*
+   * Die von Hand eingetragene Grösse hat Vorrang vor dem Gerät: Im
+   * Erstgespräch steht „zehn Kilowattstunden" fest, lange bevor
+   * jemand ein Gerät aussucht. Ohne beides ist es kein Speicher.
+   */
+  const speicherKwh =
+    plan.wirtschaft.speicherKwh ??
+    (gewaehlterSpeicher ? Number(gewaehlterSpeicher.nutzbar_kwh) : 0);
 
   const w = plan.wirtschaft;
   const wirtschaftWerte = {

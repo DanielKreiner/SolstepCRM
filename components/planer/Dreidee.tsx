@@ -9,7 +9,7 @@ import {
   modulEcken,
   rasterMitte,
 } from "@/lib/planer/module";
-import { falllinie } from "@/lib/planer/flaeche";
+import { hoeheAufFlaeche } from "@/lib/planer/flaeche";
 import type { Punkt3D } from "@/lib/planer/gebaeude";
 import {
   kachelnFuer,
@@ -711,15 +711,8 @@ export function Dreidee(p: DreideeProps) {
      * für den Strahlwurf: Läge das gesetzte Modul auf einer anderen
      * Höhe als die Dachhaut, sähe man es kippen.
      */
-    const hoeheAuf = (f: DreideeProps["plan"]["flaechen"][number], q: Meter): number => {
-      const fall = falllinie(f);
-      const steig = Math.tan((f.neigung * Math.PI) / 180);
-      const a = f.traufe !== null ? f.punkte[f.traufe % f.punkte.length]! : f.punkte[0]!;
-      return (
-        stand.current.wandhoehe +
-        (fall ? ((q.x - a.x) * fall.x + (q.y - a.y) * fall.y) * steig : 0)
-      );
-    };
+    const hoeheAuf = (f: DreideeProps["plan"]["flaechen"][number], q: Meter): number =>
+      hoeheAufFlaeche(f, q, stand.current.wandhoehe);
 
     /* Was der Strahlwurf treffen darf. */
     const dachNetze: THREE.Mesh[] = [];

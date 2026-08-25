@@ -314,3 +314,32 @@ test.describe("Planer — Ertrag und Wirtschaftlichkeit", () => {
     await expect(ertrag).toHaveAttribute("title", /Dachfläche|Module/);
   });
 });
+
+test.describe("Planer — Autarkie und Speicher", () => {
+  test("Ohne Speicher bleibt die Autarkie unter der Hälfte, mit Speicher steigt sie", async ({
+    page,
+  }) => {
+    await login(page, DEMO.gf);
+    await projektMitBelegung(page, "Autarkieweg 1");
+    await page.getByRole("button", { name: /^4 Ertrag/ }).click();
+
+    /*
+     * Beschwerde vom 13.08.2026: „wie geht eine Autarkie von 99 % ohne
+     * Speicher? Da ist die Nacht nicht drin." Genau das prüft dieser
+     * Fall — ohne Speicher ist bei knapp der Hälfte Schluss.
+     */
+    const autarkie = async () => {
+      const text = (await page.locator('[data-kennzahl="autarkie"]').textContent()) ?? "";
+      return Number(text.replace(/[^\d,]/g, "").replace(",", "."));
+    };
+
+    await expect.poll(autarkie, { timeout: 20_000 }).toBeGreaterThan(0);
+    const ohne = await autarkie();
+    expect(ohne, "ohne Speicher deckt kein Dach fast alles").toBeLessThan(50);
+
+    // Und mit Speicher steigt sie — eingetippt, nicht über ein Gerät.
+    await page.getByRole("button", { name: "10 kWh", exact: true }).click();
+    await expect.poll(autarkie, { timeout: 20_000 }).toBeGreaterThan(ohne);
+    expect(await autarkie(), "aber auch dann nicht über 85 %").toBeLessThanOrEqual(85);
+  });
+});

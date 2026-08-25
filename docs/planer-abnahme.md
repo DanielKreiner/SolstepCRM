@@ -291,3 +291,14 @@ die das Setzen nicht einhält.
 | F2 | „Ost / West" wählen | Reihenabstand aus dem Winterschatten, Ausrichtung 90/270 im Ertrag |
 | Z1 | Sperrzone zeichnen | Ecken antippen, erste Ecke schliesst — kein Rechteck, kein Enter |
 | Z2 | Neue Sperrzone | kein Sperrsaum ringsum (0 m) |
+
+## Autarkie und Speicher (13.08.2026, siebter Durchgang)
+
+| # | Prüfung | Erwartung |
+|---|---|---|
+| A1 | Grosse Anlage, kleiner Verbrauch, kein Speicher | Autarkie unter 50 %, nicht 99 % |
+| A2 | Speicher „10 kWh" antippen | Autarkie steigt, bleibt unter 85 % |
+| A3 | Eigene Grösse eintippen | gilt vor dem gewählten Speichergerät |
+| A4 | Satteldach in 3D | First oben, Traufen unten |
+| A5 | Ein String, Modul stärker als der Eingang | Hinweis „der Wechselrichter begrenzt", kein Fehler |
+| A6 | Zwei parallele Strings am selben MPPT | Fehler mit dem Rat, einen zu verlegen |

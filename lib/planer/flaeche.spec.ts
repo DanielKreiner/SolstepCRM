@@ -24,6 +24,7 @@ import {
   verkuerzt,
   versatzNachInnen,
   kanteParallel,
+  hoeheAufFlaeche,
 } from "./flaeche";
 import type { Meter } from "./geo";
 
@@ -507,5 +508,51 @@ describe("kanteParallel", () => {
       laenge(schief[2]!, schief[3]!),
       6,
     );
+  });
+});
+
+describe("hoeheAufFlaeche", () => {
+  /** Ein Pultdach: Traufe unten (Kante 0), First oben. */
+  const dach = {
+    id: "f1",
+    name: "Fläche 1",
+    punkte: [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 6 },
+      { x: 0, y: 6 },
+    ],
+    neigung: 30,
+    azimut: 180,
+    traufe: 0,
+    randabstand: 0.3,
+    hindernisse: [],
+  } as unknown as Parameters<typeof hoeheAufFlaeche>[0];
+
+  it("lässt die Traufe auf ihrer Höhe", () => {
+    expect(hoeheAufFlaeche(dach, { x: 5, y: 0 }, 3)).toBeCloseTo(3, 6);
+  });
+
+  it("hebt den First — nicht umgekehrt", () => {
+    /*
+     * Das war der Fehler: `falllinie` zeigt bergab, und wer damit
+     * multipliziert, bekommt ein Dach, das zum First hin fällt. In der
+     * räumlichen Ansicht sah man es sofort, in der Verschattung nicht.
+     */
+    const first = hoeheAufFlaeche(dach, { x: 5, y: 6 }, 3);
+    expect(first).toBeGreaterThan(3);
+    // 6 m Tiefe bei 30 Grad sind 3,46 m Anstieg.
+    expect(first).toBeCloseTo(3 + 6 * Math.tan(Math.PI / 6), 6);
+  });
+
+  it("steigt gleichmässig an", () => {
+    const halb = hoeheAufFlaeche(dach, { x: 5, y: 3 }, 3);
+    const ganz = hoeheAufFlaeche(dach, { x: 5, y: 6 }, 3);
+    expect(halb - 3).toBeCloseTo((ganz - 3) / 2, 6);
+  });
+
+  it("lässt ein Flachdach flach", () => {
+    const flach = { ...dach, neigung: 0, traufe: null };
+    expect(hoeheAufFlaeche(flach, { x: 5, y: 6 }, 3)).toBe(3);
   });
 });
