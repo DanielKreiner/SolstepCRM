@@ -999,17 +999,46 @@ export function Leinwand(p: LeinwandProps) {
 
     if (s.werkzeug === "hindernis" || s.werkzeug === "gaube") {
       const gaube = s.werkzeug === "gaube";
-      const ziel = s.plan.flaechen.find((f) => f.id === s.aktiv);
+      const mitte = {
+        x: punkte.reduce((a, q) => a + q.x, 0) / punkte.length,
+        y: punkte.reduce((a, q) => a + q.y, 0) / punkte.length,
+      };
+
+      /*
+       * Auf WELCHER Fläche liegt sie?
+       *
+       * Erst die gewählte, sonst die, auf der die Zone tatsächlich
+       * liegt, sonst — bei genau einem Dach — eben dieses.
+       *
+       * Der erste Anlauf nahm ausschliesslich die gewählte Fläche. War
+       * keine gewählt, passierte NICHTS: keine Zone, keine Meldung,
+       * kein Hinweis. Aus dem Betrieb kam entsprechend „Sperrzone und
+       * Gaube erscheinen immer noch nicht" — und das stimmte, es lag
+       * nur nicht am Zeichnen.
+       */
+      const ziel =
+        s.plan.flaechen.find((f) => f.id === s.aktiv) ??
+        s.plan.flaechen.find((f) => punktInPolygon(mitte, f.punkte)) ??
+        (s.plan.flaechen.length === 1 ? s.plan.flaechen[0] : undefined);
+
+      if (!ziel) {
+        setMeldung(
+          s.plan.flaechen.length === 0
+            ? "Zuerst eine Dachfläche zeichnen."
+            : "Zuerst die Dachfläche auswählen, auf der sie liegen soll.",
+        );
+        entwurf.current = [];
+        setEntwurfLaenge(0);
+        anstossen();
+        return;
+      }
+
       /*
        * Ein Kamin neben dem Dach ist keine Angabe, sondern ein Versehen:
        * er sperrt nichts und taucht in keiner Rechnung auf. Statt ihn
        * still anzulegen, wird abgelehnt und gesagt, warum.
        */
-      const mitte = {
-        x: punkte.reduce((a, q) => a + q.x, 0) / punkte.length,
-        y: punkte.reduce((a, q) => a + q.y, 0) / punkte.length,
-      };
-      if (ziel && !punktInPolygon(mitte, ziel.punkte)) {
+      if (!punktInPolygon(mitte, ziel.punkte)) {
         setMeldung(
           gaube
             ? "Die Gaube muss auf der gewählten Dachfläche liegen."
@@ -1020,34 +1049,32 @@ export function Leinwand(p: LeinwandProps) {
         anstossen();
         return;
       }
-      if (ziel) {
-        aendereFlaeche(
-          ziel.id,
-          (f) => ({
-            ...f,
-            hindernisse: [
-              ...f.hindernisse,
-              {
-                id: naechsteId(f.hindernisse.map((h) => h.id), "h"),
-                art: gaube ? ("gaube" as const) : ("polygon" as const),
-                name: gaube
-                  ? `Gaube ${f.hindernisse.filter((h) => h.art === "gaube").length + 1}`
-                  : `Sperrzone ${f.hindernisse.filter((h) => h.art !== "gaube").length + 1}`,
-                punkte,
-                /*
-                 * Kein Sperrsaum: „außerdem soll eine sperrzone keine
-                 * 0,3m abstand haben". Wer Abstand braucht, zeichnet
-                 * die Zone entsprechend grösser — das ist ehrlicher
-                 * als ein unsichtbarer Saum, der die Belegung frisst.
-                 */
-                abstand: 0,
-                ...(gaube ? { hoehe: 1.2 } : {}),
-              },
-            ],
-          }),
-          true,
-        );
-      }
+      aendereFlaeche(
+        ziel.id,
+        (f) => ({
+          ...f,
+          hindernisse: [
+            ...f.hindernisse,
+            {
+              id: naechsteId(f.hindernisse.map((h) => h.id), "h"),
+              art: gaube ? ("gaube" as const) : ("polygon" as const),
+              name: gaube
+                ? `Gaube ${f.hindernisse.filter((h) => h.art === "gaube").length + 1}`
+                : `Sperrzone ${f.hindernisse.filter((h) => h.art !== "gaube").length + 1}`,
+              punkte,
+              /*
+               * Kein Sperrsaum: „außerdem soll eine sperrzone keine
+               * 0,3m abstand haben". Wer Abstand braucht, zeichnet
+               * die Zone entsprechend grösser — das ist ehrlicher
+               * als ein unsichtbarer Saum, der die Belegung frisst.
+               */
+              abstand: 0,
+              ...(gaube ? { hoehe: 1.2 } : {}),
+            },
+          ],
+        }),
+        true,
+      );
     } else {
       /*
        * Der gezeichnete Umriss wird ein BAUKÖRPER, nicht bloss eine

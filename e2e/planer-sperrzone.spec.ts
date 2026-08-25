@@ -123,3 +123,40 @@ test.describe("Planer — Sperrzonen bewegen", () => {
     expect(gezogen.hoehe, "und höher").toBeGreaterThan(geschoben.hoehe);
   });
 });
+
+test.describe("Planer — Sperrzone ohne gewählte Fläche", () => {
+  test("Auch ohne Auswahl landet die Zone auf dem Dach darunter", async ({ page }) => {
+    await login(page, DEMO.gf);
+    const id = await neuesProjekt(page);
+
+    await dachSetzen(page, "Pultdach", "18", "12");
+
+    /*
+     * KEIN Klick auf „Fläche 1" — genau der Fall aus dem Betrieb:
+     * „Sperrzone und Gaube erscheinen immer noch nicht." Ohne gewählte
+     * Fläche passierte vorher nichts, nicht einmal eine Meldung.
+     */
+    const k = (await page.getByTestId("planer-leinwand").boundingBox())!;
+    const m = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
+
+    await page.getByRole("button", { name: /Sperrzone aufziehen/ }).click();
+    await vieleck(page, m, [
+      [-50, -30],
+      [10, -30],
+      [10, 20],
+      [-50, 20],
+    ]);
+
+    await expect(page.getByText(/Sperrzonen \(1\)/i)).toBeVisible();
+
+    const zonen = async () => {
+      const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();
+      const plan = data!.plan as {
+        flaechen?: Array<{ hindernisse?: Array<{ art: string }> }>;
+      };
+      return (plan.flaechen ?? []).flatMap((f) => f.hindernisse ?? []);
+    };
+    await expect.poll(async () => (await zonen()).length, { timeout: 20_000 }).toBe(1);
+    expect((await zonen())[0]!.art).toBe("polygon");
+  });
+});
