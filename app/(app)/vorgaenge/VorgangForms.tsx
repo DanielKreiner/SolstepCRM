@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Dialog } from "@/components/ui/Dialog";
 import {
   Auswahl,
   Eingabe,
@@ -116,9 +118,18 @@ const QUELLEN = [
 export function VorgangAnlegen({ kunden }: { kunden: Option[] }) {
   const [offen, setOffen] = useState(false);
   const [neuerKunde, setNeuerKunde] = useState(false);
+  const router = useRouter();
 
-  if (!offen) {
-    return (
+  /*
+   * Als Fenster, nicht inline.
+   *
+   * CLAUDE.md sagt: keine Modals für Dinge, die inline gehen. Dieses
+   * geht nicht inline — acht Felder über die halbe Seite schoben das
+   * Board nach unten aus dem Bild, und wer einen Vorgang anlegte, sah
+   * die Pipeline nicht mehr, in die er ihn anlegt.
+   */
+  return (
+    <>
       <button
         type="button"
         onClick={() => setOffen(true)}
@@ -126,18 +137,33 @@ export function VorgangAnlegen({ kunden }: { kunden: Option[] }) {
       >
         Vorgang anlegen
       </button>
-    );
-  }
 
-  return (
-    <div className="w-full">
-      <Formular
-        aktion={vorgangAnlegen}
+      <Dialog
+        offen={offen}
         titel="Neuer Vorgang"
-        hinweis="Die Nummer bleibt bis zur Schlussrechnung dieselbe."
-        knopf="Anlegen"
-        leerenNachErfolg
+        schliessen={() => {
+          setOffen(false);
+          setNeuerKunde(false);
+        }}
       >
+        <Formular
+          aktion={vorgangAnlegen}
+          hinweis="Die Nummer bleibt bis zur Schlussrechnung dieselbe."
+          knopf="Anlegen"
+          leerenNachErfolg
+          onErfolg={(status) => {
+            /*
+             * Direkt hinein. Der angelegte Vorgang ist leer, und der
+             * erste Weg führt ohnehin dorthin — Notiz, Termin,
+             * Positionen. Ohne den Sprung landet man auf dem Board und
+             * sucht die Karte, die man gerade selbst angelegt hat.
+             */
+            setOffen(false);
+            setNeuerKunde(false);
+            if (status.id) router.push(`/vorgaenge/${status.id}`);
+            else router.refresh();
+          }}
+        >
         {/*
           Bestandskunde oder neuer — beides hier. Mit dem CRM ist die
           Stelle weggefallen, an der man einen Kunden anlegen konnte, und
@@ -201,15 +227,8 @@ export function VorgangAnlegen({ kunden }: { kunden: Option[] }) {
           zeilen={3}
           platzhalter="Was der Kunde will, Budget, Besonderheiten."
         />
-      </Formular>
-
-      <button
-        type="button"
-        onClick={() => setOffen(false)}
-        className="mt-2 cursor-pointer border-0 bg-transparent text-[12.5px] text-muted underline"
-      >
-        Abbrechen
-      </button>
-    </div>
+        </Formular>
+      </Dialog>
+    </>
   );
 }

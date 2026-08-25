@@ -17,7 +17,12 @@ import {
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
-export type VorgangStatus = { error: string | null; ok: string | null };
+export type VorgangStatus = {
+  error: string | null;
+  ok: string | null;
+  /** Kennung des angelegten Vorgangs — nur beim Anlegen gesetzt. */
+  id?: string;
+};
 
 /**
  * Alles, was an einem Vorgang geschieht.
@@ -214,7 +219,15 @@ export async function vorgangAnlegen(
   });
 
   revalidatePath("/vorgaenge");
-  return { error: null, ok: `${vorgang.number as string} angelegt.` };
+  /*
+   * Die Kennung kommt mit zurück: Wer einen Vorgang anlegt, will
+   * hinein — nicht zurück auf eine Liste, in der er ihn erst sucht.
+   */
+  return {
+    error: null,
+    ok: `${vorgang.number as string} angelegt.`,
+    id: vorgang.id as string,
+  };
 }
 
 /* -------------------------------------------------------- PHASENWECHSEL */

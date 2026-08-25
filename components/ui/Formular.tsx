@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState, type ReactNode, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 
 /*
@@ -15,7 +15,18 @@ import { useFormStatus } from "react-dom";
  * und macht das Feld für Screenreader unbrauchbar.
  */
 
-export type AktionsStatus = { error: string | null; ok: string | null };
+export type AktionsStatus = {
+  error: string | null;
+  ok: string | null;
+  /**
+   * Kennung des angelegten Datensatzes.
+   *
+   * Nur beim Anlegen gesetzt und nur dort ausgewertet: Wer einen
+   * Vorgang anlegt, will hinein — nicht zurück auf eine Liste, in der
+   * er ihn erst sucht.
+   */
+  id?: string;
+};
 export const LEER: AktionsStatus = { error: null, ok: null };
 
 const FELD =
@@ -270,6 +281,7 @@ export function Formular({
   children,
   /* Nach Erfolg leeren — richtig beim Anlegen, falsch beim Bearbeiten. */
   leerenNachErfolg = false,
+  onErfolg,
 }: {
   aktion: (
     prev: AktionsStatus,
@@ -282,8 +294,25 @@ export function Formular({
   versteckt?: Record<string, string>;
   children: ReactNode;
   leerenNachErfolg?: boolean;
+  /**
+   * Läuft einmal, nachdem die Aktion gemeldet hat, dass es geklappt
+   * hat — zum Schliessen eines Fensters oder zum Weiterspringen.
+   */
+  onErfolg?: (status: AktionsStatus) => void;
 }) {
   const [status, formAction] = useActionState(aktion, LEER);
+
+  /*
+   * Nur bei einer NEUEN Erfolgsmeldung, nicht bei jedem Render: Sonst
+   * spränge die Seite nach dem Anlegen bei jeder Zustandsänderung
+   * erneut.
+   */
+  const gemeldet = useRef<string | null>(null);
+  useEffect(() => {
+    if (!status.ok || gemeldet.current === status.ok) return;
+    gemeldet.current = status.ok;
+    onErfolg?.(status);
+  }, [status, onErfolg]);
 
   return (
     <form

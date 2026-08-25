@@ -117,9 +117,33 @@ test("2 — Positionen im Vorgang zusammenstellen, ohne Seitenwechsel", async ({
   /*
    * Phase weiterschalten: der Editor steht ab „aufnahme" offen, und die
    * Annahme setzt „angebot" voraus.
+   *
+   * Der Knopf sitzt im Reiter „Aufnahme", nicht im Überblick — seit
+   * „Phase zieht mit der Arbeit mit" beginnt die Aufnahme dort, wo sie
+   * gemacht wird. Der Test klickte weiter auf den Überblick und lief in
+   * eine Zeitüberschreitung. Die Reiter sind Links: Der aktive steht in
+   * der URL, damit man ihn teilen kann.
    */
+  await page.getByRole("link", { name: "Aufnahme", exact: true }).click();
   await page.getByRole("button", { name: "Aufnahme starten" }).click();
-  await expect(page.getByText("Phase: Aufnahme.")).toBeVisible({ timeout: 20_000 });
+  /*
+   * Geprüft wird die PHASE, nicht die Erfolgsmeldung: Nach dem Start
+   * ersetzt die Checkliste den Startknopf samt Meldung, und ein Test,
+   * der auf den Satz wartet, wartet auf etwas, das es nicht mehr gibt.
+   */
+  await expect
+    .poll(
+      async () => {
+        const { data } = await db
+          .from("vorgang")
+          .select("phase")
+          .eq("id", zustand.vorgangId!)
+          .single();
+        return data?.phase;
+      },
+      { timeout: 20_000 },
+    )
+    .toBe("aufnahme");
 
   const { data: artikel } = await db
     .from("article")
@@ -192,16 +216,25 @@ test("2 — Positionen im Vorgang zusammenstellen, ohne Seitenwechsel", async ({
 test("3 — Die Annahme löst alles auf einmal aus", async ({ page }) => {
   const db = admin();
   await login(page, DEMO.gf);
-  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
-
-  await page.getByRole("button", { name: "Angebot erstellen" }).click();
-
   /*
-   * Nicht auf die Erfolgsmeldung warten: mit dem Phasenwechsel tauscht
-   * das Aktionspanel seinen Inhalt aus, und die Meldung verschwindet mit
-   * dem Formular, das sie trug. Geprüft wird die Wirkung — der
-   * Annahmeknopf der nächsten Phase.
+   * In die Angebotsphase kommt der Vorgang nicht mehr über einen Knopf
+   * im Überblick, sondern indem das Angebot rausgeht: ein verschicktes
+   * Angebot IST das Angebot. Der Test klickte weiter auf „Angebot
+   * erstellen" — ein Knopf, den es seit „Phase zieht mit der Arbeit mit"
+   * nicht mehr gibt; im Überblick steht dort nur noch der Hinweis auf
+   * den Reiter.
+   *
+   * Der Versand selbst ist hier nicht der Gegenstand — er hängt an
+   * Mailadresse und Postfach und ist in Test 15 vollständig geprüft.
+   * Geprüft wird die Kaskade, also wird die Phase gesetzt und der
+   * Annahmeknopf gedrückt.
    */
+  await db
+    .from("vorgang")
+    .update({ phase: "angebot", angebot_versendet_am: new Date().toISOString() })
+    .eq("id", zustand.vorgangId!);
+
+  await page.goto(`/vorgaenge/${zustand.vorgangId}`);
   await expect(
     page.getByRole("button", { name: "Angebot angenommen" }),
   ).toBeVisible({ timeout: 20_000 });
@@ -401,13 +434,17 @@ test("7 — Terminiert wird in der Plantafel, der Vorgang zeigt den Termin", asy
    * Den Einsatz selbst legt der Planungstest an; hier zählt, dass der
    * Vorgang ihn danach zeigt und nicht mehr nach einem Termin fragt.
    */
+  /*
+   * Ausdrücklich der Monteur, der sich in Test 8 anmeldet. Vorher stand
+   * hier `limit(1)` ohne Sortierung — solange es einen Monteur gab, ging
+   * das gut. Seit der Demomandant vier hat, landete der Einsatz bei
+   * irgendeinem, und "Heute" zeigte ihn folgerichtig nicht.
+   */
   const { data: monteur } = await db
     .from("app_user")
     .select("id, name")
     .eq("company_id", COMPANY_A)
-    .eq("role", "monteur")
-    .eq("active", true)
-    .limit(1)
+    .eq("email", DEMO.monteur)
     .single();
 
   const { data: e } = await db
@@ -1311,4 +1348,31 @@ test("19 — Der Mahnlauf erinnert, stuft hoch und lässt Ausgesetztes in Ruhe",
       status: beleg!.status,
     })
     .eq("id", beleg!.id);
+});
+
+test.describe("Vorgang anlegen", () => {
+  test("Das Formular ist ein Fenster, und danach steht man im Vorgang", async ({ page }) => {
+    await login(page, DEMO.gf);
+    await page.goto("/vorgaenge");
+
+    /*
+     * Wunsch vom 14.08.2026: „kannst du mir das Vorgang neu anlegen
+     * schön im Popup öffnen und dann gleich direkt in den angelegten
+     * Vorgang rein". Vorher schob das Formular das Board aus dem Bild,
+     * und nach dem Anlegen landete man wieder auf der Liste.
+     */
+    await page.getByRole("button", { name: "Vorgang anlegen" }).click();
+    const fenster = page.getByRole("dialog");
+    await expect(fenster).toBeVisible();
+
+    // Das Board bleibt dahinter stehen.
+    await expect(page.getByText(/^Vorgänge$/)).toBeVisible();
+
+    await fenster.getByRole("button", { name: /Kunde ist neu/ }).click();
+    await fenster.getByLabel("Name des Kunden").fill("Prüfkunde Fenster");
+    await fenster.getByRole("button", { name: "Anlegen" }).click();
+
+    await page.waitForURL(/\/vorgaenge\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await expect(page.getByText("Prüfkunde Fenster").first()).toBeVisible();
+  });
 });
