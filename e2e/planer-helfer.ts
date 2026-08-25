@@ -30,11 +30,20 @@ export async function dachSetzen(
  * Die Modulwahl gehört zum Ablauf: Ohne Modul kennt der Planer die
  * Rastermasse nicht, und der Knopf zum Belegen bleibt gesperrt.
  */
-export async function belegen(page: Page): Promise<void> {
+export async function belegen(page: Page, aufbau = "Nach Süden aufgeständert"): Promise<void> {
   const belegung = page.getByRole("button", { name: /^2 Belegung/ });
   if (await belegung.isEnabled().catch(() => false)) await belegung.click();
   await modulWaehlen(page);
   await page.getByRole("button", { name: /(Dach voll belegen|Restfläche belegen)/ }).click();
+
+  /*
+   * Beim Flachdach fragt der Planer zuerst, wie die Module stehen
+   * sollen — flach, Süd oder Ost/West. Bei einem geneigten Dach gibt
+   * es nichts zu fragen, dann ist der Kasten gar nicht da.
+   */
+  const frage = page.getByRole("button", { name: aufbau, exact: false });
+  if (await frage.isVisible().catch(() => false)) await frage.click();
+
   await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 }
 
@@ -66,4 +75,26 @@ export async function mehrOeffnen(page: Page, titel = "Mehr einstellen"): Promis
   const knopf = page.getByRole("button", { name: titel, exact: true });
   if ((await knopf.getAttribute("aria-expanded")) === "true") return;
   await knopf.click();
+}
+
+/**
+ * Ein Vieleck zeichnen: Ecken antippen, erste Ecke schliesst.
+ *
+ * Seit dem 13.08.2026 entstehen Sperrzonen und Gauben so — wie eine
+ * Dachfläche und nicht mehr als aufgezogenes Rechteck. Die Punkte sind
+ * Abstände zu einem Bezugspunkt, meist der Bildmitte.
+ */
+export async function vieleck(
+  page: Page,
+  bezug: { x: number; y: number },
+  ecken: Array<[number, number]>,
+): Promise<void> {
+  for (const [dx, dy] of ecken) {
+    await page.mouse.click(bezug.x + dx, bezug.y + dy);
+    await page.waitForTimeout(120);
+  }
+  // Auf die erste Ecke tippen schliesst die Form.
+  const [dx, dy] = ecken[0]!;
+  await page.mouse.click(bezug.x + dx, bezug.y + dy);
+  await page.waitForTimeout(200);
 }

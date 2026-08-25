@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { firstLinie, firstVersatzFuer, flaechenAusUmriss } from "./dachformen";
+import {
+  firstLinie,
+  firstVersatzFuer,
+  flaechenAusUmriss,
+  walmAnteilFuer,
+} from "./dachformen";
 import { grundflaeche } from "./flaeche";
 import type { Meter } from "./geo";
 
@@ -185,5 +190,33 @@ describe("firstVersatzFuer", () => {
   it("bleibt in den Grenzen", () => {
     expect(firstVersatzFuer(RECHTECK, 0, { x: 6, y: 99 })).toBeLessThanOrEqual(0.8);
     expect(firstVersatzFuer(RECHTECK, 0, { x: 6, y: -99 })).toBeGreaterThanOrEqual(-0.8);
+  });
+});
+
+describe("walmAnteilFuer", () => {
+  it("rechnet ein Firstende in den Anteil zurück", () => {
+    // Volles Walmdach: Wo liegen seine Enden?
+    const voll = firstLinie(RECHTECK, "walm", { neigung: 30, richtung: 0, walmAnteil: 1 })!;
+    const anteil = walmAnteilFuer(RECHTECK, 0, 0, voll.a);
+    expect(anteil).toBeCloseTo(1, 2);
+
+    // Und der Anteil bringt das Ende wieder genau dorthin.
+    const zurueck = firstLinie(RECHTECK, "walm", {
+      neigung: 30,
+      richtung: 0,
+      walmAnteil: anteil,
+    })!;
+    expect(zurueck.a.x).toBeCloseTo(voll.a.x, 4);
+  });
+
+  it("ergibt einen kleineren Anteil, je näher am Giebel gezogen wird", () => {
+    const weit = walmAnteilFuer(RECHTECK, 0, 0, { x: 1, y: 4 });
+    const nah = walmAnteilFuer(RECHTECK, 0, 0, { x: 4, y: 4 });
+    expect(weit).toBeLessThan(nah);
+  });
+
+  it("bleibt in den Grenzen", () => {
+    expect(walmAnteilFuer(RECHTECK, 0, 0, { x: -50, y: 4 })).toBeGreaterThanOrEqual(0.05);
+    expect(walmAnteilFuer(RECHTECK, 0, 0, { x: 6, y: 4 })).toBeLessThanOrEqual(1);
   });
 });

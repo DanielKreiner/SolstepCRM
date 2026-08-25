@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
-import { belegen, dachSetzen } from "./planer-helfer";
+import { belegen, dachSetzen, vieleck } from "./planer-helfer";
 
 /*
  * Gaube und Firstgriff (Wunsch vom 13.08.2026, Reonic-Vorbild:
@@ -64,10 +64,12 @@ test.describe("Planer — Gaube", () => {
     const mitte = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
 
     await page.getByRole("button", { name: /Gaube aufziehen/ }).click();
-    await page.mouse.move(mitte.x - 50, mitte.y - 30);
-    await page.mouse.down();
-    await page.mouse.move(mitte.x + 20, mitte.y + 20, { steps: 10 });
-    await page.mouse.up();
+    await vieleck(page, mitte, [
+      [-50, -30],
+      [20, -30],
+      [20, 20],
+      [-50, 20],
+    ]);
 
     const gauben = async () => {
       const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();

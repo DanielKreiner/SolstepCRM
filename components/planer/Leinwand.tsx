@@ -29,6 +29,7 @@ import {
   falllinie,
   planlaengeFuerDach,
   setzeKantenlaenge,
+  kanteParallel,
 } from "@/lib/planer/flaeche";
 import {
   modulSchluessel,
@@ -40,7 +41,7 @@ import {
 import { strangUmschalten, strangWeg } from "@/lib/planer/strings";
 import { modulEntfernen, modulSetzen, modulVorschau } from "@/lib/planer/setzen";
 import { bauAnwenden, bauAusUmriss } from "@/lib/planer/bau";
-import { firstLinie, firstVersatzFuer } from "@/lib/planer/dachformen";
+import { firstLinie, firstVersatzFuer, walmAnteilFuer } from "@/lib/planer/dachformen";
 import { anbieter as anbieterZu, type AnbieterId, hoechsterZoom, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
@@ -76,6 +77,10 @@ import {
   zeichneUmriss,
   zeichneFirst,
   firstGriff,
+  zeichneKantengriffe,
+  kantengriff,
+  zeichneUmrissMasse,
+  zeichneWalmgriffe,
   zeichneAuswahl,
   zeichneGruppe,
   zeichneGeistermodul,
@@ -278,7 +283,6 @@ export function Leinwand(p: LeinwandProps) {
   const zieht = useRef<
     | { art: "ecke"; flaeche: string; index: number }
     | { art: "kante"; flaeche: string; index: number; letzte: Meter }
-    | { art: "hindernis"; flaeche: string; von: Meter }
     /*
      * Sperrzone schieben und in der Grösse ändern. Vorher liess sie
      * sich nur aufziehen: Wer den Kamin zwei Meter zu weit links
@@ -295,6 +299,13 @@ export function Leinwand(p: LeinwandProps) {
     | { art: "bauEcke"; bau: string; index: number }
     /* Der First selbst: quer ziehen verschiebt ihn. */
     | { art: "first"; bau: string }
+    /* Ein Firstende: längs ziehen stellt den Walm ein. */
+    | { art: "walm"; bau: string }
+    /*
+     * Eine ganze Hausseite. Sie bleibt dabei parallel zu sich selbst —
+     * anders als eine Ecke, die das Haus verzieht.
+     */
+    | { art: "bauKante"; bau: string; index: number }
     /*
      * Die ganze Dachfläche schieben. Vorher liess sie sich nur über die
      * Ecken verformen: Wer die Standardform einen Meter neben dem Haus
@@ -332,7 +343,16 @@ export function Leinwand(p: LeinwandProps) {
   >(null);
 
   const [maszEingabe, setMaszEingabe] = useState<
-    { flaeche: string; kante: number; x: number; y: number; wert: string } | null
+    {
+      /** Frei gezeichnete Fläche — oder `null`, wenn es ums Haus geht. */
+      flaeche: string | null;
+      /** Haus, dessen Umriss gemasst wird. */
+      bau?: string;
+      kante: number;
+      x: number;
+      y: number;
+      wert: string;
+    } | null
   >(null);
 
   const neuZeichnen = useRef(false);
@@ -488,7 +508,12 @@ export function Leinwand(p: LeinwandProps) {
       const eigene = stand.current.plan.flaechen.filter((f) => f.bau === b.id);
       if (eigene.length === 0) continue;
       const gehoert = eigene.some((f) => f.id === stand.current.aktiv);
-      zeichneUmriss(ctx, k, b.umriss, gehoert && stand.current.bearbeitbar.flaechen);
+      const anfassbar = gehoert && stand.current.bearbeitbar.flaechen;
+      zeichneUmriss(ctx, k, b.umriss, anfassbar);
+      if (anfassbar) {
+        zeichneKantengriffe(ctx, k, b.umriss);
+        if (!stand.current.aktiveGruppe) zeichneUmrissMasse(ctx, k, b.umriss);
+      }
     }
 
     for (const f of stand.current.plan.flaechen) zeichneFlaeche(ctx, sicht, f);
@@ -512,6 +537,9 @@ export function Leinwand(p: LeinwandProps) {
           (f) => f.bau === b.id && f.id === stand.current.aktiv,
         );
         zeichneFirst(ctx, k, linie, gehoert);
+        if (gehoert && (b.form === "walm" || b.form === "kruppelwalm")) {
+          zeichneWalmgriffe(ctx, k, linie);
+        }
       }
     }
 
@@ -844,9 +872,45 @@ export function Leinwand(p: LeinwandProps) {
           firstVersatz: b.firstVersatz,
         });
         if (linie) {
+          if (b.form === "walm" || b.form === "kruppelwalm") {
+            for (const [i, ende] of [linie.a, linie.b].entries()) {
+              const g2 = meterZuBild(k, ende);
+              if (Math.hypot(g2.x - bp.x, g2.y - bp.y) <= GRIFF) {
+                return { art: "walm" as const, bau: b.id, ende: i };
+              }
+            }
+          }
           const g = firstGriff(k, linie);
           if (Math.hypot(g.x - bp.x, g.y - bp.y) <= GRIFF + 3) {
             return { art: "first" as const, bau: b.id };
+          }
+        }
+
+        /*
+         * Die Masszahl am Umriss: Sie öffnet dieselbe Eingabe wie bei
+         * einer frei gezeichneten Fläche — nur wirkt sie aufs Haus.
+         */
+        if (!s.aktiveGruppe) {
+          for (const kante of kanten(b.umriss)) {
+            const m2 = masszahlOrt(k, b.umriss, kante.a, kante.b);
+            const q1 = meterZuBild(k, kante.a);
+            const q2 = meterZuBild(k, kante.b);
+            if (Math.hypot(q2.x - q1.x, q2.y - q1.y) < 46) continue;
+            if (Math.abs(m2.x - bp.x) <= 34 && Math.abs(m2.y - bp.y) <= 11) {
+              return { art: "bauMasz" as const, bau: b.id, index: kante.i };
+            }
+          }
+        }
+
+        /*
+         * Kantengriffe vor den Eckgriffen: Sie sind das, was der
+         * Betrieb im Alltag braucht — eine Seite verschieben, ohne dass
+         * das Haus schief wird.
+         */
+        for (const kante of kanten(b.umriss)) {
+          const g3 = kantengriff(k, b.umriss, kante.i);
+          if (g3 && Math.hypot(g3.x - bp.x, g3.y - bp.y) <= GRIFF) {
+            return { art: "bauKante" as const, bau: b.id, index: kante.i };
           }
         }
         for (let i = 0; i < b.umriss.length; i++) {
@@ -970,7 +1034,13 @@ export function Leinwand(p: LeinwandProps) {
                   ? `Gaube ${f.hindernisse.filter((h) => h.art === "gaube").length + 1}`
                   : `Sperrzone ${f.hindernisse.filter((h) => h.art !== "gaube").length + 1}`,
                 punkte,
-                abstand: 0.3,
+                /*
+                 * Kein Sperrsaum: „außerdem soll eine sperrzone keine
+                 * 0,3m abstand haben". Wer Abstand braucht, zeichnet
+                 * die Zone entsprechend grösser — das ist ehrlicher
+                 * als ein unsichtbarer Saum, der die Belegung frisst.
+                 */
+                abstand: 0,
                 ...(gaube ? { hoehe: 1.2 } : {}),
               },
             ],
@@ -1231,7 +1301,14 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
       if ((s.werkzeug === "hindernis" || s.werkzeug === "gaube") && s.aktiv) {
-        zieht.current = { art: "hindernis", flaeche: s.aktiv, von: gefangen(bp, null) };
+        /*
+         * Wie beim Dach: Ecken antippen, und der Klick auf die erste
+         * Ecke schliesst die Form. Vorher liess sich nur ein Rechteck
+         * aufziehen — „das ist auch blöd, will es wie ein Dach zeichnen
+         * können". Eine Gaube ist selten ein Rechteck, und eine
+         * Abstandsfläche schon gar nicht.
+         */
+        zieht.current = null;
         return;
       }
       if (s.werkzeug === "nullpunkt") {
@@ -1280,6 +1357,14 @@ export function Leinwand(p: LeinwandProps) {
       }
       if (t?.art === "first") {
         zieht.current = { art: "first", bau: t.bau };
+        return;
+      }
+      if (t?.art === "walm") {
+        zieht.current = { art: "walm", bau: t.bau };
+        return;
+      }
+      if (t?.art === "bauKante") {
+        zieht.current = { art: "bauKante", bau: t.bau, index: t.index };
         return;
       }
       if (t?.art === "bauEcke") {
@@ -1479,6 +1564,38 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
+      if (z.art === "walm") {
+        const b = s.plan.bauten.find((x) => x.id === z.bau);
+        if (!b) return;
+        const walmAnteil = walmAnteilFuer(
+          b.umriss,
+          b.richtung,
+          b.firstVersatz,
+          bildZuMeter(kamera.current, jetzt),
+        );
+        s.onPlan(bauAnwenden(s.plan, { ...b, walmAnteil }), false);
+        return;
+      }
+
+      if (z.art === "bauKante") {
+        /*
+         * Die ganze Seite wandert, und zwar nur quer zu sich selbst.
+         * Damit bleibt aus einem Rechteck ein Rechteck — genau der
+         * Unterschied zum Ziehen an einer Ecke.
+         */
+        const b = s.plan.bauten.find((x) => x.id === z.bau);
+        if (!b) return;
+        const umriss = kanteParallel(b.umriss, z.index, bildZuMeter(kamera.current, jetzt));
+        s.onPlan(
+          bauAnwenden(
+            { ...s.plan, bauten: s.plan.bauten.map((x) => (x.id === b.id ? { ...x, umriss } : x)) },
+            { ...b, umriss },
+          ),
+          false,
+        );
+        return;
+      }
+
       if (z.art === "first") {
         const b = s.plan.bauten.find((x) => x.id === z.bau);
         if (!b) return;
@@ -1575,19 +1692,6 @@ export function Leinwand(p: LeinwandProps) {
           }),
           false,
         );
-        return;
-      }
-
-      if (z.art === "hindernis") {
-        const bis = gefangen(jetzt, null);
-        entwurf.current = [
-          z.von,
-          { x: bis.x, y: z.von.y },
-          bis,
-          { x: z.von.x, y: bis.y },
-        ];
-        setEntwurfLaenge(4);
-        anstossen();
         return;
       }
 
@@ -1828,11 +1932,6 @@ export function Leinwand(p: LeinwandProps) {
       if (zeiger.size < 2) letzterAbstand = 0;
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
 
-      if (z?.art === "hindernis" && entwurf.current.length === 4) {
-        entwurfAbschliessen();
-        zieht.current = null;
-        return;
-      }
       if (z?.art === "malen") {
         zieht.current = null;
         // Einen Rückschritt für den ganzen Zug, nicht je Modul.
@@ -2050,7 +2149,7 @@ export function Leinwand(p: LeinwandProps) {
         return;
       }
 
-      if (z?.art === "first" || z?.art === "bauEcke") {
+      if (z?.art === "first" || z?.art === "walm" || z?.art === "bauKante" || z?.art === "bauEcke") {
         // Jetzt erst ein Rückschritt — nicht für jede Mausbewegung.
         s.onPlan(s.plan, true);
         zieht.current = null;
@@ -2088,7 +2187,7 @@ export function Leinwand(p: LeinwandProps) {
       // Ab hier: ein Tippen, kein Ziehen.
       if (bewegt > 6) return;
 
-      if (s.werkzeug === "flaeche") {
+      if (s.werkzeug === "flaeche" || s.werkzeug === "hindernis" || s.werkzeug === "gaube") {
         const bezug = entwurf.current.length
           ? entwurf.current[entwurf.current.length - 1]!
           : null;
@@ -2108,6 +2207,21 @@ export function Leinwand(p: LeinwandProps) {
       }
 
       const t = treffer(bp);
+      if (t?.art === "bauMasz") {
+        const b = s.plan.bauten.find((x) => x.id === t.bau);
+        if (!b) return;
+        const kante = kanten(b.umriss)[t.index]!;
+        const m = masszahlOrt(kamera.current, b.umriss, kante.a, kante.b);
+        setMaszEingabe({
+          flaeche: null,
+          bau: b.id,
+          kante: t.index,
+          x: m.x,
+          y: m.y,
+          wert: laenge(kante.a, kante.b).toFixed(2).replace(".", ","),
+        });
+        return;
+      }
       if (t?.art === "masz") {
         const f = s.plan.flaechen.find((x) => x.id === t.flaeche)!;
         const kante = kanten(f.punkte)[t.index]!;
@@ -2290,7 +2404,31 @@ export function Leinwand(p: LeinwandProps) {
           onSubmit={(e) => {
             e.preventDefault();
             const meter = Number(maszEingabe.wert.replace(",", "."));
-            if (Number.isFinite(meter) && meter > 0) {
+            if (Number.isFinite(meter) && meter > 0 && maszEingabe.bau) {
+              /*
+               * Am Haus wird der GRUNDRISS gemasst, nicht die Dachhaut:
+               * Der Umriss ist die Draufsicht, da gibt es keine Neigung
+               * herauszurechnen. Danach werden die Dachflächen neu
+               * gerechnet — die Hauslänge zieht das ganze Dach mit.
+               */
+              const s2 = stand.current;
+              const b = s2.plan.bauten.find((x) => x.id === maszEingabe.bau);
+              if (b) {
+                const umriss = setzeKantenlaenge(b.umriss, maszEingabe.kante, meter);
+                s2.onPlan(
+                  bauAnwenden(
+                    {
+                      ...s2.plan,
+                      bauten: s2.plan.bauten.map((x) =>
+                        x.id === b.id ? { ...x, umriss } : x,
+                      ),
+                    },
+                    { ...b, umriss },
+                  ),
+                  true,
+                );
+              }
+            } else if (Number.isFinite(meter) && meter > 0 && maszEingabe.flaeche) {
               aendereFlaeche(
                 maszEingabe.flaeche,
                 (f) => {
@@ -2451,13 +2589,13 @@ export function Leinwand(p: LeinwandProps) {
             {p.werkzeug === "nullpunkt"
               ? "Stelle antippen — die räumliche Ansicht und das Luftbild richten sich danach aus"
               : p.werkzeug === "gaube"
-              ? "Rechteck über die Gaube ziehen — sie sperrt die Fläche und steht in der 3D-Ansicht"
+              ? "Ecken antippen, erste Ecke schliesst — sie sperrt die Fläche und steht in der 3D-Ansicht"
               : p.werkzeug === "flaeche"
               ? entwurfLaenge >= 3
                 ? "Ersten Punkt antippen oder Enter schliesst die Fläche · Esc bricht ab"
                 : "Ecken antippen · ab drei Punkten schliessbar"
               : p.werkzeug === "hindernis"
-                ? "Rechteck über Kamin, Gaube, Fenster oder Wartungsweg ziehen"
+                ? "Ecken antippen, erste Ecke schliesst — Kamin, Dachfenster, Abstandsfläche"
                 : p.werkzeug === "modul"
                   ? "Modul aus dem Raster ziehen · Antippen setzt es zurück"
                   : p.werkzeug === "string"

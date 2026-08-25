@@ -66,6 +66,20 @@ export interface Dachvorgaben {
   firstVersatz?: number;
 }
 
+/**
+ * Die Tiefe des Baukörpers quer zum First.
+ *
+ * Das sind die Giebelseiten (Kante 1 und 3), nicht die Traufen. Der
+ * erste Anlauf hat hier die Traufenlänge genommen — bei einem 12 × 8
+ * Meter grossen Haus rückte der First deshalb um 6 statt 4 Meter ein,
+ * lief in die Begrenzung von 0,45 und liess sich nicht mehr sauber
+ * zurückrechnen: Ein volles Walmdach kam als 90 % wieder heraus.
+ */
+function tiefeVon(q: Meter[]): number {
+  const [a, b, c, d] = q as [Meter, Meter, Meter, Meter];
+  return (Math.hypot(c.x - b.x, c.y - b.y) + Math.hypot(a.x - d.x, a.y - d.y)) / 2;
+}
+
 /** Mitte einer Strecke. */
 function mitteVon(a: Meter, b: Meter, t = 0.5): Meter {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
@@ -111,8 +125,7 @@ export function firstLinie(
 
   const anteil = Math.max(0.05, Math.min(1, vorgaben.walmAnteil ?? 1));
   const firstLaenge = Math.hypot(f1.x - f2.x, f1.y - f2.y);
-  const tiefe = (Math.hypot(b.x - a.x, b.y - a.y) + Math.hypot(d.x - c.x, d.y - c.y)) / 2;
-  const rueck = Math.min(0.45, ((tiefe / 2) * anteil) / Math.max(0.001, firstLaenge));
+  const rueck = Math.min(0.45, ((tiefeVon(q) / 2) * anteil) / Math.max(0.001, firstLaenge));
   return { a: mitteVon(f2, f1, rueck), b: mitteVon(f2, f1, 1 - rueck) };
 }
 
@@ -144,6 +157,48 @@ export function firstVersatzFuer(umriss: Meter[], richtung: 0 | 1, ziel: Meter):
   const weg = (ziel.x - mitteAlt.x) * e.x + (ziel.y - mitteAlt.y) * e.y;
   // `t` läuft von 0 bis 1 über die Kante; der Versatz ist das Doppelte.
   return Math.max(-0.8, Math.min(0.8, (weg / laenge) * 2));
+}
+
+/**
+ * Welcher Walmanteil bringt das Firstende an diese Stelle?
+ *
+ * Umkehrung der Einrückung aus `flaechenAusUmriss`. Gezogen wird das
+ * Firstende LÄNGS des Firsts; der Anteil ergibt sich aus der Strecke,
+ * die es dabei von der Giebelseite zurücklegt.
+ *
+ * Beide Enden rücken immer gleich weit ein — ein Walmdach mit zwei
+ * verschiedenen Walmen wäre kein Walmdach, sondern ein Sonderfall, den
+ * man zeichnet statt einstellt.
+ */
+export function walmAnteilFuer(
+  umriss: Meter[],
+  richtung: 0 | 1,
+  firstVersatz: number,
+  ziel: Meter,
+): number {
+  if (umriss.length !== 4) return 1;
+  const p = flaecheMitVorzeichen(umriss) < 0 ? [...umriss].reverse() : [...umriss];
+  const q = gedreht(p, richtung);
+  const [a, b, c, d] = q as [Meter, Meter, Meter, Meter];
+
+  const t = 0.5 + Math.max(-0.8, Math.min(0.8, firstVersatz)) / 2;
+  const f1 = mitteVon(b, c, t);
+  const f2 = mitteVon(a, d, t);
+
+  const richtungFirst = { x: f1.x - f2.x, y: f1.y - f2.y };
+  const firstLaenge = Math.hypot(richtungFirst.x, richtungFirst.y);
+  if (firstLaenge < 0.001) return 1;
+
+  // Wo liegt der Zeiger auf der Firstlinie, als Anteil von f2 nach f1?
+  const s2 =
+    ((ziel.x - f2.x) * richtungFirst.x + (ziel.y - f2.y) * richtungFirst.y) /
+    (firstLaenge * firstLaenge);
+  // Vom näheren Ende aus gemessen — beide Enden sind gleich.
+  const rueck = Math.max(0, Math.min(0.45, Math.min(s2, 1 - s2)));
+
+  const tiefe = tiefeVon(q);
+  if (tiefe < 0.001) return 1;
+  return Math.max(0.05, Math.min(1, (rueck * firstLaenge) / (tiefe / 2)));
 }
 
 /**
@@ -234,8 +289,7 @@ export function flaechenAusUmriss(
    * ein schiefes Haus ein sauberes Dach bekommt.
    */
   const firstLaenge = Math.hypot(f1.x - f2.x, f1.y - f2.y);
-  const tiefe = (Math.hypot(b.x - a.x, b.y - a.y) + Math.hypot(d.x - c.x, d.y - c.y)) / 2;
-  const rueck = Math.min(0.45, ((tiefe / 2) * anteil) / Math.max(0.001, firstLaenge));
+  const rueck = Math.min(0.45, ((tiefeVon(q) / 2) * anteil) / Math.max(0.001, firstLaenge));
 
   const g1 = mitteVon(f2, f1, rueck); // First-Ende auf der linken Seite
   const g2 = mitteVon(f2, f1, 1 - rueck); // First-Ende rechts

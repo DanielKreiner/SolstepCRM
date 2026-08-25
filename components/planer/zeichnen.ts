@@ -257,7 +257,12 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
    * Modulgruppe bearbeitet wird. Bei drei Dachflächen wären es sonst
    * zwölf Pillen gleichzeitig.
    */
-  const zeigeMasse = istAktiv && !s.gruppeAktiv;
+  /*
+   * Bei einer erzeugten Dachfläche gehören Masse und Ecken dem HAUS,
+   * nicht der Teilfläche: Ein Satteldach hat eine Hauslänge, nicht
+   * zwei halbe. Gezeichnet werden sie deshalb am Umriss.
+   */
+  const zeigeMasse = istAktiv && !s.gruppeAktiv && !f.bau;
   const gefaelle = falllinie(f);
   for (const kante of kanten(f.punkte)) {
     const p1 = bild(k, kante.a);
@@ -285,7 +290,7 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
     return meterText(wahreKantenlaenge(kante.a, kante.b, gefaelle, f.neigung));
   }
 
-  if (istAktiv) {
+  if (istAktiv && !f.bau) {
     for (const p of f.punkte) {
       const b = bild(k, p);
       ctx.beginPath();
@@ -1210,5 +1215,130 @@ export function zeichneGaube(
     ctx.strokeStyle = FARBEN.gaubeRand;
     ctx.lineWidth = 2;
     ctx.stroke();
+  }
+}
+
+/**
+ * Griffe an den Kanten des Umrisses.
+ *
+ * Ein Doppelpfeil QUER zur Kante, in der Mitte der Kante. Er sagt, was
+ * geht: die ganze Seite parallel verschieben. Die Ecken einzeln zu
+ * ziehen verzieht das Haus — an den Seiten bleibt es rechtwinklig.
+ */
+export function zeichneKantengriffe(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  punkte: Meter[],
+) {
+  for (const kante of kanten(punkte)) {
+    const g = kantengriff(k, punkte, kante.i);
+    if (!g) continue;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.strokeStyle = FARBEN.akzentDunkel;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Der Pfeil zeigt quer zur Kante — dorthin, wohin sie sich bewegt.
+    const a = bild(k, kante.a);
+    const b = bild(k, kante.b);
+    const laenge = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const q = { x: -(b.y - a.y) / laenge, y: (b.x - a.x) / laenge };
+
+    ctx.strokeStyle = FARBEN.akzentDunkel;
+    ctx.lineWidth = 1.7;
+    ctx.beginPath();
+    ctx.moveTo(g.x - q.x * 5.5, g.y - q.y * 5.5);
+    ctx.lineTo(g.x + q.x * 5.5, g.y + q.y * 5.5);
+    ctx.stroke();
+    for (const s of [1, -1]) {
+      const sp = { x: g.x + q.x * 5.5 * s, y: g.y + q.y * 5.5 * s };
+      ctx.beginPath();
+      ctx.moveTo(sp.x - q.y * 2.8 - q.x * 2.8 * s, sp.y + q.x * 2.8 - q.y * 2.8 * s);
+      ctx.lineTo(sp.x, sp.y);
+      ctx.lineTo(sp.x + q.y * 2.8 - q.x * 2.8 * s, sp.y - q.x * 2.8 - q.y * 2.8 * s);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/** Wo der Kantengriff auf dem Bild sitzt — Zeichnen und Treffer teilen sich das. */
+export function kantengriff(k: Kamera, punkte: Meter[], index: number) {
+  const n = punkte.length;
+  const a = punkte[index % n];
+  const b = punkte[(index + 1) % n];
+  if (!a || !b) return null;
+  const p1 = bild(k, a);
+  const p2 = bild(k, b);
+  // Zu kurze Kanten bekommen keinen Griff: Er läge auf den Eckgriffen.
+  if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 46) return null;
+  return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+}
+
+/** Griffe an den Enden des Firsts — damit stellt man den Walm ein. */
+export function zeichneWalmgriffe(
+  ctx: CanvasRenderingContext2D,
+  k: Kamera,
+  linie: { a: Meter; b: Meter },
+) {
+  const a = bild(k, linie.a);
+  const b = bild(k, linie.b);
+  const laenge = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const e = { x: (b.x - a.x) / laenge, y: (b.y - a.y) / laenge };
+
+  for (const [p, richtung] of [
+    [a, -1],
+    [b, 1],
+  ] as Array<[{ x: number; y: number }, number]>) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.strokeStyle = FARBEN.akzentDunkel;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    /*
+     * Der Pfeil zeigt LÄNGS des Firsts, nach aussen: Dorthin wandert
+     * das Firstende, wenn der Walm flacher wird.
+     */
+    ctx.strokeStyle = FARBEN.akzentDunkel;
+    ctx.lineWidth = 1.7;
+    ctx.beginPath();
+    ctx.moveTo(p.x - e.x * 5 * richtung, p.y - e.y * 5 * richtung);
+    ctx.lineTo(p.x + e.x * 5 * richtung, p.y + e.y * 5 * richtung);
+    ctx.stroke();
+    const sp = { x: p.x + e.x * 5 * richtung, y: p.y + e.y * 5 * richtung };
+    ctx.beginPath();
+    ctx.moveTo(sp.x - e.y * 2.8 - e.x * 2.8 * richtung, sp.y + e.x * 2.8 - e.y * 2.8 * richtung);
+    ctx.lineTo(sp.x, sp.y);
+    ctx.lineTo(sp.x + e.y * 2.8 - e.x * 2.8 * richtung, sp.y - e.x * 2.8 - e.y * 2.8 * richtung);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+
+/**
+ * Die Kantenmasse des Hauses.
+ *
+ * Sie stehen am Umriss und nicht an den erzeugten Dachflächen: Ein
+ * Satteldach hat eine Hauslänge, nicht zwei halbe. Angegeben wird die
+ * Länge in der Draufsicht — der Umriss IST der Grundriss, da gibt es
+ * nichts zu verkürzen.
+ */
+export function zeichneUmrissMasse(ctx: CanvasRenderingContext2D, k: Kamera, umriss: Meter[]) {
+  for (const kante of kanten(umriss)) {
+    const p1 = bild(k, kante.a);
+    const p2 = bild(k, kante.b);
+    if (Math.hypot(p2.x - p1.x, p2.y - p1.y) < 46) continue;
+    const ort = masszahlOrt(k, umriss, kante.a, kante.b);
+    pille(ctx, ort.x, ort.y, meterText(laenge(kante.a, kante.b)), false);
   }
 }

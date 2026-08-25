@@ -131,13 +131,18 @@ function schraffur(): THREE.CanvasTexture | null {
  */
 function plusmarke(): THREE.CanvasTexture | null {
   /*
-   * Grob und kontrastreich, nicht fein.
+   * Dieselbe Marke wie in der Draufsicht — Zahl für Zahl.
    *
-   * Ein Modul ist auf dem Schirm gut zwanzig Bildpunkte breit. Die
-   * erste Fassung hatte einen gestrichelten Rand und eine Scheibe mit
-   * Kreuz darin — beides bei dieser Grösse ein blasser beiger Fleck.
-   * Jetzt trägt die ganze Zelle die Farbe und ein Kreuz über die volle
-   * Breite; das liest sich auch als Daumennagel.
+   * Die Werte stehen in `zeichnen.ts` in `zeichneAnbaustellen`: Zelle
+   * mit 14 % Akzentfarbe gefüllt, gestrichelter Rand in Akzentfarbe,
+   * in der Mitte eine volle Scheibe mit weissem Kreuz darin. Die
+   * Scheibe hat dort höchstens ein Viertel der Modulbreite, das Kreuz
+   * knapp die Hälfte der Scheibe.
+   *
+   * Davor war die 3D-Marke zweimal daneben: erst zu fein, dann ein
+   * oranger Block mit einem Kreuz über die ganze Zelle. Beides
+   * dieselbe Ursache — hier wurde etwas Eigenes erfunden, statt das
+   * zu nehmen, was auf der Karte schon steht.
    */
   const c = document.createElement("canvas");
   c.width = 128;
@@ -145,21 +150,37 @@ function plusmarke(): THREE.CanvasTexture | null {
   const ctx = c.getContext("2d");
   if (!ctx) return null;
 
-  ctx.fillStyle = "rgba(232, 149, 43, 0.55)";
+  // Fläche: 14 % Akzent, wie in der Draufsicht.
+  ctx.fillStyle = "rgba(232, 149, 43, 0.14)";
   ctx.fillRect(0, 0, 128, 128);
 
-  ctx.strokeStyle = "rgba(150, 86, 8, 1)";
-  ctx.lineWidth = 10;
-  ctx.strokeRect(5, 5, 118, 118);
+  /*
+   * Gestrichelter Rand in Akzentfarbe. Das Verhältnis von Strich zu
+   * Lücke (4:3) und die Strichstärke sind auf die Kachelgrösse
+   * hochgerechnet — 128 Bildpunkte tragen ungefähr eine Modulbreite.
+   */
+  ctx.strokeStyle = "#e8952b";
+  ctx.setLineDash([9, 7]);
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, 125, 125);
+  ctx.setLineDash([]);
 
+  // Scheibe: ein Viertel der Zelle, wie `r = breite / 2.6` dort.
+  const r = 128 / 2.6 / 2;
+  ctx.beginPath();
+  ctx.arc(64, 64, r, 0, Math.PI * 2);
+  ctx.fillStyle = "#e8952b";
+  ctx.fill();
+
+  // Kreuz: 45 % des Scheibenradius je Arm, weiss, runde Enden.
   ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 18;
+  ctx.lineWidth = 5;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(64, 34);
-  ctx.lineTo(64, 94);
-  ctx.moveTo(34, 64);
-  ctx.lineTo(94, 64);
+  ctx.moveTo(64 - r * 0.45, 64);
+  ctx.lineTo(64 + r * 0.45, 64);
+  ctx.moveTo(64, 64 - r * 0.45);
+  ctx.lineTo(64, 64 + r * 0.45);
   ctx.stroke();
 
   const t = new THREE.CanvasTexture(c);

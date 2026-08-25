@@ -63,8 +63,34 @@ export function modulname(m: { hersteller: string; bezeichnung: string }): strin
   return b.toLowerCase().startsWith(h.toLowerCase()) ? b : `${h} ${b}`;
 }
 
+/** Wie die Module auf einem Flachdach stehen. */
+type Aufbauart = "flach" | "sued" | "ost-west";
+
+const AUFBAUARTEN: Array<{ id: Aufbauart; label: string; hinweis: string }> = [
+  {
+    id: "sued",
+    label: "Nach Süden aufgeständert",
+    hinweis: "Höchster Ertrag je Modul, aber Reihenabstand gegen Verschattung",
+  },
+  {
+    id: "ost-west",
+    label: "Ost / West",
+    hinweis: "Rücken an Rücken, mehr Module aufs Dach, gleichmässiger über den Tag",
+  },
+  {
+    id: "flach",
+    label: "Flach aufliegend",
+    hinweis: "Ohne Gestell, wenig Ballast — dafür weniger Ertrag und Selbstreinigung",
+  },
+];
+
 export function ModulSchritt(p: ModulSchrittProps) {
   const [hinweis, setHinweis] = useState<string | null>(null);
+  /*
+   * Welche Fläche gerade auf die Frage nach der Aufständerung wartet.
+   * Sie steht nur zwischen dem Klick auf „belegen" und der Antwort.
+   */
+  const [fragtAufbau, setFragtAufbau] = useState<Dachflaeche | null>(null);
   const gewaehltesModul = p.module.find((m) => m.id === p.plan.technik.modul) ?? null;
   /*
    * KEIN Rückfall auf die erste Fläche.
@@ -90,16 +116,27 @@ export function ModulSchritt(p: ModulSchrittProps) {
       .filter((g) => g.flaeche === f.id && g.id !== ausser)
       .flatMap((g) => aktiveZellen(g).map((z) => modulEcken(g, f, z.reihe, z.spalte)));
 
-  function belegen(f: Dachflaeche) {
+  function belegen(f: Dachflaeche, art: Aufbauart = "sued") {
     const flach = f.neigung === 0;
     const typ = gewaehltesModul ? modulTyp(gewaehltesModul) : STANDARD_MODUL;
+    /*
+     * Auf dem Flachdach entscheidet die Aufständerung alles: Reihenabstand,
+     * Ausrichtung, Ertrag und Ballast. Deshalb wird sie GEFRAGT, bevor
+     * das erste Modul liegt — vorher stand hier stillschweigend Süd,
+     * und wer Ost/West wollte, musste die fertige Belegung umstellen
+     * und sich dabei die halbe Reihe wegrechnen lassen.
+     */
+    const aufstaenderung =
+      flach && art !== "flach" ? { art, winkel: 15 } : null;
     const neu = autoBelegen(f, naechsteId(p.plan.gruppen.map((g) => g.id), "g"), `Feld ${p.plan.gruppen.length + 1}`, {
       typ,
       ausrichtung: "hoch",
-      reihenabstand: flach ? reihenabstandVorschlag(typ.hoehe, 15, p.breitengrad) : 0.02,
+      reihenabstand: aufstaenderung
+        ? reihenabstandVorschlag(typ.hoehe, 15, p.breitengrad)
+        : 0.02,
       spaltenabstand: 0.02,
       winkel: 0,
-      aufstaenderung: flach ? { art: "sued", winkel: 15 } : null,
+      aufstaenderung,
       besetzt: besetzt(f),
     });
     if (!neu) return;
@@ -168,9 +205,52 @@ export function ModulSchritt(p: ModulSchrittProps) {
         </Knopf>
       ) : null}
 
-      {p.schreibrecht && flaeche ? (
+      {p.schreibrecht && flaeche && fragtAufbau ? (
+        <section className="flex flex-col gap-2 rounded-[14px] border border-accent bg-accent-sunk p-3.5">
+          <h3 className="text-[14px] font-bold">Wie sollen die Module stehen?</h3>
+          <p className="text-[12.5px] leading-[1.45] text-muted">
+            {fragtAufbau.name} ist ein Flachdach. Die Aufständerung bestimmt Reihenabstand,
+            Ausrichtung und Ertrag — deshalb kommt sie vor der Belegung.
+          </p>
+          {AUFBAUARTEN.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => {
+                const ziel = fragtAufbau;
+                setFragtAufbau(null);
+                belegen(ziel, a.id);
+              }}
+              className="flex flex-col items-start gap-0.5 rounded-[12px] border border-line bg-surface px-3.5 py-2.5 text-left transition-colors hover:border-accent"
+            >
+              <span className="text-[14px] font-bold">{a.label}</span>
+              <span className="text-[11.5px] leading-[1.4] text-muted">{a.hinweis}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFragtAufbau(null)}
+            className="h-9 text-[12.5px] font-semibold text-muted hover:text-ink"
+          >
+            Abbrechen
+          </button>
+        </section>
+      ) : null}
+
+      {p.schreibrecht && flaeche && !fragtAufbau ? (
         <Knopf
-          onClick={() => belegen(flaeche)}
+          onClick={() => {
+            /*
+             * Beim Flachdach erst fragen. Bei einem geneigten Dach gibt
+             * es nichts zu entscheiden — dort liegen die Module in der
+             * Dachebene, und eine Frage wäre nur ein Klick mehr.
+             */
+            if (flaeche.neigung === 0 && !p.plan.gruppen.some((g) => g.flaeche === flaeche.id)) {
+              setFragtAufbau(flaeche);
+              return;
+            }
+            belegen(flaeche);
+          }}
           zeichen={p.plan.gruppen.length === 0 ? <ZeichenModul /> : <ZeichenPlus />}
           aus={p.module.length > 0 && !gewaehltesModul}
           titel={

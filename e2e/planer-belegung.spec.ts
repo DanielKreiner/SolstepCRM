@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { DEMO, login } from "./helpers";
-import { belegen, dachSetzen, gewaehlteWattzahl, mehrOeffnen } from "./planer-helfer";
+import { belegen, dachSetzen, gewaehlteWattzahl, mehrOeffnen, vieleck } from "./planer-helfer";
 
 /*
  * Planer, Stufe 3 — Modulbelegung (Briefing 4).
@@ -111,10 +111,12 @@ test.describe("Planer — Belegung", () => {
     await page.getByRole("button", { name: /Sperrzone aufziehen/ }).click();
     const kasten = (await page.getByTestId("planer-leinwand").boundingBox())!;
     const m = { x: kasten.x + kasten.width / 2, y: kasten.y + kasten.height / 2 };
-    await page.mouse.move(m.x - 40, m.y - 30);
-    await page.mouse.down();
-    await page.mouse.move(m.x + 40, m.y + 30, { steps: 10 });
-    await page.mouse.up();
+    await vieleck(page, m, [
+      [-40, -30],
+      [40, -30],
+      [40, 30],
+      [-40, 30],
+    ]);
     await expect(page.getByText(/Sperrzonen \(1\)/i)).toBeVisible();
 
     await belegen(page);

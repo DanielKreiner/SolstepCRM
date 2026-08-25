@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { admin, DEMO, login } from "./helpers";
-import { dachSetzen, mehrOeffnen } from "./planer-helfer";
+import { dachSetzen, mehrOeffnen, vieleck } from "./planer-helfer";
 
 /*
  * Planer, Stufe 2 — Zeichnen (Briefing 13.2).
@@ -209,10 +209,12 @@ test.describe("Planer — Zeichnen", () => {
     await page.getByRole("button", { name: /Sperrzone aufziehen/ }).click();
 
     // Kamin mitten auf dem Dach: wird angelegt.
-    await page.mouse.move(mitte.x - 30, mitte.y - 20);
-    await page.mouse.down();
-    await page.mouse.move(mitte.x + 20, mitte.y + 30, { steps: 10 });
-    await page.mouse.up();
+    await vieleck(page, mitte, [
+      [-30, -20],
+      [20, -20],
+      [20, 30],
+      [-30, 30],
+    ]);
     await expect(page.getByText(/Sperrzonen \(1\)/i)).toBeVisible();
 
     /*
@@ -222,13 +224,14 @@ test.describe("Planer — Zeichnen", () => {
     await page.getByRole("button", { name: /Sperrzone aufziehen/ }).click();
     /*
      * Deutlich neben der Fläche (die reicht bis ±140/±80), aber weit
-     * genug INNERHALB der Zeichenfläche: endet der Zug ausserhalb, geht
-     * das Loslassen an ein anderes Element und der Test wird sprunghaft.
+     * genug INNERHALB der Zeichenfläche.
      */
-    await page.mouse.move(mitte.x + 190, mitte.y + 120);
-    await page.mouse.down();
-    await page.mouse.move(mitte.x + 235, mitte.y + 160, { steps: 8 });
-    await page.mouse.up();
+    await vieleck(page, mitte, [
+      [190, 120],
+      [235, 120],
+      [235, 160],
+      [190, 160],
+    ]);
 
     await expect(
       page.getByText(/Sperrzone muss auf der gewählten Dachfläche liegen/),

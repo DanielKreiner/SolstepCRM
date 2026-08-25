@@ -318,6 +318,38 @@ export function punktEinfuegen(punkte: Meter[], kante: number, bei: Meter): Mete
 }
 
 /** Kante parallel verschieben: beide Endpunkte wandern gleich weit. */
+/**
+ * Eine Kante PARALLEL zu sich selbst verschieben.
+ *
+ * Der Unterschied zu `kanteVerschieben`: Nur der Anteil QUER zur Kante
+ * zählt, die Bewegung längs wird verworfen. Damit bleibt ein Rechteck
+ * ein Rechteck — man schiebt die Hauswand nach aussen, statt sie
+ * schief zu ziehen.
+ *
+ * Genau darum ging es im Betrieb: „Mach mir es so auf der Seite, dass
+ * ich die Seiten vom ganzen Dach verschieben kann, nicht die Ecken,
+ * dass alles immer perfekt bleibt."
+ */
+export function kanteParallel(punkte: Meter[], kante: number, ziel: Meter): Meter[] {
+  const n = punkte.length;
+  const a = punkte[kante % n]!;
+  const b = punkte[(kante + 1) % n]!;
+
+  const laengs = { x: b.x - a.x, y: b.y - a.y };
+  const laenge = Math.hypot(laengs.x, laengs.y);
+  if (laenge < 0.001) return punkte;
+
+  // Normale der Kante (nach aussen zeigt sie bei Umlauf gegen den Uhrzeiger nach rechts).
+  const nx = laengs.y / laenge;
+  const ny = -laengs.x / laenge;
+
+  // Wie weit der Zeiger quer zur Kante von ihr weg ist.
+  const mitte = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const weg = (ziel.x - mitte.x) * nx + (ziel.y - mitte.y) * ny;
+
+  return kanteVerschieben(punkte, kante, { x: nx * weg, y: ny * weg });
+}
+
 export function kanteVerschieben(punkte: Meter[], kante: number, um: Meter): Meter[] {
   const n = punkte.length;
   const neu = punkte.slice();

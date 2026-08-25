@@ -23,6 +23,7 @@ import {
   umlaufGegenUhrzeiger,
   verkuerzt,
   versatzNachInnen,
+  kanteParallel,
 } from "./flaeche";
 import type { Meter } from "./geo";
 
@@ -463,5 +464,48 @@ describe("Fang beim Ziehen einer Ecke", () => {
     );
     expect(hinweis).toBe("raster");
     expect(punkt.x).toBeCloseTo(3.1, 9);
+  });
+});
+
+describe("kanteParallel", () => {
+  const RECHTECK = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 6 },
+    { x: 0, y: 6 },
+  ];
+
+  it("verschiebt die Kante quer und lässt das Rechteck rechtwinklig", () => {
+    const neu = kanteParallel(RECHTECK, 0, { x: 5, y: -2 });
+    expect(neu[0]).toEqual({ x: 0, y: -2 });
+    expect(neu[1]).toEqual({ x: 10, y: -2 });
+    expect(neu[2], "die Gegenseite bleibt").toEqual({ x: 10, y: 6 });
+    expect(neu[3]).toEqual({ x: 0, y: 6 });
+  });
+
+  it("verwirft die Bewegung LÄNGS der Kante", () => {
+    // Nur seitlich gezogen: nichts darf sich ändern.
+    const neu = kanteParallel(RECHTECK, 0, { x: 99, y: 0 });
+    expect(neu).toEqual(RECHTECK);
+  });
+
+  it("funktioniert auf einer schrägen Kante", () => {
+    const schief = [
+      { x: 0, y: 0 },
+      { x: 6, y: 6 },
+      { x: 3, y: 9 },
+      { x: -3, y: 3 },
+    ];
+    const neu = kanteParallel(schief, 0, { x: 4, y: 2 });
+    const laenge = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      Math.hypot(b.x - a.x, b.y - a.y);
+    expect(laenge(neu[0]!, neu[1]!), "die Kante behält ihre Länge").toBeCloseTo(
+      laenge(schief[0]!, schief[1]!),
+      6,
+    );
+    expect(laenge(neu[2]!, neu[3]!), "und die Gegenkante auch").toBeCloseTo(
+      laenge(schief[2]!, schief[3]!),
+      6,
+    );
   });
 });

@@ -278,3 +278,16 @@ die das Setzen nicht einhält.
 | G4 | Satteldach, Griff am First quer ziehen | First wandert, beide Hälften bleiben verbunden |
 | G5 | In eine Dachhälfte fassen und ziehen | das ganze Haus wandert, die Form bleibt |
 | G6 | An einer Ecke der Teilfläche ziehen | nicht möglich — nur Hausecken und First sind greifbar |
+
+
+## Griffe, Aufständerung, Sperrzonen (13.08.2026, sechster Durchgang)
+
+| # | Prüfung | Erwartung |
+|---|---|---|
+| H1 | Walmdach, an einem Firstende ziehen | der Walm wird tiefer oder flacher, beide Enden gleich |
+| H2 | An einem Seitengriff des Hauses ziehen | die ganze Seite wandert parallel, das Haus bleibt rechtwinklig |
+| H3 | Kantenmass am Haus antippen, Zahl eintippen | die Seite sitzt exakt, alle Dachflächen rechnen sich mit |
+| F1 | Flachdach belegen | erst die Frage: flach, Süd oder Ost/West |
+| F2 | „Ost / West" wählen | Reihenabstand aus dem Winterschatten, Ausrichtung 90/270 im Ertrag |
+| Z1 | Sperrzone zeichnen | Ecken antippen, erste Ecke schliesst — kein Rechteck, kein Enter |
+| Z2 | Neue Sperrzone | kein Sperrsaum ringsum (0 m) |

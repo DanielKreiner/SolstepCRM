@@ -423,3 +423,42 @@ Was sie NICHT tut: Schatten werfen. Der Ertrag rechnet die Verschattung
 aus Bäumen und Nachbargebäuden; eine Gaube auf derselben Fläche ist
 dort noch nicht drin. Lieber eine Lücke, die dasteht, als eine Zahl,
 die so tut als ob.
+
+
+## 13. Griffe an den Seiten, Aufständerung, Vieleck-Sperrzonen (13.08.2026)
+
+**Seiten statt Ecken.** „Mach mir es so auf der Seite, dass ich die
+Seiten vom ganzen Dach verschieben kann, nicht die Ecken, dass alles
+immer perfekt bleibt." In der Mitte jeder Hausseite sitzt ein Griff mit
+Doppelpfeil quer dazu; `kanteParallel` verwirft die Bewegung LÄNGS der
+Kante, deshalb bleibt aus einem Rechteck ein Rechteck. Die Kantenmasse
+gehören jetzt an den Umriss statt an die Teilfläche: Ein Satteldach hat
+eine Hauslänge, nicht zwei halbe. Antippen, Zahl eintippen, das ganze
+Dach rechnet sich mit.
+
+**Walmgriffe.** An den Firstenden, Pfeil längs des Firsts.
+`walmAnteilFuer` rechnet die gezogene Stelle in den Anteil zurück.
+Dabei ist ein Rechenfehler aufgefallen: Als „Tiefe" ging die
+Traufenlänge ein statt der Giebelseite. Bei einem 12 × 8 Meter grossen
+Haus rückte der First deshalb um 6 statt 4 Meter ein, lief in die
+Begrenzung von 0,45 — und ein volles Walmdach kam beim Zurückrechnen
+als 90 % heraus.
+
+**Aufständerung wird gefragt.** Auf einem Flachdach entscheidet sie
+alles: Reihenabstand, Ausrichtung, Ertrag, Ballast. Vor dem ersten
+Modul steht deshalb die Frage — flach aufliegend, nach Süden
+aufgeständert, oder Ost/West. Vorher stand dort stillschweigend Süd,
+und wer Ost/West wollte, musste die fertige Belegung umstellen und sich
+dabei die halbe Reihe wegrechnen lassen.
+
+**Sperrzonen als Vieleck.** Ecken antippen, erste Ecke schliesst — wie
+beim Dach, kein aufgezogenes Rechteck und kein Enter. Und ohne
+Sperrsaum: Wer Abstand braucht, zeichnet die Zone grösser. Ein
+unsichtbarer Saum, der die Belegung frisst, ist schwerer zu verstehen
+als eine Linie, die man sieht.
+
+**Das Pluszeichen in 3D** ist jetzt Zahl für Zahl das aus der
+Draufsicht (14 % Akzentfläche, gestrichelter Rand, Scheibe mit weissem
+Kreuz). Zweimal daneben gelegen — erst zu fein, dann ein oranger Block
+—, beide Male aus demselben Grund: Hier wurde etwas Eigenes erfunden,
+statt die Werte zu nehmen, die auf der Karte schon stehen.

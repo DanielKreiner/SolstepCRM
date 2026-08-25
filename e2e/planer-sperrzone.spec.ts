@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
-import { dachSetzen } from "./planer-helfer";
+import { dachSetzen, vieleck } from "./planer-helfer";
 
 /*
  * Sperrzonen bewegen (Wunsch vom 13.08.2026: „Sperrzonen soll man
@@ -47,10 +47,12 @@ test.describe("Planer — Sperrzonen bewegen", () => {
     const mitte = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
 
     await page.getByRole("button", { name: /Sperrzone aufziehen/ }).click();
-    await page.mouse.move(mitte.x - 60, mitte.y - 40);
-    await page.mouse.down();
-    await page.mouse.move(mitte.x - 10, mitte.y + 10, { steps: 10 });
-    await page.mouse.up();
+    await vieleck(page, mitte, [
+      [-60, -40],
+      [-10, -40],
+      [-10, 10],
+      [-60, 10],
+    ]);
     await expect(page.getByText(/Sperrzonen \(1\)/i)).toBeVisible();
 
     /*
