@@ -1,9 +1,11 @@
 import type { Meter } from "./geo";
-import { punktInPolygon } from "./flaeche";
+import { punktInPolygon, type Dachflaeche } from "./flaeche";
 import {
   aktiveZellen,
   eckenUm,
   einzelnesModul,
+  istPaarweise,
+  paarReihe,
   leereZellen,
   modulAnbauen,
   modulEcken,
@@ -184,6 +186,47 @@ export function modulVorschau(
   return { ecken: modulEcken(roh, f, 0, 0), passt: false, flaeche: f.id };
 }
 
+/**
+ * Das zweite Modul eines Ost/West-Paares nachziehen.
+ *
+ * Ein Ost/West-Gestell trägt zwei Module, die sich gegeneinander lehnen.
+ * Eines allein gibt es nicht: es stünde ohne Gegenhalt im Wind, und der
+ * Betrieb müsste es beim Einkauf trotzdem als Paar bestellen. Deshalb
+ * legt ein Klick beide, und ein Klick nimmt auch beide weg.
+ *
+ * Passt das Gegenstück nicht — Dachkante, Sperrzone, Nachbarfeld —,
+ * bleibt es beim einen. Lieber ein Modul weniger als eines über der
+ * Traufe.
+ */
+function paarNachziehen(
+  plan: Plan,
+  f: Dachflaeche,
+  gruppeId: string,
+  reihe: number,
+  spalte: number,
+): Plan {
+  const g = plan.gruppen.find((x) => x.id === gruppeId);
+  if (!g || !istPaarweise(g)) return plan;
+
+  const partner = paarReihe(reihe);
+  const drin = partner >= 0 && partner < g.reihen;
+  if (drin && !leereZellen(g).has(zelle(partner, spalte))) return plan;
+
+  const ecken = eckenUm(rasterMitte(g, f, partner, spalte), g, f);
+  const belegt = plan.gruppen
+    .filter((x) => x.flaeche === f.id)
+    .flatMap((x) =>
+      aktiveZellen(x).map((z) => modulEcken(x, f, z.reihe, z.spalte)),
+    );
+  if (!modulPasst(ecken, f) || stoesstAn(ecken, belegt)) return plan;
+
+  const erweitert = modulAnbauen(g, f, { reihe: partner, spalte });
+  return {
+    ...plan,
+    gruppen: plan.gruppen.map((x) => (x.id === gruppeId ? erweitert : x)),
+  };
+}
+
 export type Setzergebnis =
   | { ok: true; plan: Plan; flaeche: string; gruppe: string }
   | { ok: false; meldung: string };
@@ -216,12 +259,13 @@ export function modulSetzen(
   }
   if (an?.art === "anbauen") {
     const erweitert = modulAnbauen(an.gruppe, f, { reihe: an.reihe, spalte: an.spalte });
+    const eins: Plan = {
+      ...plan,
+      gruppen: plan.gruppen.map((g) => (g.id === an.gruppe.id ? erweitert : g)),
+    };
     return {
       ok: true,
-      plan: {
-        ...plan,
-        gruppen: plan.gruppen.map((g) => (g.id === an.gruppe.id ? erweitert : g)),
-      },
+      plan: paarNachziehen(eins, f, an.gruppe.id, an.reihe, an.spalte),
       flaeche: f.id,
       gruppe: an.gruppe.id,
     };
@@ -243,9 +287,10 @@ export function modulSetzen(
     return { ok: false, meldung: "Hier ist kein Platz — Randabstand, Hindernis oder ein Modul im Weg." };
   }
 
+  const mitNeu: Plan = { ...plan, gruppen: [...plan.gruppen, neu] };
   return {
     ok: true,
-    plan: { ...plan, gruppen: [...plan.gruppen, neu] },
+    plan: paarNachziehen(mitNeu, f, neu.id, 0, 0),
     flaeche: f.id,
     gruppe: neu.id,
   };
@@ -261,17 +306,26 @@ export function modulSetzen(
  * ist nur Ballast.
  */
 export function modulEntfernen(plan: Plan, gruppeId: string, reihe: number, spalte: number): Plan {
-  const zelle = `${reihe}:${spalte}`;
+  const ziel = plan.gruppen.find((g) => g.id === gruppeId);
+  /*
+   * Bei Ost/West geht das Gegenstück mit — dieselbe Regel wie beim
+   * Setzen. Ein halbes Gestell bleibt sonst als einzelnes schräges
+   * Modul stehen.
+   */
+  const reihen =
+    ziel && istPaarweise(ziel) ? [reihe, paarReihe(reihe)] : [reihe];
+  const zellen = reihen.map((r) => `${r}:${spalte}`);
+
   const gruppen = plan.gruppen
     .map((g) => {
       if (g.id !== gruppeId) return g;
-      if ((g.entfernt ?? []).includes(zelle)) return g;
-      return { ...g, entfernt: [...(g.entfernt ?? []), zelle] };
+      const dazu = zellen.filter((z) => !(g.entfernt ?? []).includes(z));
+      if (dazu.length === 0) return g;
+      return { ...g, entfernt: [...(g.entfernt ?? []), ...dazu] };
     })
     .filter((g) => aktiveZellen(g).length > 0);
 
   const weg = new Set(plan.gruppen.map((g) => g.id).filter((id) => !gruppen.some((g) => g.id === id)));
-  const schluessel = `${gruppeId}/${zelle}`;
 
   return {
     ...plan,
@@ -284,7 +338,9 @@ export function modulEntfernen(plan: Plan, gruppeId: string, reihe: number, spal
     strings: plan.strings.map((s) => ({
       ...s,
       module: s.module.filter(
-        (m) => m !== schluessel && !weg.has(m.slice(0, Math.max(0, m.lastIndexOf("/")))),
+        (m) =>
+          !zellen.some((z) => m === `${gruppeId}/${z}`) &&
+          !weg.has(m.slice(0, Math.max(0, m.lastIndexOf("/")))),
       ),
     })),
   };

@@ -100,7 +100,9 @@ export function zelle(reihe: number, spalte: number): string {
  */
 
 /** Wahre Kantenlängen: quer zur Falllinie und in Falllinienrichtung. */
-export function wahreMasse(g: Modulgruppe): { quer: number; laengs: number } {
+export function wahreMasse(
+  g: Pick<Modulgruppe, "typ" | "ausrichtung">,
+): { quer: number; laengs: number } {
   return g.ausrichtung === "hoch"
     ? { quer: g.typ.breite, laengs: g.typ.hoehe }
     : { quer: g.typ.hoehe, laengs: g.typ.breite };
@@ -165,16 +167,107 @@ export function achsen(g: Modulgruppe, f: Dachflaeche): Achsen {
   };
 }
 
+/**
+ * Luft zwischen den beiden Modulen eines Ost/West-Paares.
+ *
+ * Sie stossen oben zusammen und bilden ein Dach — zwei Zentimeter, damit
+ * die Rahmen sich nicht berühren, mehr nicht. Der Abstand ZWISCHEN den
+ * Paaren ist etwas anderes und steht in `reihenabstand`.
+ */
+export const OST_WEST_FIRSTLUFT = 0.02;
+
+/** Steht diese Gruppe als Ost/West-Paare? */
+export function istPaarweise(g: Modulgruppe): boolean {
+  return g.aufstaenderung?.art === "ost-west";
+}
+
+/**
+ * Wie weit die Mitte einer Reihe vom Anker weg liegt, bergauf gemessen.
+ *
+ * Bei Süd und auf dem Schrägdach ist das ein gleichmässiger Schritt.
+ * Ost/West steht dagegen in Paaren: zwei Module Rücken an Rücken, dann
+ * der Abstand zum nächsten Paar. Ein gleichmässiges Raster kann das
+ * nicht abbilden — es stellte alle Module gleich weit auseinander, und
+ * genau das sah auf dem Dach nicht nach Ost/West aus.
+ */
+export function laengsVersatz(g: Modulgruppe, f: Dachflaeche, reihe: number): number {
+  const m = planMasse(g, f);
+  if (!istPaarweise(g)) return (reihe + 0.5) * (m.laengs + g.reihenabstand);
+
+  const paar = Math.floor(reihe / 2);
+  const inPaar = reihe - paar * 2;
+  const paarSchritt = 2 * m.laengs + OST_WEST_FIRSTLUFT + g.reihenabstand;
+  return (
+    paar * paarSchritt +
+    inPaar * (m.laengs + OST_WEST_FIRSTLUFT) +
+    m.laengs / 2
+  );
+}
+
 /** Mittelpunkt einer Rasterzelle, ohne Rücksicht auf freie Positionen. */
 export function rasterMitte(g: Modulgruppe, f: Dachflaeche, reihe: number, spalte: number): Meter {
   const a = achsen(g, f);
   const m = planMasse(g, f);
   const du = (spalte + 0.5) * (m.quer + g.spaltenabstand);
-  const dv = (reihe + 0.5) * (m.laengs + g.reihenabstand);
+  const dv = laengsVersatz(g, f, reihe);
   return {
     x: g.anker.x + a.quer.x * du + a.laengs.x * dv,
     y: g.anker.y + a.quer.y * du + a.laengs.y * dv,
   };
+}
+
+/**
+ * Die Reihe, die zu diesem Modul gehört — das andere Modul des Paares.
+ *
+ * Nur bei Ost/West. Ein einzeln stehendes Modul eines Paares gibt es auf
+ * dem Dach nicht: das Gestell trägt beide, und ohne Gegenstück steht es
+ * schief im Wind.
+ */
+export function paarReihe(reihe: number): number {
+  return reihe % 2 === 0 ? reihe + 1 : reihe - 1;
+}
+
+/**
+ * Auf welcher Seite ein aufgeständertes Modul hoch steht.
+ *
+ * +1 heisst bergauf (in Richtung `laengs`), -1 talwärts. Bei Süd steht
+ * die Hinterkante hoch, das Modul schaut also nach vorn. Bei Ost/West
+ * kippen die beiden Module eines Paares gegeneinander — deshalb der
+ * Wechsel nach Reihe.
+ */
+export function hochseite(g: Modulgruppe, reihe: number): 1 | -1 {
+  if (!g.aufstaenderung) return 1;
+  if (g.aufstaenderung.art === "sued") return 1;
+  return reihe % 2 === 0 ? 1 : -1;
+}
+
+/**
+ * Um wie viel die Hinterkante über der Dachhaut steht, in Metern.
+ *
+ * Aus der wahren Modullänge und dem Gestellwinkel — dieselbe Zahl, mit
+ * der auch der Reihenabstand gegen die Winterverschattung gerechnet
+ * wird.
+ */
+export function aufstaenderungsHub(
+  g: Pick<Modulgruppe, "typ" | "ausrichtung" | "aufstaenderung">,
+): number {
+  if (!g.aufstaenderung) return 0;
+  return wahreMasse(g).laengs * Math.sin((g.aufstaenderung.winkel * Math.PI) / 180);
+}
+
+/**
+ * Zusatzhöhe je Ecke, in der Reihenfolge von `eckenUm`.
+ *
+ * Die beiden Ecken der Hochseite bekommen den Hub, die anderen null.
+ * Damit steht das Modul in der räumlichen Ansicht so schief, wie es auf
+ * dem Gestell auch steht — flach gezeichnete Module auf einem
+ * Flachdach sahen aus, als wäre die Aufständerung nicht angekommen.
+ */
+export function eckenHub(g: Modulgruppe, reihe: number): [number, number, number, number] {
+  const h = aufstaenderungsHub(g);
+  if (h === 0) return [0, 0, 0, 0];
+  // eckenUm liefert: -quer/-laengs, +quer/-laengs, +quer/+laengs, -quer/+laengs
+  return hochseite(g, reihe) === 1 ? [0, 0, h, h] : [h, h, 0, 0];
 }
 
 /** Tatsächlicher Mittelpunkt: freie Position schlägt das Raster. */
@@ -345,6 +438,36 @@ export function reihenabstandVorschlag(
   return Math.round((hoehe / Math.tan((alpha * Math.PI) / 180)) * 100) / 100;
 }
 
+/**
+ * Der Reihenabstand, der zu dieser Aufständerung passt.
+ *
+ * Er hängt am Winkel, nicht am Geschmack — und deshalb wird er
+ * mitgerechnet, sobald jemand Art oder Winkel ändert. Vorher stand ein
+ * Knopf „Reihenabstand vorschlagen" daneben: wer ihn übersah, plante
+ * eine Süd-Aufständerung mit zwei Zentimetern Reihenabstand, die sich
+ * ab Oktober selbst verschattet.
+ *
+ * - Süd: der Schatten der Reihe muss am 21. Dezember vor der nächsten
+ *   enden.
+ * - Ost/West: die Paare verschatten sich kaum, gebraucht wird ein
+ *   Gang zum Warten. Ein halber Hub, mindestens zehn Zentimeter.
+ * - flach aufliegend: zwei Zentimeter Luft für die Rahmen.
+ */
+export function abstandVorschlag(
+  g: Pick<Modulgruppe, "typ" | "ausrichtung" | "aufstaenderung">,
+  breitengrad: number,
+): number {
+  if (!g.aufstaenderung) return 0.02;
+  if (g.aufstaenderung.art === "sued") {
+    return reihenabstandVorschlag(
+      wahreMasse(g).laengs,
+      g.aufstaenderung.winkel,
+      breitengrad,
+    );
+  }
+  return Math.max(0.1, Math.round(aufstaenderungsHub(g) * 50) / 100);
+}
+
 /*
  * ── Automatische Belegung ──────────────────────────────────────────
  */
@@ -399,7 +522,14 @@ export function autoBelegen(
   const a = achsen(vorlage, f);
   const m = planMasse(vorlage, f);
   const schrittQuer = m.quer + opt.spaltenabstand;
-  const schrittLaengs = m.laengs + opt.reihenabstand;
+  /*
+   * Bei Ost/West ist der mittlere Schritt je Reihe die halbe
+   * Paarteilung — sonst zählt die Schätzung zu wenige Reihen und die
+   * oberste Paarhälfte fehlt.
+   */
+  const schrittLaengs = istPaarweise(vorlage)
+    ? (2 * m.laengs + OST_WEST_FIRSTLUFT + opt.reihenabstand) / 2
+    : m.laengs + opt.reihenabstand;
   if (schrittQuer <= 0 || schrittLaengs <= 0) return null;
 
   // Ausdehnung der Fläche in Rasterrichtung bestimmen.
@@ -414,7 +544,13 @@ export function autoBelegen(
   const vMax = Math.max(...projektionen.map((p) => p.v));
 
   const spaltenMax = Math.floor((uMax - uMin) / schrittQuer) + 1;
-  const reihenMax = Math.floor((vMax - vMin) / schrittLaengs) + 1;
+  let reihenMax = Math.floor((vMax - vMin) / schrittLaengs) + 1;
+  /*
+   * Ost/West kommt paarweise aufs Dach. Eine ungerade Reihe bliebe ohne
+   * Gegenstück stehen — ein halbes Gestell, das es so nicht zu kaufen
+   * gibt.
+   */
+  if (istPaarweise(vorlage) && reihenMax % 2 === 1) reihenMax -= 1;
   if (spaltenMax < 1 || reihenMax < 1) return null;
 
   /*
@@ -552,7 +688,8 @@ export function modulLage(
   const a = achsen(vorlage, f);
   const m = planMasse(vorlage, f);
   const halbQuer = (m.quer + opt.spaltenabstand) / 2;
-  const halbLaengs = (m.laengs + opt.reihenabstand) / 2;
+  /* Über `laengsVersatz`, damit die Paarteilung bei Ost/West stimmt. */
+  const halbLaengs = laengsVersatz(vorlage, f, 0);
   const gruppe: Modulgruppe = {
     ...vorlage,
     anker: {
@@ -634,10 +771,17 @@ export function rasterIndex(
   const dy = p.y - g.anker.y;
   const du = dx * a.quer.x + dy * a.quer.y;
   const dv = dx * a.laengs.x + dy * a.laengs.y;
-  return {
-    reihe: Math.floor(dv / (m.laengs + g.reihenabstand)),
-    spalte: Math.floor(du / (m.quer + g.spaltenabstand)),
-  };
+  const spalte = Math.floor(du / (m.quer + g.spaltenabstand));
+
+  if (!istPaarweise(g)) {
+    return { reihe: Math.floor(dv / (m.laengs + g.reihenabstand)), spalte };
+  }
+
+  /* Umkehrung von `laengsVersatz` für die Paarteilung. */
+  const paarSchritt = 2 * m.laengs + OST_WEST_FIRSTLUFT + g.reihenabstand;
+  const paar = Math.floor(dv / paarSchritt);
+  const rest = dv - paar * paarSchritt;
+  return { reihe: paar * 2 + (rest < m.laengs + OST_WEST_FIRSTLUFT ? 0 : 1), spalte };
 }
 
 /**

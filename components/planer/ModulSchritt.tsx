@@ -8,13 +8,13 @@ import {
   achsen,
   aktiveZellen,
   anzahlModule,
+  abstandVorschlag,
   autoBelegen,
   kwp,
   type Modulgruppe,
   modulEcken,
   nachfuehren,
   planMasse,
-  reihenabstandVorschlag,
   STANDARD_MODUL,
 } from "@/lib/planer/module";
 import { naechsteId, type Plan } from "@/lib/planer/plan";
@@ -120,6 +120,13 @@ export function ModulSchritt(p: ModulSchrittProps) {
     const flach = f.neigung === 0;
     const typ = gewaehltesModul ? modulTyp(gewaehltesModul) : STANDARD_MODUL;
     /*
+     * Ost/West steht quer zur Nordrichtung: die Reihen laufen von Nord
+     * nach Süd, damit die Paare nach Osten und Westen kippen. Ohne die
+     * Drehung schaute die eine Hälfte nach Norden — genau das, was mit
+     * Ost/West vermieden werden soll.
+     */
+    const drehung = art === "ost-west" && flach ? -90 : 0;
+    /*
      * Auf dem Flachdach entscheidet die Aufständerung alles: Reihenabstand,
      * Ausrichtung, Ertrag und Ballast. Deshalb wird sie GEFRAGT, bevor
      * das erste Modul liegt — vorher stand hier stillschweigend Süd,
@@ -128,15 +135,23 @@ export function ModulSchritt(p: ModulSchrittProps) {
      */
     const aufstaenderung =
       flach && art !== "flach" ? { art, winkel: 15 } : null;
-    const neu = autoBelegen(f, naechsteId(p.plan.gruppen.map((g) => g.id), "g"), `Feld ${p.plan.gruppen.length + 1}`, {
+    /*
+     * Der Reihenabstand kommt aus dem Winkel, nicht aus einer festen
+     * Zahl — bei Süd die Schattenlänge im Dezember, bei Ost/West der
+     * Gang zwischen den Paaren.
+     */
+    const vorlage = {
       typ,
-      ausrichtung: "hoch",
-      reihenabstand: aufstaenderung
-        ? reihenabstandVorschlag(typ.hoehe, 15, p.breitengrad)
-        : 0.02,
+      ausrichtung: "hoch" as const,
       spaltenabstand: 0.02,
-      winkel: 0,
+      winkel: drehung,
       aufstaenderung,
+      reihenabstand: 0.02,
+    };
+    const reihenabstand = abstandVorschlag(vorlage, p.breitengrad);
+    const neu = autoBelegen(f, naechsteId(p.plan.gruppen.map((g) => g.id), "g"), `Feld ${p.plan.gruppen.length + 1}`, {
+      ...vorlage,
+      reihenabstand,
       besetzt: besetzt(f),
     });
     if (!neu) return;
@@ -383,21 +398,33 @@ export function ModulSchritt(p: ModulSchrittProps) {
                   value={gruppe.aufstaenderung?.art ?? ""}
                   disabled={!p.schreibrecht}
                   onChange={(e) =>
-                    setzeGruppe(gruppe.id, (g) =>
-                      nachfuehren(
+                    setzeGruppe(gruppe.id, (g) => {
+                      const aufstaenderung = e.target.value
+                        ? {
+                            art: e.target.value as "sued" | "ost-west",
+                            winkel: g.aufstaenderung?.winkel ?? 15,
+                          }
+                        : null;
+                      /*
+                       * Reihenabstand und Drehung ziehen mit. Ost/West
+                       * braucht Reihen von Nord nach Süd, sonst schaut
+                       * die halbe Anlage nach Norden — und der Abstand
+                       * hängt am Winkel, nicht am Geschmack.
+                       */
+                      const umgestellt = {
+                        ...g,
+                        aufstaenderung,
+                        winkel: aufstaenderung?.art === "ost-west" ? -90 : 0,
+                      };
+                      return nachfuehren(
                         {
-                          ...g,
-                          aufstaenderung: e.target.value
-                            ? {
-                                art: e.target.value as "sued" | "ost-west",
-                                winkel: g.aufstaenderung?.winkel ?? 15,
-                              }
-                            : null,
+                          ...umgestellt,
+                          reihenabstand: abstandVorschlag(umgestellt, p.breitengrad),
                         },
                         flaecheDerGruppe,
                         besetzt(flaecheDerGruppe, g.id),
-                      ),
-                    )
+                      );
+                    })
                   }
                   className="h-[52px] rounded-[14px] border border-line bg-surface px-3 text-[15px] outline-none focus:border-accent"
                 >
@@ -417,18 +444,22 @@ export function ModulSchritt(p: ModulSchrittProps) {
                     max={60}
                     aus={!p.schreibrecht}
                     onWert={(v) =>
-                      setzeGruppe(gruppe.id, (g) =>
-                        nachfuehren(
+                      setzeGruppe(gruppe.id, (g) => {
+                        const gedreht = {
+                          ...g,
+                          aufstaenderung: g.aufstaenderung
+                            ? { ...g.aufstaenderung, winkel: v }
+                            : null,
+                        };
+                        return nachfuehren(
                           {
-                            ...g,
-                            aufstaenderung: g.aufstaenderung
-                              ? { ...g.aufstaenderung, winkel: v }
-                              : null,
+                            ...gedreht,
+                            reihenabstand: abstandVorschlag(gedreht, p.breitengrad),
                           },
                           flaecheDerGruppe,
                           besetzt(flaecheDerGruppe, g.id),
-                        ),
-                      )
+                        );
+                      })
                     }
                   />
                   {p.schreibrecht ? (
@@ -437,14 +468,7 @@ export function ModulSchritt(p: ModulSchrittProps) {
                       onClick={() =>
                         setzeGruppe(gruppe.id, (g) =>
                           nachfuehren(
-                            {
-                              ...g,
-                              reihenabstand: reihenabstandVorschlag(
-                                g.typ.hoehe,
-                                g.aufstaenderung?.winkel ?? 15,
-                                p.breitengrad,
-                              ),
-                            },
+                            { ...g, reihenabstand: abstandVorschlag(g, p.breitengrad) },
                             flaecheDerGruppe,
                             besetzt(flaecheDerGruppe, g.id),
                           ),
@@ -456,14 +480,8 @@ export function ModulSchritt(p: ModulSchrittProps) {
                         `${(90 - Math.abs(p.breitengrad) - 23.44).toFixed(1)}° hoch.`
                       }
                     >
-                      Reihenabstand vorschlagen:{" "}
-                      {reihenabstandVorschlag(
-                        gruppe.typ.hoehe,
-                        gruppe.aufstaenderung.winkel,
-                        p.breitengrad,
-                      )
-                        .toFixed(2)
-                        .replace(".", ",")}{" "}
+                      Reihenabstand zurücksetzen:{" "}
+                      {abstandVorschlag(gruppe, p.breitengrad).toFixed(2).replace(".", ",")}{" "}
                       m
                     </Knopf>
                   ) : null}

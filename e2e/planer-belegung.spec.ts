@@ -146,8 +146,13 @@ test.describe("Planer — Belegung", () => {
     const abstand = Number((await page.getByLabel("Reihenabstand", { exact: true }).inputValue()).replace(",", "."));
     expect(abstand).toBeGreaterThan(1.2);
     expect(abstand).toBeLessThan(1.6);
-    // Und der Vorschlagsknopf steht daneben — mit derselben Zahl.
-    await expect(page.getByRole("button", { name: /Reihenabstand vorschlagen/ })).toBeVisible();
+    /*
+     * Der Abstand kommt seit der Aufständerungsrunde von selbst aus dem
+     * Winkel. Der Knopf daneben setzt ihn zurück, wenn jemand von Hand
+     * etwas anderes eingetragen hat — vorher hiess er „vorschlagen" und
+     * musste gedrückt werden, sonst blieben zwei Zentimeter stehen.
+     */
+    await expect(page.getByRole("button", { name: /Reihenabstand zurücksetzen/ })).toBeVisible();
   });
 
   test("Belegung übersteht das Neuladen", async ({ page }) => {

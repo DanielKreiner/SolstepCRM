@@ -5,6 +5,7 @@ import * as THREE from "three";
 import {
   aktiveZellen,
   anbaustellen,
+  eckenHub,
   eckenUm,
   modulEcken,
   rasterMitte,
@@ -962,9 +963,24 @@ export function Dreidee(p: DreideeProps) {
             const stringfarbe = stringFarben.get(schluessel);
             const farbe = new THREE.Color(stringfarbe ?? 0x1b2a4a);
             if (grad > 0.05) farbe.lerp(new THREE.Color(0x8e93a1), Math.min(0.85, grad * 1.1));
-            const netz = new THREE.Mesh(
+            /*
+             * Aufgeständerte Module stehen schief — und müssen auch so
+             * aussehen. Die beiden Ecken der Hochseite bekommen den Hub
+             * aus Modullänge und Gestellwinkel; bei Ost/West kippt jede
+             * zweite Reihe in die andere Richtung, so dass die Paare
+             * gegeneinander stehen. Flach gezeichnete Module auf einem
+             * Flachdach sahen aus, als wäre die Aufständerung nie
+             * angekommen.
+             */
+            const hub = eckenHub(mg, z.reihe);
+            const raum = flach.map((q, i) => ({
+              x: q.x,
+              y: q.y,
               // 4 cm über der Dachhaut, sonst flimmern beide gegeneinander.
-              flaecheGeometrie(flach.map((q) => ({ x: q.x, y: q.y, z: hoeheAn(q) + 0.04 }))),
+              z: hoeheAn(q) + 0.04 + (hub[i] ?? 0),
+            }));
+            const netz = new THREE.Mesh(
+              flaecheGeometrie(raum),
               new THREE.MeshLambertMaterial({ color: farbe, side: THREE.DoubleSide }),
             );
             netz.userData = { gruppe: mg.id, reihe: z.reihe, spalte: z.spalte };
@@ -982,11 +998,31 @@ export function Dreidee(p: DreideeProps) {
             gruppe.add(
               new THREE.LineLoop(
                 new THREE.BufferGeometry().setFromPoints(
-                  flach.map((q) => new THREE.Vector3(q.x, hoeheAn(q) + 0.05, -q.y)),
+                  raum.map((q) => new THREE.Vector3(q.x, q.z + 0.01, -q.y)),
                 ),
                 new THREE.LineBasicMaterial({ color: 0x0d1220 }),
               ),
             );
+
+            /*
+             * Und die Ständer darunter. Zwei dünne Striche von der
+             * Hochkante aufs Dach: ohne sie schwebt die Reihe, und man
+             * sieht nicht, dass da ein Gestell steht.
+             */
+            const stuetzen = raum.filter((q) => q.z - hoeheAn(q) > 0.3);
+            if (stuetzen.length > 0) {
+              gruppe.add(
+                new THREE.LineSegments(
+                  new THREE.BufferGeometry().setFromPoints(
+                    stuetzen.flatMap((q) => [
+                      new THREE.Vector3(q.x, q.z, -q.y),
+                      new THREE.Vector3(q.x, hoeheAn(q) + 0.02, -q.y),
+                    ]),
+                  ),
+                  new THREE.LineBasicMaterial({ color: 0x5c626e }),
+                ),
+              );
+            }
           }
         }
       }
