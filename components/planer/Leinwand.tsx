@@ -39,14 +39,18 @@ import {
   strangFarbe,
 } from "@/lib/planer/plan";
 import { strangUmschalten, strangWeg } from "@/lib/planer/strings";
-import { modulEntfernen, modulSetzen, modulVorschau } from "@/lib/planer/setzen";
+import {
+  anbaustelleSetzen,
+  modulEntfernen,
+  modulSetzen,
+  modulVorschau,
+} from "@/lib/planer/setzen";
 import { bauAnwenden, bauAusUmriss } from "@/lib/planer/bau";
 import { firstLinie, firstVersatzFuer, walmAnteilFuer } from "@/lib/planer/dachformen";
 import { anbieter as anbieterZu, type AnbieterId, hoechsterZoom, kachelUrl } from "@/lib/planer/anbieter";
 import {
   aktiveZellen,
   anbaustellen,
-  modulAnbauen,
   erweitere,
   fangeAufRaster,
   insRasterZurueck,
@@ -1426,15 +1430,7 @@ export function Leinwand(p: LeinwandProps) {
          * ein versehentliches Modul mit einem Rückschritt wieder
          * verschwindet.
          */
-        const g = s.plan.gruppen.find((x) => x.id === t.gruppe);
-        const gf = g ? s.plan.flaechen.find((x) => x.id === g.flaeche) : null;
-        if (g && gf) {
-          const erweitert = modulAnbauen(g, gf, { reihe: t.reihe, spalte: t.spalte });
-          s.onPlan(
-            { ...s.plan, gruppen: s.plan.gruppen.map((x) => (x.id === g.id ? erweitert : x)) },
-            true,
-          );
-        }
+        s.onPlan(anbaustelleSetzen(s.plan, t.gruppe, t.reihe, t.spalte), true);
         zieht.current = null;
         return;
       }

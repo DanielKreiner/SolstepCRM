@@ -101,6 +101,36 @@ describe("Ost/West steht in Paaren", () => {
     expect(a[2]).toBeCloseTo(1.762 * Math.sin((15 * Math.PI) / 180), 6);
   });
 
+  it("lässt am Rand kein halbes Paar stehen", () => {
+    /* Ein Dach mit schräger Kante — dort passt reihenweise nur die Hälfte. */
+    const schraeg: Dachflaeche = {
+      ...dach,
+      punkte: [
+        { x: 0, y: 0 },
+        { x: 12, y: 0 },
+        { x: 12, y: 6 },
+        { x: 0, y: 12 },
+      ],
+    };
+    const g = autoBelegen(schraeg, "g1", "Feld 1", {
+      typ: STANDARD_MODUL,
+      ausrichtung: "quer",
+      reihenabstand: 0.25,
+      spaltenabstand: 0.02,
+      winkel: -90,
+      aufstaenderung: { art: "ost-west", winkel: 15 },
+    });
+    expect(g).not.toBeNull();
+    expect(anzahlModule(g!) % 2).toBe(0);
+
+    /* Und keines steht ohne sein Gegenstück. */
+    const belegt = new Set(aktiveZellen(g!).map((z) => `${z.reihe}:${z.spalte}`));
+    for (const z of aktiveZellen(g!)) {
+      const partner = z.reihe % 2 === 0 ? z.reihe + 1 : z.reihe - 1;
+      expect(belegt.has(`${partner}:${z.spalte}`)).toBe(true);
+    }
+  });
+
   it("belegt nur ganze Paare", () => {
     const g = autoBelegen(dach, "g1", "Feld 1", {
       typ: STANDARD_MODUL,
@@ -112,6 +142,27 @@ describe("Ost/West steht in Paaren", () => {
     });
     expect(g).not.toBeNull();
     expect(g!.reihen % 2).toBe(0);
+  });
+});
+
+describe("Ost/West liegt quer", () => {
+  it("nimmt bei der Belegung das Querformat und dreht die Reihen", () => {
+    const r = modulSetzen(
+      { flaechen: [dach], gruppen: [], strings: [], objekte: [] } as unknown as Plan,
+      { x: 6, y: 6 },
+      dach.id,
+      STANDARD_MODUL,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const g = r.plan.gruppen[0]!;
+    /*
+     * Quer liegt die lange Kante in der Reihe: das Gestell wird
+     * niedriger, und auf dieselbe Dachtiefe passen mehr Paare.
+     */
+    expect(planMasse(g, dach).quer).toBeCloseTo(STANDARD_MODUL.hoehe, 6);
+    // Reihen von Nord nach Süd, damit die Paare nach Ost und West kippen.
+    expect(g.winkel).toBe(-90);
   });
 });
 
@@ -178,16 +229,19 @@ describe("Ein Klick legt bei Ost/West beide Module", () => {
     }) as unknown as Plan;
 
   it("legt schon beim ersten Modul ein Paar an", () => {
+    /*
+     * Auch auf dem leeren Flachdach: Ost/West ist dort die Vorgabe, und
+     * ein einzelnes Modul eines Paares gibt es nicht. Vorher legte der
+     * erste Klick ein flach liegendes Einzelmodul, und wer danach die
+     * Fläche fertig belegte, hatte zwei Bauarten auf einem Dach.
+     */
     const r = modulSetzen(plan([]), { x: 6, y: 6 }, dach.id, STANDARD_MODUL);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     const neu = r.plan.gruppen.find((x) => x.id === r.gruppe)!;
-    /*
-     * Ohne bestehendes Feld gibt es keine Aufständerung zu erben — das
-     * einzelne Modul liegt flach. Erst mit einem Ost/West-Feld auf der
-     * Fläche wird angebaut, und dann paarweise.
-     */
-    expect(anzahlModule(neu)).toBe(1);
+    expect(neu.aufstaenderung?.art).toBe("ost-west");
+    expect(neu.ausrichtung).toBe("quer");
+    expect(anzahlModule(neu)).toBe(2);
   });
 
   it("zieht beim Anbauen das Gegenstück nach", () => {

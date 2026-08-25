@@ -30,21 +30,22 @@ export async function dachSetzen(
  * Die Modulwahl gehört zum Ablauf: Ohne Modul kennt der Planer die
  * Rastermasse nicht, und der Knopf zum Belegen bleibt gesperrt.
  */
-export async function belegen(page: Page, aufbau = "Nach Süden aufgeständert"): Promise<void> {
+export async function belegen(page: Page, aufbau?: string): Promise<void> {
   const belegung = page.getByRole("button", { name: /^2 Belegung/ });
   if (await belegung.isEnabled().catch(() => false)) await belegung.click();
   await modulWaehlen(page);
   await page.getByRole("button", { name: /(Dach voll belegen|Restfläche belegen)/ }).click();
+  await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
 
   /*
-   * Beim Flachdach fragt der Planer zuerst, wie die Module stehen
-   * sollen — flach, Süd oder Ost/West. Bei einem geneigten Dach gibt
-   * es nichts zu fragen, dann ist der Kasten gar nicht da.
+   * Auf dem Flachdach liegt zuerst Ost/West — die übliche Bauform.
+   * Wer etwas anderes prüfen will, stellt danach um; die drei Arten
+   * stehen als Knopfreihe unter dem Feld. Bei einem geneigten Dach gibt
+   * es sie nicht, dann tut der Parameter nichts.
    */
-  const frage = page.getByRole("button", { name: aufbau, exact: false });
-  if (await frage.isVisible().catch(() => false)) await frage.click();
-
-  await expect(page.getByRole("button", { name: /^Feld 1/ })).toBeVisible();
+  if (!aufbau) return;
+  const wahl = page.getByRole("button", { name: aufbau, exact: false });
+  if (await wahl.isVisible().catch(() => false)) await wahl.click();
 }
 
 /** Das erste Modul aus dem Materialstamm wählen, falls noch keines gewählt ist. */

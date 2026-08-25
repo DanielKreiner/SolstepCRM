@@ -133,7 +133,14 @@ test.describe("Planer — Belegung", () => {
     await belegen(page);
     await expect.poll(async () => (await kennzahlen(page)).module).toBeGreaterThan(0);
 
-    // Beim Flachdach steht das Modul auf einem Gestell — Süd, 15°.
+    /*
+     * Auf dem Flachdach liegt zuerst Ost/West — die übliche Bauform, und
+     * seit der Aufständerungsrunde die Vorgabe. Für diesen Test geht es
+     * um Süd: eine Reihe im Gestell, die der nächsten Abstand lassen
+     * muss. Umgestellt wird über die Knopfreihe unter dem Feld.
+     */
+    await page.getByRole("button", { name: /Nach Süden aufgeständert/ }).click();
+
     await mehrOeffnen(page, "Feineinstellung");
     await expect(page.getByLabel("Aufständerung")).toHaveValue("sued");
     await expect(page.getByLabel("Winkel", { exact: true })).toHaveValue("15");

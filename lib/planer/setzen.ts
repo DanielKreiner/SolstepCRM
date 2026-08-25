@@ -1,6 +1,7 @@
 import type { Meter } from "./geo";
 import { punktInPolygon, type Dachflaeche } from "./flaeche";
 import {
+  abstandVorschlag,
   aktiveZellen,
   eckenUm,
   einzelnesModul,
@@ -58,15 +59,45 @@ export function flaecheUnter(plan: Plan, punkt: Meter, aktiv: string | null) {
  * mit den Pluszeichen weiterbauen, weil die Raster nicht
  * zusammenpassen.
  */
-function vorbildFuer(plan: Plan, flaecheId: string, standard: Modultyp) {
-  const vorbild = plan.gruppen.find((g) => g.flaeche === flaecheId);
+function vorbildFuer(plan: Plan, f: Dachflaeche, standard: Modultyp) {
+  const vorbild = plan.gruppen.find((g) => g.flaeche === f.id);
+  if (vorbild) {
+    return {
+      typ: vorbild.typ,
+      ausrichtung: vorbild.ausrichtung,
+      reihenabstand: vorbild.reihenabstand,
+      spaltenabstand: vorbild.spaltenabstand,
+      winkel: vorbild.winkel,
+      aufstaenderung: vorbild.aufstaenderung,
+    };
+  }
+
+  const typ = plan.gruppen[0]?.typ ?? standard;
+  /*
+   * Auf dem leeren Flachdach beginnt auch das einzeln gesetzte Modul als
+   * Ost/West-Paar — dieselbe Vorgabe wie beim Belegen. Sonst legte der
+   * erste Klick ein flach liegendes Einzelmodul, und wer danach die
+   * Fläche fertig belegte, hatte zwei Bauarten auf einem Dach.
+   */
+  if (f.neigung === 0) {
+    const aufstaenderung = { art: "ost-west" as const, winkel: 15 };
+    const lage = { typ, ausrichtung: "quer" as const, aufstaenderung };
+    return {
+      ...lage,
+      /* Die Breite zählt nur bei Süd — Ost/West braucht einen Gang, keinen Schattenabstand. */
+      reihenabstand: abstandVorschlag(lage, 48),
+      spaltenabstand: 0.02,
+      winkel: -90,
+    };
+  }
+
   return {
-    typ: vorbild?.typ ?? plan.gruppen[0]?.typ ?? standard,
-    ausrichtung: vorbild?.ausrichtung ?? ("hoch" as const),
-    reihenabstand: vorbild?.reihenabstand ?? 0.02,
-    spaltenabstand: vorbild?.spaltenabstand ?? 0.02,
-    winkel: vorbild?.winkel ?? 0,
-    aufstaenderung: vorbild?.aufstaenderung ?? null,
+    typ,
+    ausrichtung: "hoch" as const,
+    reihenabstand: 0.02,
+    spaltenabstand: 0.02,
+    winkel: 0,
+    aufstaenderung: null,
   };
 }
 
@@ -178,7 +209,7 @@ export function modulVorschau(
     return { ecken, passt: false, flaeche: f.id };
   }
 
-  const opt = vorbildFuer(plan, f.id, standard);
+  const opt = vorbildFuer(plan, f, standard);
   const gruppe = einzelnesModul(f, punkt, "geist", "Geist", opt);
   if (gruppe) return { ecken: modulEcken(gruppe, f, 0, 0), passt: true, flaeche: f.id };
 
@@ -225,6 +256,32 @@ function paarNachziehen(
     ...plan,
     gruppen: plan.gruppen.map((x) => (x.id === gruppeId ? erweitert : x)),
   };
+}
+
+/**
+ * An einer Anbaustelle — einem Pluszeichen — ein Modul setzen.
+ *
+ * Dieselbe Rechnung für die Draufsicht und die räumliche Ansicht, und
+ * dieselbe Paarregel wie beim freien Setzen: Bei Ost/West kommt das
+ * Gegenstück mit. Vorher riefen beide Ansichten `modulAnbauen` direkt
+ * auf und liessen dabei einzelne Module in einem Paarfeld stehen.
+ */
+export function anbaustelleSetzen(
+  plan: Plan,
+  gruppeId: string,
+  reihe: number,
+  spalte: number,
+): Plan {
+  const g = plan.gruppen.find((x) => x.id === gruppeId);
+  const f = g ? plan.flaechen.find((x) => x.id === g.flaeche) : null;
+  if (!g || !f) return plan;
+
+  const erweitert = modulAnbauen(g, f, { reihe, spalte });
+  const eins: Plan = {
+    ...plan,
+    gruppen: plan.gruppen.map((x) => (x.id === gruppeId ? erweitert : x)),
+  };
+  return paarNachziehen(eins, f, gruppeId, reihe, spalte);
 }
 
 export type Setzergebnis =
@@ -280,7 +337,7 @@ export function modulSetzen(
     punkt,
     naechsteId(plan.gruppen.map((g) => g.id), "g"),
     `Feld ${plan.gruppen.length + 1}`,
-    { ...vorbildFuer(plan, f.id, standard), besetzt: belegt },
+    { ...vorbildFuer(plan, f, standard), besetzt: belegt },
   );
 
   if (!neu) {

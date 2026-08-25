@@ -66,16 +66,25 @@ export function modulname(m: { hersteller: string; bezeichnung: string }): strin
 /** Wie die Module auf einem Flachdach stehen. */
 type Aufbauart = "flach" | "sued" | "ost-west";
 
+/*
+ * Ost/West steht oben und ist die Vorgabe.
+ *
+ * Auf einem Flachdach ist es der Normalfall: quer liegende Module Rücken
+ * an Rücken bringen rund die Hälfte mehr Leistung aufs selbe Dach als
+ * die Südreihen, die einander Abstand lassen müssen. Wer Süd will,
+ * wählt es — aber niemand soll sich die häufigste Bauform erst
+ * heraussuchen müssen.
+ */
 const AUFBAUARTEN: Array<{ id: Aufbauart; label: string; hinweis: string }> = [
+  {
+    id: "ost-west",
+    label: "Ost / West",
+    hinweis: "Quer, Rücken an Rücken — mehr Module aufs Dach, gleichmässiger über den Tag",
+  },
   {
     id: "sued",
     label: "Nach Süden aufgeständert",
     hinweis: "Höchster Ertrag je Modul, aber Reihenabstand gegen Verschattung",
-  },
-  {
-    id: "ost-west",
-    label: "Ost / West",
-    hinweis: "Rücken an Rücken, mehr Module aufs Dach, gleichmässiger über den Tag",
   },
   {
     id: "flach",
@@ -84,13 +93,19 @@ const AUFBAUARTEN: Array<{ id: Aufbauart; label: string; hinweis: string }> = [
   },
 ];
 
+/**
+ * Wie die Module bei dieser Aufständerung liegen.
+ *
+ * Ost/West wird quer gebaut: Das Gestell trägt die lange Kante, die
+ * Reihe wird niedriger, und auf dieselbe Dachtiefe passen mehr Paare.
+ * Süd und flach liegen hoch.
+ */
+function lageFuer(art: "sued" | "ost-west" | null): "hoch" | "quer" {
+  return art === "ost-west" ? "quer" : "hoch";
+}
+
 export function ModulSchritt(p: ModulSchrittProps) {
   const [hinweis, setHinweis] = useState<string | null>(null);
-  /*
-   * Welche Fläche gerade auf die Frage nach der Aufständerung wartet.
-   * Sie steht nur zwischen dem Klick auf „belegen" und der Antwort.
-   */
-  const [fragtAufbau, setFragtAufbau] = useState<Dachflaeche | null>(null);
   const gewaehltesModul = p.module.find((m) => m.id === p.plan.technik.modul) ?? null;
   /*
    * KEIN Rückfall auf die erste Fläche.
@@ -100,12 +115,19 @@ export function ModulSchritt(p: ModulSchrittProps) {
    * hat, findet die Module dann dort, wo er sie nicht wollte. Ist keine
    * gewählt, wird gefragt.
    */
-  const flaeche = p.plan.flaechen.find((f) => f.id === p.aktiv) ?? null;
   const mehrereFlaechen = p.plan.flaechen.length > 1;
   const gruppe = p.plan.gruppen.find((g) => g.id === p.aktiveGruppe) ?? null;
   const flaecheDerGruppe = gruppe
     ? (p.plan.flaechen.find((f) => f.id === gruppe.flaeche) ?? null)
     : null;
+  /*
+   * Wohl aber auf die Fläche des Feldes, an dem gerade gearbeitet wird:
+   * Wer ein Feld mit einem einzelnen Modul beginnt, will es dort
+   * weiterbauen. Vorher fragte das Panel danach noch einmal „welche
+   * Fläche soll belegt werden?", obwohl das erste Modul schon lag.
+   */
+  const flaeche =
+    p.plan.flaechen.find((f) => f.id === p.aktiv) ?? flaecheDerGruppe;
   // Nicht `module`: In Next.js ist der Name gesperrt.
   const modulzahl = p.plan.gruppen.reduce((s, g) => s + anzahlModule(g), 0);
   const leistung = p.plan.gruppen.reduce((s, g) => s + kwp(g), 0);
@@ -116,7 +138,7 @@ export function ModulSchritt(p: ModulSchrittProps) {
       .filter((g) => g.flaeche === f.id && g.id !== ausser)
       .flatMap((g) => aktiveZellen(g).map((z) => modulEcken(g, f, z.reihe, z.spalte)));
 
-  function belegen(f: Dachflaeche, art: Aufbauart = "sued") {
+  function belegen(f: Dachflaeche, art: Aufbauart = "ost-west") {
     const flach = f.neigung === 0;
     const typ = gewaehltesModul ? modulTyp(gewaehltesModul) : STANDARD_MODUL;
     /*
@@ -142,7 +164,7 @@ export function ModulSchritt(p: ModulSchrittProps) {
      */
     const vorlage = {
       typ,
-      ausrichtung: "hoch" as const,
+      ausrichtung: lageFuer(aufstaenderung?.art ?? null),
       spaltenabstand: 0.02,
       winkel: drehung,
       aufstaenderung,
@@ -158,6 +180,32 @@ export function ModulSchritt(p: ModulSchrittProps) {
     p.onPlan({ ...p.plan, gruppen: [...p.plan.gruppen, neu] }, true);
     p.onAktiveGruppe(neu.id);
     p.onAktiv(f.id);
+  }
+
+  /**
+   * Eine bestehende Gruppe auf eine andere Aufständerung umstellen.
+   *
+   * Art, Ausrichtung, Drehung und Reihenabstand hängen zusammen — wer
+   * nur eines davon ändert, bekommt Ost/West-Module im Hochformat, die
+   * nach Norden schauen. Deshalb an einer Stelle, für die Knopfreihe
+   * unter dem Feld und für das Auswahlfeld in der Feineinstellung.
+   */
+  function aufbauUmstellen(gruppeId: string, art: Aufbauart, f: Dachflaeche) {
+    setzeGruppe(gruppeId, (g) => {
+      const aufstaenderung =
+        art === "flach" ? null : { art, winkel: g.aufstaenderung?.winkel ?? 15 };
+      const umgestellt = {
+        ...g,
+        aufstaenderung,
+        winkel: aufstaenderung?.art === "ost-west" ? -90 : 0,
+        ausrichtung: lageFuer(aufstaenderung?.art ?? null),
+      };
+      return nachfuehren(
+        { ...umgestellt, reihenabstand: abstandVorschlag(umgestellt, p.breitengrad) },
+        f,
+        besetzt(f, g.id),
+      );
+    });
   }
 
   const setzeGruppe = (id: string, wie: (g: Modulgruppe) => Modulgruppe) =>
@@ -220,52 +268,44 @@ export function ModulSchritt(p: ModulSchrittProps) {
         </Knopf>
       ) : null}
 
-      {p.schreibrecht && flaeche && fragtAufbau ? (
-        <section className="flex flex-col gap-2 rounded-[14px] border border-accent bg-accent-sunk p-3.5">
-          <h3 className="text-[14px] font-bold">Wie sollen die Module stehen?</h3>
-          <p className="text-[12.5px] leading-[1.45] text-muted">
-            {fragtAufbau.name} ist ein Flachdach. Die Aufständerung bestimmt Reihenabstand,
-            Ausrichtung und Ertrag — deshalb kommt sie vor der Belegung.
-          </p>
-          {AUFBAUARTEN.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => {
-                const ziel = fragtAufbau;
-                setFragtAufbau(null);
-                belegen(ziel, a.id);
-              }}
-              className="flex flex-col items-start gap-0.5 rounded-[12px] border border-line bg-surface px-3.5 py-2.5 text-left transition-colors hover:border-accent"
-            >
-              <span className="text-[14px] font-bold">{a.label}</span>
-              <span className="text-[11.5px] leading-[1.4] text-muted">{a.hinweis}</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setFragtAufbau(null)}
-            className="h-9 text-[12.5px] font-semibold text-muted hover:text-ink"
-          >
-            Abbrechen
-          </button>
+      {/*
+        Wie die Module stehen — nach der Belegung, nicht davor.
+
+        Vorher kam auf dem Flachdach erst eine Frage und dann die
+        Belegung. Das war ein Klick zu viel für den Normalfall: Ost/West
+        ist auf einem Flachdach die übliche Bauform. Jetzt liegt sie
+        gleich, und die drei Arten stehen sichtbar daneben — umstellen
+        ist ein Tipp, und man sieht sofort, was sich am Dach ändert.
+      */}
+      {p.schreibrecht && gruppe && flaecheDerGruppe && flaecheDerGruppe.neigung === 0 ? (
+        <section className="flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-3.5">
+          <h3 className="text-[13.5px] font-bold">Wie die Module stehen</h3>
+          {AUFBAUARTEN.map((a) => {
+            const jetzt = (gruppe.aufstaenderung?.art ?? "flach") as Aufbauart;
+            return (
+              <button
+                key={a.id}
+                type="button"
+                aria-pressed={jetzt === a.id}
+                onClick={() => aufbauUmstellen(gruppe.id, a.id, flaecheDerGruppe)}
+                className={[
+                  "flex flex-col items-start gap-0.5 rounded-[12px] border px-3.5 py-2.5 text-left transition-colors",
+                  jetzt === a.id
+                    ? "border-accent bg-accent-sunk"
+                    : "border-line bg-surface hover:border-accent",
+                ].join(" ")}
+              >
+                <span className="text-[14px] font-bold">{a.label}</span>
+                <span className="text-[11.5px] leading-[1.4] text-muted">{a.hinweis}</span>
+              </button>
+            );
+          })}
         </section>
       ) : null}
 
-      {p.schreibrecht && flaeche && !fragtAufbau ? (
+      {p.schreibrecht && flaeche ? (
         <Knopf
-          onClick={() => {
-            /*
-             * Beim Flachdach erst fragen. Bei einem geneigten Dach gibt
-             * es nichts zu entscheiden — dort liegen die Module in der
-             * Dachebene, und eine Frage wäre nur ein Klick mehr.
-             */
-            if (flaeche.neigung === 0 && !p.plan.gruppen.some((g) => g.flaeche === flaeche.id)) {
-              setFragtAufbau(flaeche);
-              return;
-            }
-            belegen(flaeche);
-          }}
+          onClick={() => belegen(flaeche)}
           zeichen={p.plan.gruppen.length === 0 ? <ZeichenModul /> : <ZeichenPlus />}
           aus={p.module.length > 0 && !gewaehltesModul}
           titel={
@@ -398,33 +438,11 @@ export function ModulSchritt(p: ModulSchrittProps) {
                   value={gruppe.aufstaenderung?.art ?? ""}
                   disabled={!p.schreibrecht}
                   onChange={(e) =>
-                    setzeGruppe(gruppe.id, (g) => {
-                      const aufstaenderung = e.target.value
-                        ? {
-                            art: e.target.value as "sued" | "ost-west",
-                            winkel: g.aufstaenderung?.winkel ?? 15,
-                          }
-                        : null;
-                      /*
-                       * Reihenabstand und Drehung ziehen mit. Ost/West
-                       * braucht Reihen von Nord nach Süd, sonst schaut
-                       * die halbe Anlage nach Norden — und der Abstand
-                       * hängt am Winkel, nicht am Geschmack.
-                       */
-                      const umgestellt = {
-                        ...g,
-                        aufstaenderung,
-                        winkel: aufstaenderung?.art === "ost-west" ? -90 : 0,
-                      };
-                      return nachfuehren(
-                        {
-                          ...umgestellt,
-                          reihenabstand: abstandVorschlag(umgestellt, p.breitengrad),
-                        },
-                        flaecheDerGruppe,
-                        besetzt(flaecheDerGruppe, g.id),
-                      );
-                    })
+                    aufbauUmstellen(
+                      gruppe.id,
+                      (e.target.value || "flach") as Aufbauart,
+                      flaecheDerGruppe,
+                    )
                   }
                   className="h-[52px] rounded-[14px] border border-line bg-surface px-3 text-[15px] outline-none focus:border-accent"
                 >

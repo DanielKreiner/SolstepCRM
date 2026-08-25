@@ -55,8 +55,8 @@ import {
 } from "@/lib/planer/anbieter";
 import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
-import { anzahlModule, kwp, modulAnbauen } from "@/lib/planer/module";
-import { modulEntfernen, modulSetzen } from "@/lib/planer/setzen";
+import { anzahlModule, kwp } from "@/lib/planer/module";
+import { anbaustelleSetzen, modulEntfernen, modulSetzen } from "@/lib/planer/setzen";
 import { anlagenpreisGilt } from "@/lib/planer/wirtschaft";
 import { ursprungVersetzen } from "@/lib/planer/ursprung";
 import { strangUmschalten } from "@/lib/planer/strings";
@@ -859,18 +859,10 @@ export function Planer({
               onAnbauen={(g, reihe, spalte) => {
                 /*
                  * Dieselbe Rechnung wie hinter den Pluszeichen der
-                 * Draufsicht: `modulAnbauen` lässt das Raster um genau
-                 * eine Zelle wachsen und schaltet alles ab, was dabei
-                 * sonst noch entstünde.
+                 * Draufsicht: Das Raster wächst um genau eine Zelle, und
+                 * bei Ost/West kommt das Gegenstück des Paares mit.
                  */
-                const g2 = plan.gruppen.find((x) => x.id === g);
-                const f2 = g2 ? plan.flaechen.find((x) => x.id === g2.flaeche) : null;
-                if (!g2 || !f2) return;
-                const erweitert = modulAnbauen(g2, f2, { reihe, spalte });
-                onPlan(
-                  { ...plan, gruppen: plan.gruppen.map((x) => (x.id === g ? erweitert : x)) },
-                  true,
-                );
+                onPlan(anbaustelleSetzen(plan, g, reihe, spalte), true);
                 setAktiveGruppe(g);
                 setRaumMeldung(null);
               }}

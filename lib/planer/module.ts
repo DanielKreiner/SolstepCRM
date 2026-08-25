@@ -439,6 +439,32 @@ export function reihenabstandVorschlag(
 }
 
 /**
+ * Angefangene Ost/West-Paare abschalten.
+ *
+ * An der Dachkante oder neben einem Kamin passt manchmal nur eine
+ * Hälfte eines Paares. Auf dem Dach nützt sie nichts: das Gestell trägt
+ * zwei Module, die sich gegeneinander lehnen. Deshalb fällt mit dem
+ * fehlenden Gegenstück auch das übrig gebliebene Modul weg — sonst
+ * stünde in der Stückliste eine ungerade Zahl, die sich nicht bauen
+ * lässt.
+ */
+export function paareAusgleichen(g: Modulgruppe, aus: string[]): string[] {
+  if (!istPaarweise(g)) return aus;
+
+  const leer = new Set([...aus, ...(g.entfernt ?? [])]);
+  const dazu: string[] = [];
+  for (let r = 0; r < g.reihen; r++) {
+    for (let c = 0; c < g.spalten; c++) {
+      if (leer.has(zelle(r, c))) continue;
+      const partner = paarReihe(r);
+      const drin = partner >= 0 && partner < g.reihen;
+      if (!drin || leer.has(zelle(partner, c))) dazu.push(zelle(r, c));
+    }
+  }
+  return dazu.length > 0 ? [...aus, ...dazu] : aus;
+}
+
+/**
  * Der Reihenabstand, der zu dieser Aufständerung passt.
  *
  * Er hängt am Winkel, nicht am Geschmack — und deshalb wird er
@@ -575,18 +601,18 @@ export function autoBelegen(
         spalten: spaltenMax,
         reihen: reihenMax,
       };
-      const aus: string[] = [];
-      let anzahl = 0;
-
+      const roh: string[] = [];
       for (let r = 0; r < reihenMax; r++) {
         for (let c = 0; c < spaltenMax; c++) {
           const ecken = modulEcken(kandidat, f, r, c);
-          const passt =
-            modulPasst(ecken, f) && !stoesstAn(ecken, opt.besetzt ?? []);
-          if (passt) anzahl++;
-          else aus.push(zelle(r, c));
+          if (!modulPasst(ecken, f) || stoesstAn(ecken, opt.besetzt ?? [])) {
+            roh.push(zelle(r, c));
+          }
         }
       }
+      /* Halbe Ost/West-Paare zählen nicht mit — sie werden nicht gebaut. */
+      const aus = paareAusgleichen(kandidat, roh);
+      const anzahl = reihenMax * spaltenMax - aus.length;
 
       if (!beste || anzahl > beste.anzahl) beste = { anker, aus, anzahl };
     }
@@ -617,7 +643,7 @@ export function nachfuehren(g: Modulgruppe, f: Dachflaeche, besetzt: Meter[][] =
       if (!modulPasst(ecken, f) || stoesstAn(ecken, besetzt)) aus.push(zelle(r, c));
     }
   }
-  return { ...g, aus };
+  return { ...g, aus: paareAusgleichen(g, aus) };
 }
 
 
