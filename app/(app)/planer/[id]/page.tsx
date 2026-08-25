@@ -178,8 +178,8 @@ export default async function PlanerProjektPage({
 
   /*
    * PostgREST liefert numeric als Zeichenkette. Einmal beim Hereinkommen
-   * umwandeln — sonst rechnet irgendwo weiter unten jemand "0.28" + 1
-   * und bekommt "0.281".
+   * umwandeln — sonst rechnet irgendwo weiter unten jemand "0.32" + 1
+   * und bekommt "0.321".
    *
    * Fehlt die Vorgabezeile (neuer Mandant), gelten die Werte aus dem
    * Modell. Der Planer soll auch ohne eingerichtete Einstellungen
@@ -204,7 +204,7 @@ export default async function PlanerProjektPage({
   const vorgabe: WirtschaftVorgabe = {
     verlustProzent: roh ? Number(roh.verlust_prozent) : 14,
     steigerung: roh ? Number(roh.steigerung) : MODELL.strompreisSteigerung,
-    strompreis: roh ? Number(roh.strompreis) : 0.28,
+    strompreis: roh ? Number(roh.strompreis) : 0.32,
     verguetung: roh ? Number(roh.verguetung) : 0.08,
     preisstaffel: staffel,
     speicherEurProKwh: roh ? Number(roh.speicher_eur_pro_kwh) : 0,

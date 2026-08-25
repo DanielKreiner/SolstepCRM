@@ -71,7 +71,7 @@ function Rechenvorgaben({
 
   /*
    * PostgREST liefert numeric als Zeichenkette. Einmal beim Hereinkommen
-   * umwandeln, sonst rechnet weiter unten jemand mit "0.28" weiter.
+   * umwandeln, sonst rechnet weiter unten jemand mit "0.32" weiter.
    */
   const z = (w: number | string | null | undefined, standard: number) =>
     w === null || w === undefined || w === "" ? standard : Number(w);
@@ -127,7 +127,7 @@ function Rechenvorgaben({
             einheit="€/kWh"
             hinweis="Was der Kunde heute für Netzstrom zahlt."
             name="strompreis"
-            standard={z(vorgabe?.strompreis, 0.28)}
+            standard={z(vorgabe?.strompreis, 0.32)}
             schritt={0.01}
             disabled={!schreibrecht}
           />

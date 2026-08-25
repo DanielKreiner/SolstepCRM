@@ -173,7 +173,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     .maybeSingle();
 
   const w = plan.wirtschaft;
-  const strompreis = w.strompreis ?? Number(vorgabe?.strompreis ?? 0.28);
+  const strompreis = w.strompreis ?? Number(vorgabe?.strompreis ?? 0.32);
   const verguetung = w.verguetung ?? Number(vorgabe?.verguetung ?? 0.08);
   const steigerung = Number(vorgabe?.steigerung ?? 0.02);
   const verbrauch = w.verbrauchKwh ?? 4500;

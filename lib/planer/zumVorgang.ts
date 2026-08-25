@@ -73,7 +73,7 @@ export async function planungFuerVorgang(
     geraetSpeicherKwh: geraet ? Number(geraet.nutzbar_kwh) : 0,
     angebotssumme,
     vorgabe: {
-      strompreis: Number(vorgabe?.strompreis ?? 0.28),
+      strompreis: Number(vorgabe?.strompreis ?? 0.32),
       verguetung: Number(vorgabe?.verguetung ?? 0.08),
       steigerung: Number(vorgabe?.steigerung ?? 0.02),
       speicherEurProKwh: Number(vorgabe?.speicher_eur_pro_kwh ?? 0),
