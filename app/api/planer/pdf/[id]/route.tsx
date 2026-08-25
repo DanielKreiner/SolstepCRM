@@ -6,7 +6,7 @@ import { aktiveZellen, anzahlModule, ausrichtungen, kwp } from "@/lib/planer/mod
 import { modulSchluessel, planLesen } from "@/lib/planer/plan";
 import { bedarfAusPlan, type GeraeteStand } from "@/lib/planer/uebergabe";
 import { pruefe } from "@/lib/planer/elektrik";
-import { rechne, richtpreis } from "@/lib/planer/wirtschaft";
+import { anlagenpreisGilt, rechne, richtpreis } from "@/lib/planer/wirtschaft";
 import { anlagenErtrag, fallbackErtrag, regionAus } from "@/lib/planer/ertrag";
 import { anlagenVerschattung } from "@/lib/planer/verschattung";
 import { requireMe } from "@/lib/session";
@@ -32,7 +32,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const { data: projekt } = await supabase
     .from("planer_projekt")
-    .select("id, name, adresse, ursprung_lat, ursprung_lon, plan, vorschau_pfad, updated_at")
+    .select("id, name, adresse, ursprung_lat, ursprung_lon, plan, vorschau_pfad, updated_at, vorgang_id")
     .eq("id", id)
     .maybeSingle();
   if (!projekt) return NextResponse.json({ fehler: "Projekt nicht gefunden." }, { status: 404 });
@@ -61,7 +61,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const leistung = plan.gruppen.reduce((s, g) => s + kwp(g), 0);
   const modulzahl = plan.gruppen.reduce((s, g) => s + anzahlModule(g), 0);
-  const speicherKwh = speicher ? Number(speicher.nutzbar_kwh) : 0;
+  /*
+   * Die von Hand eingetragene Speichergrösse hat Vorrang vor dem
+   * Gerät. Vorher las diese Stelle NUR das Gerät — wer im Gespräch
+   * „zehn Kilowattstunden" eingetippt hatte, ohne ein Gerät zu
+   * wählen, bekam ein Kundenblatt, in dem der Speicher nicht
+   * vorkam: dieselbe Autarkie wie ohne, dieselbe Ersparnis.
+   */
+  const speicherKwh =
+    plan.wirtschaft.speicherKwh ?? (speicher ? Number(speicher.nutzbar_kwh) : 0);
 
   /*
    * Der Prüfstatus wird mitgerechnet, nicht gespeichert: Er hängt an
@@ -183,15 +191,45 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         eur_pro_kwp: Number(st.eur_pro_kwp),
       }))
     : [];
-  const speicherAufpreis = w.mitSpeicher
-    ? speicherKwh * Number(vorgabe?.speicher_eur_pro_kwh ?? 0)
-    : 0;
-  const anlagenpreis = w.anlagenpreis ?? richtpreis(leistung, staffel, speicherAufpreis);
+  const speicherAufpreis = speicherKwh * Number(vorgabe?.speicher_eur_pro_kwh ?? 0);
+
+  /*
+   * Und derselbe Preis wie am Bildschirm: getippt, sonst die
+   * Angebotssumme, sonst der Richtpreis. Ein Kundenblatt mit einer
+   * anderen Investition als das Angebot daneben ist der Fehler, den
+   * niemand bemerkt, bis der Kunde nachrechnet.
+   */
+  let angebotssumme: number | null = null;
+  if (projekt.vorgang_id) {
+    const { data: positionen } = await supabase
+      .from("vorgang_position")
+      .select("menge, ep_netto, rabatt_prozent")
+      .eq("vorgang_id", projekt.vorgang_id as string)
+      .is("dokument_id", null);
+    const zeilen = (positionen ?? []) as Array<{
+      menge: number | string;
+      ep_netto: number | string;
+      rabatt_prozent: number | string | null;
+    }>;
+    if (zeilen.length > 0) {
+      angebotssumme = zeilen.reduce(
+        (sum, x) =>
+          sum + Number(x.menge) * Number(x.ep_netto) * (1 - Number(x.rabatt_prozent ?? 0) / 100),
+        0,
+      );
+    }
+  }
+
+  const anlagenpreis = anlagenpreisGilt(
+    w.anlagenpreis,
+    angebotssumme,
+    richtpreis(leistung, staffel, speicherAufpreis),
+  ).wert;
 
   const rechnung = rechne({
     ertragKwh: ertrag.jahresertragKwh,
     verbrauchKwh: verbrauch,
-    speicherKwh: w.mitSpeicher ? speicherKwh : 0,
+    speicherKwh,
     strompreis,
     verguetung,
     anlagenpreis,

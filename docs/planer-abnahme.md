@@ -302,3 +302,13 @@ die das Setzen nicht einhält.
 | A4 | Satteldach in 3D | First oben, Traufen unten |
 | A5 | Ein String, Modul stärker als der Eingang | Hinweis „der Wechselrichter begrenzt", kein Fehler |
 | A6 | Zwei parallele Strings am selben MPPT | Fehler mit dem Rat, einen zu verlegen |
+
+## Angebot und Planung zusammen (13.08.2026, achter Durchgang)
+
+| # | Prüfung | Erwartung |
+|---|---|---|
+| V1 | Planung mit Speicher, Kunden-PDF öffnen | Speicher ist eingerechnet — auch ohne gewähltes Gerät |
+| V2 | Angebotsposition ändern, Planung öffnen | Anlagenpreis und Amortisation folgen der Angebotssumme |
+| V3 | Angebots-PDF mit verknüpfter Planung | „Du sparst rund X € im Jahr", Ertrag gerechnet statt geschätzt, Dachbild |
+| V4 | Kundenportal, Angebot | derselbe Satz auf dem Bildschirm, vor den Positionen |
+| V5 | Angebot ohne Planung | wie vorher: Faustformel als Schätzung ausgewiesen, kein Sparblock |

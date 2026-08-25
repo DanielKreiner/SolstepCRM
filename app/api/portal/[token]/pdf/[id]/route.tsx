@@ -1,6 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
 import { VorgangPdf, type BelegArt, type VorgangPdfData } from "@/lib/pdf/vorgang";
+import { planungFuerVorgang } from "@/lib/planer/zumVorgang";
 import { markeAus } from "@/lib/marke";
 import { resolvePortal } from "@/lib/portal/data";
 import { portalVorgangDetail } from "@/lib/portal/vorgang";
@@ -59,8 +60,16 @@ export async function GET(
 
   const anz = daten.dokumente.find((d) => d.typ === "anzahlungsrechnung");
 
+  /*
+   * Auch im Portal trägt das Angebot die Planungszahlen — dieselbe
+   * Funktion wie im Backoffice. Der Kunde soll auf beiden Wegen
+   * dasselbe Blatt sehen.
+   */
+  const planung = await planungFuerVorgang(admin, daten.vorgang.id);
+
   const pdf: VorgangPdfData = {
     art,
+    planung,
     vorgangNummer: daten.vorgang.nummer,
     belegNummer: dok?.nummer ?? null,
     erstelltAm: new Date().toISOString(),

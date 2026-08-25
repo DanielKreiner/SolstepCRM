@@ -93,6 +93,25 @@ export type VorgangPdfData = {
     adresse: string | null;
     zaehlpunkt: string | null;
   };
+  /**
+   * Die Planung, falls eine dranhängt.
+   *
+   * Damit trägt EIN Blatt beides: was gebaut wird und was es bringt.
+   * Vorher schätzte das Angebot den Ertrag mit einer Faustformel
+   * („rund 1000 kWh je kWp"), während die Planung daneben eine
+   * gerechnete Zahl auswies — zwei Ertragsangaben in einem Umschlag.
+   */
+  planung?: {
+    kwp: number;
+    jahresertragKwh: number;
+    autarkie: number;
+    speicherKwh: number;
+    ersparnisJahr1: number;
+    ersparnis20: number;
+    amortisationJahre: number | null;
+    /** Das Dach als Bild, schon als data-URL. */
+    bild: string | null;
+  } | null;
   /** Eigene Texte aus dem Angebotskopf. */
   texte: { titel: string | null; einleitung: string | null; abschluss: string | null };
   gruppen: PdfGruppe[];
@@ -167,6 +186,30 @@ const s = StyleSheet.create({
   kennfeld: { flex: 1 },
   kennwert: { fontSize: 15, fontFamily: "Helvetica-Bold", letterSpacing: -0.4 },
   kennlabel: { fontSize: 7.5, color: ZART, marginTop: 1 },
+
+  /*
+   * Der Satz, um den es dem Betrieb ging: „Da soll stehen, du sparst
+   * circa X Euro im Jahr — also wirklich dem Kunden das Angebot
+   * schmackhaft machen." Er steht deshalb gross und vor dem
+   * Leistungsumfang; die Einschränkungen darunter, klein aber da.
+   */
+  sparband: {
+    borderWidth: 1,
+    borderColor: FLAECHE,
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 16,
+  },
+  sparsatz: { fontSize: 17, fontFamily: "Helvetica-Bold", letterSpacing: -0.4 },
+  sparklein: { fontSize: 9, lineHeight: 1.5, marginTop: 6 },
+  sparfuss: { fontSize: 7.5, color: ZART, lineHeight: 1.45, marginTop: 6 },
+  dachbild: {
+    width: "100%",
+    height: 150,
+    objectFit: "cover",
+    borderRadius: 8,
+    marginBottom: 16,
+  },
 
   /* -------------------------------------------------------------- TEXTE */
   h2: { fontSize: 12.5, fontFamily: "Helvetica-Bold", marginTop: 18, marginBottom: 8 },
@@ -314,11 +357,21 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
   const nummer = data.belegNummer ?? data.vorgangNummer;
 
   /*
-   * Rund 1000 kWh je kWp im Jahr — grober Mittelwert für Österreich und
-   * Süddeutschland. Steht als Schätzung da und nicht als Zusage; eine
-   * genaue Zahl käme aus der Planung und nicht aus einer Faustformel.
+   * Der Ertrag kommt aus der PLANUNG, wenn eine dranhängt — gerechnet
+   * aus Ausrichtung, Neigung und Verschattung. Nur ohne Planung bleibt
+   * die Faustformel „rund 1000 kWh je kWp": ein grober Mittelwert für
+   * Österreich und Süddeutschland, als Schätzung ausgewiesen.
+   *
+   * Vorher stand die Faustformel auch dann im Angebot, wenn daneben
+   * eine gerechnete Zahl vorlag — zwei Ertragsangaben in einem
+   * Umschlag, und der Kunde hat beide gelesen.
    */
-  const ertrag = data.anlage.kwp ? Math.round(data.anlage.kwp * 1000) : null;
+  const geplant = data.planung ?? null;
+  const ertrag = geplant
+    ? Math.round(geplant.jahresertragKwh)
+    : data.anlage.kwp
+      ? Math.round(data.anlage.kwp * 1000)
+      : null;
 
   return (
     <Document
@@ -416,7 +469,9 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
               <>
                 <View style={s.kennfeld}>
                   <Text style={s.kennwert}>{zahl(ertrag)} kWh</Text>
-                  <Text style={s.kennlabel}>Ertrag im Jahr, geschätzt</Text>
+                  <Text style={s.kennlabel}>
+                    {geplant ? "Ertrag im Jahr, gerechnet" : "Ertrag im Jahr, geschätzt"}
+                  </Text>
                 </View>
                 <View style={s.kennfeld}>
                   {/*
@@ -431,6 +486,36 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
               </>
             ) : null}
           </View>
+        ) : null}
+
+        {/* ------------------------------------------- WAS ES DIR BRINGT */}
+        {istAngebot && geplant && geplant.ersparnisJahr1 > 0 ? (
+          <View style={s.sparband}>
+            <Text style={[s.sparsatz, { color: akzent }]}>
+              Du sparst rund {zahl(Math.round(geplant.ersparnisJahr1))} € im Jahr.
+            </Text>
+            <Text style={s.sparklein}>
+              Gerechnet mit deinem Verbrauch, {zahl(Math.round(geplant.jahresertragKwh))} kWh
+              Ertrag und {Math.round(geplant.autarkie * 100)} % Autarkie
+              {geplant.speicherKwh > 0
+                ? ` — mit ${zahl(Math.round(geplant.speicherKwh * 10) / 10)} kWh Speicher`
+                : " — ohne Speicher"}
+              . Über zwanzig Jahre sind das rund {zahl(Math.round(geplant.ersparnis20))} €
+              {geplant.amortisationJahre !== null
+                ? `; die Anlage hat sich nach etwa ${zahl(Math.round(geplant.amortisationJahre * 10) / 10)} Jahren bezahlt.`
+                : "."}
+            </Text>
+            <Text style={s.sparfuss}>
+              Richtwerte aus der Planung — der tatsächliche Ertrag hängt vom Wetter ab, die
+              Ersparnis vom Strompreis. Steigt er, wird die Rechnung besser.
+            </Text>
+          </View>
+        ) : null}
+
+        {istAngebot && geplant?.bild ? (
+          /* eslint-disable-next-line jsx-a11y/alt-text --
+             @react-pdf/Image ist kein <img>; alt gibt es dort nicht. */
+          <Image src={geplant.bild} style={s.dachbild} />
         ) : null}
 
         {istAngebot && data.texte.einleitung ? (

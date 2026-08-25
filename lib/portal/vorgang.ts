@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { planungFuerVorgang } from "@/lib/planer/zumVorgang";
 import { kaskadeAusloesen } from "@/lib/vorgang/kaskade";
 import type { PortalSession } from "./data";
 import type { Phase } from "@/lib/vorgang/modell";
@@ -122,6 +123,21 @@ export async function portalVorgaenge(
 
 export type PortalDetail = {
   vorgang: PortalVorgang;
+  /**
+   * Die Planungszahlen, falls eine Planung am Vorgang hängt.
+   *
+   * Der Kunde soll im Portal dasselbe lesen wie auf dem Blatt: was die
+   * Anlage bringt, nicht nur was sie kostet.
+   */
+  planung: {
+    kwp: number;
+    jahresertragKwh: number;
+    autarkie: number;
+    speicherKwh: number;
+    ersparnisJahr1: number;
+    ersparnis20: number;
+    amortisationJahre: number | null;
+  } | null;
   schritte: PortalSchritt[];
   dokumente: PortalDokument[];
   positionen: PortalPosition[];
@@ -346,8 +362,16 @@ export async function portalVorgangDetail(
     jeKategorie.set(a.category, l);
   }
 
+  /*
+   * Die Planungszahlen — dieselbe Rechnung wie im Angebots-PDF. Sie
+   * stehen im Portal auf dem Bildschirm, damit der Kunde nicht erst
+   * das PDF öffnen muss, um zu sehen, was ihm die Anlage bringt.
+   */
+  const planung = await planungFuerPortal(admin, vorgangId);
+
   return {
     vorgang: abbilden(v as unknown as Roh),
+    planung,
     angenommen: Boolean(ab),
     fassung: (fassung?.version as number | null) ?? null,
     angebotVersendet: angebotOffen,
@@ -775,3 +799,21 @@ type TerminRoh = {
   kunde_bestaetigt_am: string | null;
   personen: { user: { name: string } | null }[] | null;
 };
+
+
+/**
+ * Planungszahlen für das Portal.
+ *
+ * Dieselbe Funktion wie im PDF, nur ohne Bild — das lädt der
+ * Bildschirm getrennt, und ein Bild als data-URL in einer
+ * Server-Antwort wäre unnötiger Ballast.
+ */
+async function planungFuerPortal(
+  admin: ReturnType<typeof createAdminClient>,
+  vorgangId: string,
+): Promise<PortalDetail["planung"]> {
+  const geplant = await planungFuerVorgang(admin, vorgangId);
+  if (!geplant) return null;
+  const { bild: _bild, ...zahlen } = geplant;
+  return zahlen;
+}

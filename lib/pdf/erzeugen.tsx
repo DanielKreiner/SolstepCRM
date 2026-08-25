@@ -1,6 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { VorgangPdf, type BelegArt, type VorgangPdfData } from "@/lib/pdf/vorgang";
+import { planungFuerVorgang } from "@/lib/planer/zumVorgang";
 import { markeAus } from "@/lib/marke";
 import { anzahlung, summen } from "@/lib/vorgang/modell";
 
@@ -42,6 +43,20 @@ export async function belegPdf(
   if (!v) {
     return { ok: false, grund: "Vorgang nicht gefunden." };
   }
+
+  /*
+   * Hängt eine Planung am Vorgang, trägt das Angebot ihre Zahlen —
+   * Leistung, Ertrag, Autarkie, Ersparnis und das Dachbild.
+   *
+   * Der Betrieb wollte das ausdrücklich: „mach, dass der Ertrag PDF mit
+   * dem Angebot verschmilzt". Vorher gingen zwei Blätter zum Kunden,
+   * und ihre Ertragsangaben stimmten nicht überein — das eine
+   * gerechnet, das andere aus einer Faustformel.
+   *
+   * Gerechnet wird mit `planungKennzahlen`, derselben Funktion wie im
+   * Planungs-PDF. Der Anlagenpreis ist hier die Summe dieses Angebots.
+   */
+  const planung = await planungFuerVorgang(supabase, id);
 
   const { data: firma } = await supabase
     .from("company")
@@ -252,9 +267,10 @@ export async function belegPdf(
       plz: kunde?.zip ?? null,
       ort: kunde?.city ?? null,
     },
+    planung,
     anlage: {
-      kwp: v.kwp === null ? null : Number(v.kwp),
-      speicherKwh: v.speicher_kwh === null ? null : Number(v.speicher_kwh),
+      kwp: planung ? planung.kwp : v.kwp === null ? null : Number(v.kwp),
+      speicherKwh: planung?.speicherKwh || (v.speicher_kwh === null ? null : Number(v.speicher_kwh)),
       adresse: [(v.adresse as string | null), (v.ort as string | null)]
         .filter(Boolean)
         .join(", ") || null,
@@ -321,3 +337,13 @@ type PosRoh = {
   ist_material: boolean;
   bild_url: string | null;
 };
+
+
+/**
+ * Die Planungszahlen zu einem Vorgang — oder `null`, wenn keine
+ * Planung dranhängt.
+ *
+ * Bewusst hier und nicht im Route-Handler: Das Angebots-PDF entsteht
+ * an mehreren Stellen (Backoffice, Portal, Mailversand), und die
+ * Zahlen müssen überall dieselben sein.
+ */
