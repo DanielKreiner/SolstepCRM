@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
+import { formatInTimeZone } from "date-fns-tz";
+import { TZ } from "@/lib/format";
+import { alsZeitpunkt, tagPlus, zeitraum } from "@/lib/einsatz/zeitfeld";
 import { useFormStatus } from "react-dom";
 import { Dialog, DialogFuss } from "@/components/ui/Dialog";
 import { Suchauswahl, type Option } from "@/components/ui/Suchauswahl";
@@ -195,19 +198,30 @@ function Legende() {
   );
 }
 
-/**
- * Ein gespeicherter Zeitpunkt als Wert für ein datetime-local-Feld.
+/*
+ * Ein gespeicherter Zeitpunkt als Wert fürs Formular — getrennt nach Tag
+ * und Uhrzeit.
  *
- * `toISOString()` ginge nicht: das liefert UTC, und ein Einsatz von 07:00
- * stünde im Formular als 05:00. Gefragt ist die Wanduhrzeit des Browsers,
- * die auch der Planer sieht.
+ * Gerechnet wird in der Zeitzone des Betriebs, nicht in der des Browsers.
+ * `getHours()` las die Zone des Geräts; wer im Urlaub die Tafel öffnete,
+ * bekam die Einsätze um zwei Stunden verschoben zu sehen.
  */
-function lokal(iso: string): string {
-  const d = new Date(iso);
-  const zwei = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}T${zwei(
-    d.getHours(),
-  )}:${zwei(d.getMinutes())}`;
+function tagVon(iso: string): string {
+  return formatInTimeZone(new Date(iso), TZ, "yyyy-MM-dd");
+}
+
+function zeitVon(iso: string): string {
+  return formatInTimeZone(new Date(iso), TZ, "HH:mm");
+}
+
+/** "2026-09-01" -> "Di, 01.09." — für den Klartext unter den Feldern. */
+function datumText(tag: string): string {
+  return new Date(`${tag}T12:00:00Z`).toLocaleDateString("de-AT", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: TZ,
+  });
 }
 
 /** Datum um Tage verschieben, ohne Zeitzonenrechnerei. */
@@ -266,22 +280,64 @@ function EinsatzDialog({
   );
   const [fahrzeugId, setFahrzeugId] = useState(block?.fahrzeugId ?? "");
   const [benoetigt, setBenoetigt] = useState<string[]>(block?.benoetigt ?? []);
-  const [vonRoh, setVonRoh] = useState(
-    block ? lokal(block.von) : `${tag}T07:00`,
+  /*
+   * Tag und Uhrzeit stehen getrennt — ein Feld je Sache.
+   *
+   * Vorher hingen beide in je einem `datetime-local`, dessen Wert bei
+   * jedem Tastendruck neu von React gesetzt wurde. Beim Tippen sprangen
+   * die Ziffern: aus 11 bis 14 Uhr wurde 12 bis 16. Ein Datumsfeld und
+   * zwei Uhrzeitfelder haben je einen einzigen Wert und können nicht
+   * springen — und für den Betrieb sind sie ohnehin die natürliche
+   * Eingabe: ein Tag, von wann bis wann.
+   */
+  const [datum, setDatum] = useState(block ? tagVon(block.von) : tag);
+  const [zeitA, setZeitA] = useState(block ? zeitVon(block.von) : "07:00");
+  const [zeitE, setZeitE] = useState(block ? zeitVon(block.bis) : "16:00");
+  const [endDatum, setEndDatum] = useState(
+    block ? tagVon(block.bis) : tag,
   );
-  const [bisRoh, setBisRoh] = useState(
-    block ? lokal(block.bis) : `${tag}T16:00`,
+  const [mehrtaegig, setMehrtaegig] = useState(
+    block ? tagVon(block.von) !== tagVon(block.bis) && !block.ganztaegig : false,
   );
   const [grund, setGrund] = useState("");
   const [loeschFrage, setLoeschFrage] = useState(false);
 
   /*
-   * Ganztägig heisst 00:00 bis 23:59 — und dann hat eine Uhrzeit im Feld
-   * nichts verloren. Vorher standen beide Felder weiter mit Uhrzeit da,
-   * obwohl der Wert ignoriert wurde.
+   * Ganztägig heisst 00:00 bis 23:59 — und dann haben die Uhrzeitfelder
+   * nichts zu suchen.
+   *
+   * Ohne zweites Datum endet der Einsatz am selben Tag — ausser die
+   * Endzeit liegt vor der Anfangszeit. 22:00 bis 06:00 ist keine
+   * Fehleingabe, sondern eine Nachtstörung, und der Dialog sagt es
+   * darunter auch dazu.
    */
-  const von = ganztaegig ? `${vonRoh.slice(0, 10)}T00:00` : vonRoh;
-  const bis = ganztaegig ? `${bisRoh.slice(0, 10)}T23:59` : bisRoh;
+  const { von, bis, bisTag, ueberNacht } = zeitraum({
+    datum,
+    zeitVon: zeitA,
+    zeitBis: zeitE,
+    endDatum,
+    mehrtaegig,
+    ganztaegig,
+  });
+
+  /*
+   * Ein Satz darunter sagt, was gespeichert wird. Beim Nachteinsatz ist
+   * das keine Verzierung: 22:00 bis 06:00 endet am nächsten Tag, und das
+   * sieht man den beiden Uhrzeiten nicht an.
+   */
+  const zeitraumText = (
+    ganztaegig
+      ? `Ganztägig am ${datumText(datum)}` +
+        (mehrtaegig && endDatum !== datum ? ` bis ${datumText(endDatum)}` : "") +
+        "."
+      : `${datumText(datum)}, ${zeitA} bis ${zeitE} Uhr` +
+        (ueberNacht
+          ? ` — endet am Folgetag, ${datumText(bisTag)}`
+          : mehrtaegig && endDatum !== datum
+            ? ` am ${datumText(endDatum)}`
+            : "") +
+        "."
+  ).replace("..", ".");
 
   /*
    * Geprüft wird beim Tippen, nicht erst beim Absenden.
@@ -293,12 +349,14 @@ function EinsatzDialog({
    * Oberfläche umgehen kann.
    */
   const konflikte = useMemo(() => {
-    if (!von || !bis || new Date(bis) <= new Date(von)) return [];
+    const vonIso = alsZeitpunkt(von);
+    const bisIso = alsZeitpunkt(bis);
+    if (!von || !bis || bisIso <= vonIso) return [];
     return pruefe({
       neu: {
         id: block?.id ?? "neu",
-        von: new Date(von).toISOString(),
-        bis: new Date(bis).toISOString(),
+        von: vonIso,
+        bis: bisIso,
         personen: gewaehlt,
         fahrzeugId: fahrzeugId || null,
         titel: "dieser Einsatz",
@@ -472,6 +530,7 @@ function EinsatzDialog({
         <Beschriftung>Bezeichnung</Beschriftung>
         <input
           name="titel"
+          aria-label="Bezeichnung"
           defaultValue={block?.titel ?? ""}
           placeholder={art === "intern" ? "z. B. Lager aufräumen" : "z. B. Montage Tag 1"}
           className="mb-3 w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
@@ -489,36 +548,86 @@ function EinsatzDialog({
           Ganztägig
         </label>
 
-        <div className="mb-3 grid gap-3 sm:grid-cols-2">
+        <label className="mb-2 flex items-center gap-2 text-[12.5px]">
+          <input
+            type="checkbox"
+            checked={mehrtaegig}
+            onChange={(e) => {
+              setMehrtaegig(e.target.checked);
+              if (e.target.checked && endDatum <= datum) {
+                setEndDatum(tagPlus(datum, 1));
+              }
+            }}
+            className="h-4 w-4 accent-[var(--accent)]"
+          />
+          Geht über mehrere Tage
+        </label>
+
+        <div className="mb-1 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+          <div>
+            <Beschriftung>{mehrtaegig ? "Erster Tag" : "Tag"}</Beschriftung>
+            <input
+              type="date"
+              required
+              aria-label={mehrtaegig ? "Erster Tag" : "Tag"}
+              value={datum}
+              onChange={(e) => {
+                const wert = e.target.value;
+                if (!wert) return;
+                setDatum(wert);
+                if (endDatum < wert) setEndDatum(wert);
+              }}
+              className="num w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
+            />
+          </div>
           <div>
             <Beschriftung>Von</Beschriftung>
             <input
-              type={ganztaegig ? "date" : "datetime-local"}
-              required
-              value={ganztaegig ? vonRoh.slice(0, 10) : vonRoh}
-              onChange={(e) =>
-                setVonRoh(
-                  ganztaegig ? `${e.target.value}T00:00` : e.target.value,
-                )
-              }
-              className="num w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
+              type="time"
+              required={!ganztaegig}
+              disabled={ganztaegig}
+              step={300}
+              aria-label="Von"
+              value={zeitA}
+              onChange={(e) => setZeitA(e.target.value)}
+              className="num w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent disabled:opacity-40"
             />
           </div>
           <div>
             <Beschriftung>Bis</Beschriftung>
             <input
-              type={ganztaegig ? "date" : "datetime-local"}
-              required
-              value={ganztaegig ? bisRoh.slice(0, 10) : bisRoh}
-              onChange={(e) =>
-                setBisRoh(
-                  ganztaegig ? `${e.target.value}T23:59` : e.target.value,
-                )
-              }
-              className="num w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
+              type="time"
+              required={!ganztaegig}
+              disabled={ganztaegig}
+              step={300}
+              aria-label="Bis"
+              value={zeitE}
+              onChange={(e) => setZeitE(e.target.value)}
+              className="num w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent disabled:opacity-40"
             />
           </div>
         </div>
+
+        {mehrtaegig ? (
+          <div className="mb-1 sm:w-1/2 sm:pr-[6px]">
+            <Beschriftung>Letzter Tag</Beschriftung>
+            <input
+              type="date"
+              required
+              aria-label="Letzter Tag"
+              min={datum}
+              value={endDatum}
+              onChange={(e) => e.target.value && setEndDatum(e.target.value)}
+              className="num w-full rounded-input border border-line bg-surface px-[13px] py-[10px] text-[13.5px] outline-0 focus:border-accent"
+            />
+          </div>
+        ) : null}
+
+        {/*
+          Was gespeichert wird, steht ausgeschrieben darunter — sonst
+          rät man beim Nachteinsatz, an welchem Tag er endet.
+        */}
+        <p className="mb-3 text-[11.5px] text-muted">{zeitraumText}</p>
 
         <Beschriftung>
           Wer fährt{gewaehlt.length ? ` — ${gewaehlt.length} gewählt` : ""}

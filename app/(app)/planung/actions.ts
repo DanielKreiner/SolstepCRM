@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { alsPruefdaten, tafelLaden } from "@/lib/einsatz/daten";
+import { alsZeitpunkt } from "@/lib/einsatz/zeitfeld";
 import { blockiert, pruefe, type EinsatzKonflikt } from "@/lib/einsatz/konflikte";
 import { terminMitteilen } from "@/lib/vorgang/kundenmails";
 
@@ -62,11 +63,6 @@ const anlegenSchema = z.object({
   /** Beim Verschieben gesetzt. */
   einsatzId: z.string().uuid().optional().or(z.literal("")),
 });
-
-/** Lokale Eingabe („2026-08-12T07:00") in einen Zeitpunkt. */
-function alsZeitpunkt(roh: string): string {
-  return new Date(roh).toISOString();
-}
 
 export async function einsatzSpeichern(
   _prev: PlanStatus,

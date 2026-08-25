@@ -4,8 +4,8 @@ import { Planung } from "@/components/planung/Planung";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { kalenderwoche, tafelLaden } from "@/lib/einsatz/daten";
-import { viennaDay } from "@/lib/format";
-import { addDays, startOfViennaWeek } from "@/lib/time";
+import { dateShort, TZ, viennaDay } from "@/lib/format";
+import { addDays, startOfViennaDay, startOfViennaWeek } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Planung" };
 
@@ -46,8 +46,13 @@ export default async function PlanungPage({
    */
   const tage = Array.from({ length: 5 }, (_, i) => addDays(montagIso, i));
 
-  const von = new Date(`${montagIso}T00:00:00`);
-  const bis = new Date(`${addDays(montagIso, 7)}T00:00:00`);
+  /*
+   * Die Wochengrenzen laufen über die Zeitzone des Betriebs. `new Date()`
+   * auf einen Datumsstring las die Zone des Servers — auf Vercel UTC —,
+   * und damit fehlten am Rand der Woche zwei Stunden Einsätze.
+   */
+  const von = startOfViennaDay(montagIso);
+  const bis = startOfViennaDay(addDays(montagIso, 7));
 
   const tafel = await tafelLaden(supabase, von, bis);
 
@@ -92,19 +97,19 @@ export default async function PlanungPage({
     .order("sort");
 
   const darfPlanen = me.perms.pipelines === "write";
-  const sonntag = new Date(`${addDays(montagIso, 6)}T00:00:00`);
+  const sonntag = new Date(`${addDays(montagIso, 6)}T12:00:00Z`);
 
   return (
     <>
       <PageHeader
         title="Plantafel"
-        subtitle={`Der Einsatz ist die Planungseinheit · KW ${kalenderwoche(von)} · ${von.toLocaleDateString(
-          "de-AT",
-          { day: "2-digit", month: "2-digit" },
+        subtitle={`Der Einsatz ist die Planungseinheit · KW ${kalenderwoche(von)} · ${dateShort(
+          montagIso,
         )}–${sonntag.toLocaleDateString("de-AT", {
           day: "2-digit",
           month: "2-digit",
           year: "numeric",
+          timeZone: TZ,
         })}${darfPlanen ? " · leere Zelle klicken legt einen Einsatz an" : ""}`}
       />
 

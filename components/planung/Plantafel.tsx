@@ -11,7 +11,9 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { initials } from "@/lib/format";
+import { initials, time, TZ, viennaDay } from "@/lib/format";
+import { fromZonedTime } from "date-fns-tz";
+import { endOfViennaDay, startOfViennaDay } from "@/lib/time";
 import { einsatzVerschieben } from "@/app/(app)/planung/actions";
 import type { EinsatzKonflikt } from "@/lib/einsatz/konflikte";
 
@@ -94,15 +96,15 @@ const ROLLE: Record<string, string> = {
   lager: "Lager",
 };
 
-function tagesSchluessel(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
+/*
+ * Tag und Uhrzeit kommen aus der Zeitzone des Betriebs, nicht aus der des
+ * Geräts. Vorher rechnete die Tafel mit `getHours()` und `new Date(tag)`
+ * — beides die Browserzone. Auf einem Rechner ausserhalb von Mitteleuropa
+ * rutschten die Blöcke damit um Stunden, ganztägige Einsätze sogar in die
+ * Spalte des Vortags.
+ */
 function uhr(iso: string): string {
-  return new Date(iso).toLocaleTimeString("de-AT", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return time(iso);
 }
 
 export function Plantafel({
@@ -157,9 +159,13 @@ export function Plantafel({
     const bisAlt = new Date(block.bis);
     const dauer = bisAlt.getTime() - vonAlt.getTime();
 
-    const [j, m, t] = tag.split("-").map(Number);
-    const vonNeu = new Date(vonAlt);
-    vonNeu.setFullYear(j!, m! - 1, t!);
+    /*
+     * Die Wanduhrzeit des Betriebs bleibt stehen, das Datum wandert.
+     * Über `setFullYear` auf dem Date-Objekt ginge es auch — aber das
+     * rechnet in der Zone des Geräts, und beim Wechsel der Sommerzeit
+     * verschöbe sich der Einsatz um eine Stunde.
+     */
+    const vonNeu = fromZonedTime(`${tag}T${time(vonAlt)}:00`, TZ);
     const bisNeu = new Date(vonNeu.getTime() + dauer);
 
     if (vonNeu.getTime() === vonAlt.getTime() && (!wer || wer === "-")) return;
@@ -249,8 +255,9 @@ export function Plantafel({
                 Ressource
               </div>
               {tage.map((t) => {
-                const d = new Date(t);
-                const heute = tagesSchluessel(new Date()) === tagesSchluessel(d);
+                /* Mittags, damit die Zone den Kalendertag nicht kippt. */
+                const d = new Date(`${t}T12:00:00Z`);
+                const heute = viennaDay() === t;
                 return (
                   <div key={t} className="border-l border-line px-4 py-[14px]">
                     <div
@@ -259,12 +266,13 @@ export function Plantafel({
                         heute ? "text-accent-ink" : "",
                       ].join(" ")}
                     >
-                      {d.toLocaleDateString("de-AT", { weekday: "short" })}
+                      {d.toLocaleDateString("de-AT", { weekday: "short", timeZone: TZ })}
                     </div>
                     <div className="num text-[11.5px] text-faint">
                       {d.toLocaleDateString("de-AT", {
                         day: "2-digit",
                         month: "2-digit",
+                        timeZone: TZ,
                       })}
                     </div>
                   </div>
@@ -354,9 +362,8 @@ function Zelle({
   const zellId = `z:${tag}:${zeile.typ === "person" ? zeile.id : "-"}`;
   const { setNodeRef, isOver } = useDroppable({ id: zellId, disabled: !darfPlanen });
 
-  const tagStart = new Date(tag);
-  const tagEnde = new Date(tagStart);
-  tagEnde.setDate(tagEnde.getDate() + 1);
+  const tagStart = startOfViennaDay(tag);
+  const tagEnde = endOfViennaDay(tag);
 
   const drin = bloecke.filter((b) => {
     const passt =
