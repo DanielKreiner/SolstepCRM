@@ -31,6 +31,7 @@ interface Zeile {
   foto_breite: number | null;
   foto_hoehe: number | null;
   foto_meter_pro_pixel: number | null;
+  vorgang_id: string | null;
 }
 
 export default async function PlanerProjektPage({
@@ -48,13 +49,45 @@ export default async function PlanerProjektPage({
     .from("planer_projekt")
     .select(
       "id, name, adresse, ursprung_lat, ursprung_lon, anbieter, zoom, plan, " +
-        "foto_pfad, foto_breite, foto_hoehe, foto_meter_pro_pixel",
+        "foto_pfad, foto_breite, foto_hoehe, foto_meter_pro_pixel, vorgang_id",
     )
     .eq("id", id)
     .maybeSingle();
 
   const zeile = data as Zeile | null;
   if (!zeile) notFound();
+
+  /*
+   * Hängt ein Vorgang dran, gilt SEINE Angebotssumme als Anlagenpreis.
+   *
+   * Sonst rechnet der Planer mit einem Richtpreis aus der Staffel,
+   * während der Kunde ein Angebot mit einer anderen Summe in der Hand
+   * hält — zwei Amortisationen für dieselbe Anlage. Gezählt werden die
+   * Positionen des offenen Angebots (ohne Dokumentbezug), netto, mit
+   * Rabatt.
+   */
+  let angebotssumme: number | null = null;
+  if (zeile.vorgang_id) {
+    const { data: positionen } = await supabase
+      .from("vorgang_position")
+      .select("menge, ep_netto, rabatt_prozent")
+      .eq("vorgang_id", zeile.vorgang_id)
+      .is("dokument_id", null);
+
+    const zeilen = (positionen ?? []) as Array<{
+      menge: number | string;
+      ep_netto: number | string;
+      rabatt_prozent: number | string | null;
+    }>;
+    if (zeilen.length > 0) {
+      angebotssumme = zeilen.reduce(
+        (s2, p) =>
+          s2 +
+          Number(p.menge) * Number(p.ep_netto) * (1 - Number(p.rabatt_prozent ?? 0) / 100),
+        0,
+      );
+    }
+  }
 
   /*
    * Welche Anbieter eingerichtet sind — ohne die Schlüssel selbst. Der
@@ -192,6 +225,7 @@ export default async function PlanerProjektPage({
         speicher: (geraeteSpeicher ?? []) as unknown as GeraetSpeicher[],
       }}
       vorgabe={vorgabe}
+      angebotssumme={angebotssumme}
       regionen={regionen}
       kunden={((kundenZeilen ?? []) as Array<{ id: string; name: string; city: string | null }>).map(
         (k) => ({ id: k.id, name: k.name, ort: k.city }),

@@ -296,3 +296,36 @@ export function richtpreis(kwp: number, staffel: PreisStufe[], speicherPreis = 0
   if (!passend) return speicherPreis;
   return Math.round(kwp * passend.eur_pro_kwp) + speicherPreis;
 }
+
+/** Woher der Anlagenpreis in der Rechnung stammt. */
+export type Preisquelle = "getippt" | "angebot" | "richtpreis";
+
+/**
+ * Welcher Anlagenpreis gilt — und warum.
+ *
+ * Es gab zwei Wahrheiten über denselben Preis: Der Planer rechnete
+ * Ersparnis, Amortisation und Break-even aus einem Richtpreis (€ je
+ * kWp aus der Staffel), das Angebot summierte Positionen. Beide gingen
+ * als PDF zum Kunden. Wer im Angebot eine Zeile änderte, hatte danach
+ * zwei verschiedene Amortisationen im selben Vorgang — und niemand
+ * merkte es.
+ *
+ * Die Reihenfolge ist deshalb festgelegt:
+ *
+ * 1. Was jemand von Hand eingetippt hat, gilt. Immer.
+ * 2. Sonst die Summe des Angebots, sobald eines dranhängt. Das ist der
+ *    Preis, den der Kunde schwarz auf weiss bekommt.
+ * 3. Sonst der Richtpreis aus der Staffel — eine Schätzung, solange es
+ *    nichts Besseres gibt.
+ */
+export function anlagenpreisGilt(
+  getippt: number | null,
+  angebotssumme: number | null,
+  richtpreis: number,
+): { wert: number; quelle: Preisquelle } {
+  if (getippt !== null && Number.isFinite(getippt)) return { wert: getippt, quelle: "getippt" };
+  if (angebotssumme !== null && angebotssumme > 0) {
+    return { wert: angebotssumme, quelle: "angebot" };
+  }
+  return { wert: richtpreis, quelle: "richtpreis" };
+}

@@ -1491,8 +1491,20 @@ export function Leinwand(p: LeinwandProps) {
         const bezug = entwurf.current.length
           ? entwurf.current[entwurf.current.length - 1]!
           : null;
-        const m = s.werkzeug === "flaeche" ? gefangen(jetzt, bezug) : bildZuMeter(k, jetzt);
-        zeigerRef.current = s.werkzeug === "flaeche" ? m : null;
+        /*
+         * Sperrzone und Gaube werden seit dem 13.08.2026 als Vieleck
+         * gezeichnet — also brauchen sie dieselbe Vorschau wie eine
+         * Dachfläche: die Gummilinie vom letzten Punkt zum Zeiger.
+         *
+         * Ohne sie sah man beim Ziehen nichts und erst nach dem
+         * nächsten Klick, was entstanden war. Aus dem Betrieb kam
+         * dazu: „man sieht nicht das Polygon beim Schieben, erst wenn
+         * man einen Punkt hinzugefügt hat."
+         */
+        const zeichnet =
+          s.werkzeug === "flaeche" || s.werkzeug === "hindernis" || s.werkzeug === "gaube";
+        const m = zeichnet ? gefangen(jetzt, bezug) : bildZuMeter(k, jetzt);
+        zeigerRef.current = zeichnet ? m : null;
         setZeigerMeter(m);
 
         /*
@@ -2248,7 +2260,12 @@ export function Leinwand(p: LeinwandProps) {
       const bp = { x: e.clientX - r.left, y: e.clientY - r.top };
       const s = stand.current;
 
-      if (s.werkzeug === "flaeche") {
+      /*
+       * Doppelklick schliesst — bei allen drei Vieleck-Werkzeugen.
+       * Wer die letzte Ecke zweimal antippt, meint „fertig"; den Weg
+       * zurück zur ersten Ecke spart das.
+       */
+      if (s.werkzeug === "flaeche" || s.werkzeug === "hindernis" || s.werkzeug === "gaube") {
         entwurfAbschliessen();
         return;
       }

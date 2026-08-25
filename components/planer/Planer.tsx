@@ -57,6 +57,7 @@ import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
 import { anzahlModule, kwp, modulAnbauen } from "@/lib/planer/module";
 import { modulEntfernen, modulSetzen } from "@/lib/planer/setzen";
+import { anlagenpreisGilt } from "@/lib/planer/wirtschaft";
 import { ursprungVersetzen } from "@/lib/planer/ursprung";
 import { strangUmschalten } from "@/lib/planer/strings";
 import { num } from "@/lib/format";
@@ -211,6 +212,7 @@ export function Planer({
   schreibrecht,
   geraete,
   vorgabe,
+  angebotssumme,
   regionen,
   kunden,
 }: {
@@ -219,6 +221,11 @@ export function Planer({
   schreibrecht: boolean;
   geraete: { module: GeraetModul[]; wechselrichter: GeraetWr[]; speicher: GeraetSpeicher[] };
   vorgabe: WirtschaftVorgabe;
+  /**
+   * Nettosumme des offenen Angebots am verknüpften Vorgang, falls es
+   * eines gibt. Sie schlägt den Richtpreis — siehe `anlagenpreisGilt`.
+   */
+  angebotssumme: number | null;
   regionen: FoerderRegion[];
   kunden: KundeKurz[];
 }) {
@@ -552,14 +559,22 @@ export function Planer({
     (gewaehlterSpeicher ? Number(gewaehlterSpeicher.nutzbar_kwh) : 0);
 
   const w = plan.wirtschaft;
+  /*
+   * Ein Preis, eine Wahrheit: Getipptes zuerst, dann die Angebotssumme,
+   * dann der Richtpreis aus der Staffel. Ohne diese Reihenfolge rechnet
+   * die Planung mit einer Schätzung, während der Kunde ein Angebot mit
+   * einer anderen Summe in der Hand hält.
+   */
+  const preis = anlagenpreisGilt(
+    w.anlagenpreis,
+    angebotssumme ?? null,
+    preisVorschlag(vorgabe, leistung, speicherKwh, w.mitSpeicher),
+  );
   const wirtschaftWerte = {
     verbrauchKwh: gilt(w.verbrauchKwh, 4500),
     strompreis: gilt(w.strompreis, vorgabe.strompreis),
     verguetung: gilt(w.verguetung, vorgabe.verguetung),
-    anlagenpreis: gilt(
-      w.anlagenpreis,
-      preisVorschlag(vorgabe, leistung, speicherKwh, w.mitSpeicher),
-    ),
+    anlagenpreis: preis.wert,
     foerderung: gilt(w.foerderung, regionen.find((r) => r.region === w.region)?.betrag ?? 0),
   };
 
@@ -1307,6 +1322,7 @@ export function Planer({
                     regionen={regionen}
                     anlageKwp={leistung}
                     speicherKwh={speicherKwh}
+                    angebotssumme={angebotssumme ?? null}
                     schreibrecht={schreibrecht}
                   />
                 )}

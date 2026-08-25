@@ -7,6 +7,7 @@ import {
   verbrauchAusChips,
   type WirtschaftEingaben,
   autarkie,
+  anlagenpreisGilt,
 } from "./wirtschaft";
 
 /*
@@ -242,5 +243,29 @@ describe("Vorbelegungen", () => {
     // Staffel beginnt erst bei 5 kWp — eine 3-kWp-Anlage bleibt offen.
     expect(richtpreis(3, [{ ab_kwp: 5, eur_pro_kwp: 1500 }])).toBe(0);
     expect(richtpreis(0, [{ ab_kwp: 0, eur_pro_kwp: 1500 }])).toBe(0);
+  });
+});
+
+describe("anlagenpreisGilt", () => {
+  it("nimmt den getippten Preis, auch wenn ein Angebot dranhängt", () => {
+    expect(anlagenpreisGilt(21000, 24500, 19000)).toEqual({ wert: 21000, quelle: "getippt" });
+  });
+
+  it("nimmt sonst die Angebotssumme", () => {
+    /*
+     * Der Punkt der ganzen Änderung: Sobald ein Angebot existiert, ist
+     * SEINE Summe der Preis — sonst liest der Kunde zwei verschiedene
+     * Amortisationen im selben Vorgang.
+     */
+    expect(anlagenpreisGilt(null, 24500, 19000)).toEqual({ wert: 24500, quelle: "angebot" });
+  });
+
+  it("fällt ohne Angebot auf den Richtpreis zurück", () => {
+    expect(anlagenpreisGilt(null, null, 19000)).toEqual({ wert: 19000, quelle: "richtpreis" });
+    expect(anlagenpreisGilt(null, 0, 19000)).toEqual({ wert: 19000, quelle: "richtpreis" });
+  });
+
+  it("lässt eine getippte Null gelten — sie ist eine Aussage", () => {
+    expect(anlagenpreisGilt(0, 24500, 19000)).toEqual({ wert: 0, quelle: "getippt" });
   });
 });

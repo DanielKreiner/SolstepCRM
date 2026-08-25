@@ -44,6 +44,8 @@ interface Props {
   anlageKwp: number;
   /** Nutzbare Kapazität des gewählten Speichers, 0 wenn keiner. */
   speicherKwh: number;
+  /** Nettosumme des offenen Angebots, falls ein Vorgang dranhängt. */
+  angebotssumme: number | null;
   schreibrecht: boolean;
 }
 
@@ -73,6 +75,7 @@ export function WirtschaftPanel({
   regionen,
   anlageKwp,
   speicherKwh,
+  angebotssumme,
   schreibrecht,
 }: Props) {
   const w = plan.wirtschaft;
@@ -179,7 +182,7 @@ export function WirtschaftPanel({
           label="Anlagenpreis"
           titel="Vorbelegt aus der Preisstaffel des Betriebs — überschreibbar."
           einheit="€"
-          wert={gilt(w.anlagenpreis, vorschlag)}
+          wert={gilt(w.anlagenpreis, angebotssumme && angebotssumme > 0 ? angebotssumme : vorschlag)}
           schritt={100}
           disabled={!schreibrecht}
           onWert={(v) => setze({ anlagenpreis: v })}
@@ -201,7 +204,41 @@ export function WirtschaftPanel({
        * die Staffel hergäbe, damit ein alter Wert nach dem Umplanen
        * nicht unbemerkt stehen bleibt.
        */}
-      {w.anlagenpreis !== null && vorschlag > 0 && Math.abs(w.anlagenpreis - vorschlag) > 1 ? (
+      {/*
+        * Woher der Preis kommt — das muss dastehen.
+        *
+        * Vorher rechnete die Planung mit einem Richtpreis, während der
+        * Kunde ein Angebot mit einer anderen Summe in der Hand hielt:
+        * zwei Amortisationen für dieselbe Anlage. Jetzt gilt die
+        * Angebotssumme, sobald es eine gibt — und hier steht, dass sie
+        * es tut.
+        */}
+      {w.anlagenpreis === null && angebotssumme && angebotssumme > 0 ? (
+        <p className="-mt-2 text-[12.5px] leading-[1.45] text-muted">
+          Das ist die Summe des Angebots — {num(Math.round(angebotssumme))} € netto. Ändert sich
+          dort eine Position, rechnet die Wirtschaftlichkeit mit.
+        </p>
+      ) : null}
+
+      {w.anlagenpreis !== null && angebotssumme && angebotssumme > 0 ? (
+        <p className="-mt-2 text-[12.5px] leading-[1.45] text-muted">
+          Von Hand gesetzt. Das Angebot steht bei{" "}
+          <button
+            type="button"
+            disabled={!schreibrecht}
+            onClick={() => setze({ anlagenpreis: null })}
+            className="num font-semibold text-accent-ink hover:underline"
+          >
+            {num(Math.round(angebotssumme))} €
+          </button>{" "}
+          — übernehmen
+        </p>
+      ) : null}
+
+      {w.anlagenpreis !== null &&
+      !(angebotssumme && angebotssumme > 0) &&
+      vorschlag > 0 &&
+      Math.abs(w.anlagenpreis - vorschlag) > 1 ? (
         <p className="-mt-2 text-[12.5px] leading-[1.45] text-muted">
           Richtpreis für {num(Math.round(anlageKwp * 100) / 100)} kWp
           {w.mitSpeicher && speicherKwh > 0 ? ` mit ${num(Math.round(speicherKwh * 10) / 10)} kWh Speicher` : ""}:{" "}
