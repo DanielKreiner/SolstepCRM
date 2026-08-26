@@ -1446,5 +1446,19 @@ test.describe("Vorgang anlegen", () => {
 
     await page.waitForURL(/\/vorgaenge\/[0-9a-f-]{36}$/, { timeout: 20_000 });
     await expect(page.getByText("Prüfkunde Fenster").first()).toBeVisible();
+
+    /*
+     * Und hinter sich aufräumen.
+     *
+     * Der Test legt einen echten Kunden mit echtem Vorgang an. Ohne
+     * dieses Aufräumen sammelten sich sie im Demomandanten — nach fünf
+     * Läufen standen fünf „Prüfkunde Fenster" im Board, und vor einem
+     * Kundentermin sieht das niemand gern.
+     */
+    const db = admin();
+    const id = page.url().split("/").pop()!;
+    await db.from("vorgang_event").delete().eq("vorgang_id", id);
+    await db.from("vorgang").delete().eq("id", id);
+    await db.from("customer").delete().eq("company_id", COMPANY_A).eq("name", "Prüfkunde Fenster");
   });
 });
