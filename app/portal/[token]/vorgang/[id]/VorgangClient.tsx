@@ -71,6 +71,17 @@ export function PositionListe({
   );
 }
 
+/*
+ * Wo die feste Leiste anfängt.
+ *
+ * Sie lag über der ganzen Fensterbreite und schob sich damit über die
+ * Seitenleiste — der Ansprechpartner unten links verschwand hinter
+ * einem weissen Balken. Die Zahl ist die Summe aus Aussenabstand,
+ * Seitenleiste und Spalte dazwischen (14 + 246 + 14); unter der
+ * md-Grenze gibt es keine Seitenleiste, dort bleibt sie ganz links.
+ */
+const LEISTE = "fixed right-0 bottom-0 left-0 z-30 border-t border-line bg-surface/97 backdrop-blur md:left-[274px]";
+
 /**
  * Feste Leiste am unteren Rand: Summe links, Zusage rechts.
  *
@@ -92,7 +103,7 @@ export function AngebotAktionen({
   /* Nach der Zusage wird die Seite neu geladen — die Leiste verschwindet. */
   if (status.ok) {
     return (
-      <div className="fixed right-0 bottom-0 left-0 z-30 border-t border-line bg-surface/97 backdrop-blur">
+      <div className={LEISTE}>
         <p
           role="status"
           className="mx-auto w-full max-w-[860px] px-4 py-4 text-[13.5px] font-medium text-s-done"
@@ -104,7 +115,14 @@ export function AngebotAktionen({
   }
 
   return (
-    <div className="fixed right-0 bottom-0 left-0 z-30 border-t border-line bg-surface/97 backdrop-blur">
+    <>
+      {/*
+        Platzhalter im Fluss: Ohne ihn liegt die letzte Zeile des
+        Angebots unter der Leiste, und der Kunde scrollt bis zum Ende,
+        ohne die Summe zu sehen.
+      */}
+      <div aria-hidden className="h-[92px]" />
+      <div className={LEISTE}>
       <div className="mx-auto flex w-full max-w-[860px] flex-wrap items-center gap-3 px-4 py-3">
         <span className="min-w-0">
           <span className="block text-[11px] text-muted">Gesamt brutto</span>
@@ -178,7 +196,8 @@ export function AngebotAktionen({
           </form>
         </div>
       ) : null}
-    </div>
+      </div>
+    </>
   );
 }
 

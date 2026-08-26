@@ -346,6 +346,11 @@ export function flaechenFuerBau(
     const alt = vorhanden.find((f) => f.teil === i);
     const flaeche: Dachflaeche = {
       id: `${bau.id}-${i}`,
+      /*
+       * Der Name wird unten aus der Himmelsrichtung gebildet, sobald
+       * sie feststeht. Bis dahin die Nummer als Platzhalter — sie steht
+       * nirgends lange genug, um jemandem aufzufallen.
+       */
       name: teile.length === 1 ? bau.name : `${bau.name} ${i + 1}`,
       punkte: t.punkte,
       neigung: t.neigung,
@@ -362,6 +367,28 @@ export function flaechenFuerBau(
       teil: i,
     };
     const az = azimutAusTraufe(flaeche);
-    return { ...flaeche, azimut: az ?? 180 };
+    /*
+     * „Fläche 1 Süd" statt „Fläche 1 2".
+     *
+     * Der Name steht im Angebot und im Kundenportal, und dort las sich
+     * die durchnummerierte Fassung wie ein Tippfehler. Die
+     * Himmelsrichtung sagt dem Kunden dagegen genau das, worauf es
+     * ankommt — und dem Monteur auch.
+     */
+    const richtung = az === null ? null : himmelsrichtungKurz(az);
+    return {
+      ...flaeche,
+      azimut: az ?? 180,
+      name:
+        teile.length === 1 || richtung === null
+          ? flaeche.name
+          : `${bau.name} ${richtung}`,
+    };
   });
+}
+
+/** Süd, Nord-Ost … aus dem Azimut. 0° ist Norden, 180° Süden. */
+export function himmelsrichtungKurz(azimut: number): string {
+  const namen = ["Nord", "Nord-Ost", "Ost", "Süd-Ost", "Süd", "Süd-West", "West", "Nord-West"];
+  return namen[Math.round((((azimut % 360) + 360) % 360) / 45) % 8]!;
 }

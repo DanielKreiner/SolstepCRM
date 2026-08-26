@@ -137,6 +137,23 @@ export type PortalDetail = {
     ersparnisJahr1: number;
     ersparnis20: number;
     amortisationJahre: number | null;
+    /* Dieselben Angaben wie im Angebots-PDF — ein Bild, eine Rechnung. */
+    spezifisch: number;
+    monateKwh: number[];
+    verbrauchKwh: number;
+    eigenverbrauchKwh: number;
+    einspeisungKwh: number;
+    strompreis: number;
+    verguetung: number;
+    investition: number;
+    modulAnzahl: number;
+    modulTyp: string | null;
+    wechselrichter: string | null;
+    speicher: string | null;
+    speicherModule: number | null;
+    flaechen: Array<{ name: string; neigung: number; azimut: number; module: number }>;
+    /** Signierter Link auf das Bild der Planung, 15 Minuten gültig. */
+    bildUrl: string | null;
   } | null;
   schritte: PortalSchritt[];
   dokumente: PortalDokument[];
@@ -814,6 +831,22 @@ async function planungFuerPortal(
 ): Promise<PortalDetail["planung"]> {
   const geplant = await planungFuerVorgang(admin, vorgangId);
   if (!geplant) return null;
-  const { bild: _bild, ...zahlen } = geplant;
-  return zahlen;
+
+  /*
+   * Das Bild kommt als signierter Link, nicht als data-URL: Der
+   * Bildschirm lädt es selbst, und eine halbe Megabyte Base64 in jeder
+   * Serverantwort wäre Ballast. Fünfzehn Minuten, wie alle
+   * Portallinks (CLAUDE.md 4.4).
+   */
+  let bildUrl: string | null = null;
+  if (geplant.bildPfad) {
+    const { data } = await admin.storage
+      .from("planer-fotos")
+      .createSignedUrl(geplant.bildPfad, 900);
+    bildUrl = data?.signedUrl ?? null;
+  }
+
+  const { bild: _bild, bildPfad: _pfad, verschattungProzent: _v, steigerung: _s, ...zahlen } =
+    geplant;
+  return { ...zahlen, bildUrl };
 }

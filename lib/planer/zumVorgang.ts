@@ -1,4 +1,7 @@
 import { planungKennzahlen } from "./kennzahlen";
+import { geraetName } from "./geraetname";
+import { anzahlModule } from "./module";
+import { modulzahl, speicherKwhVonPlan } from "./speicher";
 import { planLesen } from "./plan";
 import type { VorgangPdfData } from "@/lib/pdf/vorgang";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -34,17 +37,29 @@ export async function planungFuerVorgang(
   const plan = planLesen((projekt as { plan: unknown }).plan);
   if (plan.gruppen.length === 0) return null;
 
-  const [{ data: vorgabe }, { data: speicherZeilen }, { data: positionen }] = await Promise.all([
+  const [
+    { data: vorgabe },
+    { data: speicherZeilen },
+    { data: positionen },
+    { data: modulZeilen },
+    { data: wrZeilen },
+  ] = await Promise.all([
     supabase
       .from("planer_wirtschaft_vorgabe")
       .select("strompreis, verguetung, steigerung, preisstaffel, speicher_eur_pro_kwh, verlust_prozent")
       .maybeSingle(),
-    supabase.from("planer_speicher").select("id, nutzbar_kwh"),
+    supabase
+      .from("planer_speicher")
+      .select(
+        "id, hersteller, bezeichnung, nutzbar_kwh, modulgroesse_kwh, min_module, max_module, artikel_id, bms_artikel_id",
+      ),
     supabase
       .from("vorgang_position")
       .select("menge, ep_netto, rabatt_prozent")
       .eq("vorgang_id", vorgangId)
       .is("dokument_id", null),
+    supabase.from("planer_modul").select("id, hersteller, bezeichnung"),
+    supabase.from("planer_wechselrichter").select("id, hersteller, bezeichnung"),
   ]);
 
   const zeilen = (positionen ?? []) as Array<{
@@ -61,8 +76,21 @@ export async function planungFuerVorgang(
         )
       : null;
 
-  const geraet = ((speicherZeilen ?? []) as Array<{ id: string; nutzbar_kwh: number | string }>)
-    .find((sp) => sp.id === plan.technik.speicher);
+  const speicherTypen = ((speicherZeilen ?? []) as Array<Record<string, unknown>>).map((sp) => ({
+    id: sp.id as string,
+    hersteller: sp.hersteller as string,
+    bezeichnung: sp.bezeichnung as string,
+    nutzbar_kwh: Number(sp.nutzbar_kwh),
+    modulgroesse_kwh: sp.modulgroesse_kwh == null ? null : Number(sp.modulgroesse_kwh),
+    min_module: (sp.min_module as number | null) ?? null,
+    max_module: (sp.max_module as number | null) ?? null,
+    artikel_id: (sp.artikel_id as string | null) ?? null,
+    bms_artikel_id: (sp.bms_artikel_id as string | null) ?? null,
+  }));
+  const geraet = speicherTypen.find((sp) => sp.id === plan.technik.speicher);
+  const speicherKwh = plan.wirtschaft.mitSpeicher
+    ? speicherKwhVonPlan(plan, speicherTypen)
+    : 0;
 
   const k = planungKennzahlen({
     plan,
@@ -71,6 +99,7 @@ export async function planungFuerVorgang(
       lon: Number((projekt as { ursprung_lon: number }).ursprung_lon),
     },
     geraetSpeicherKwh: geraet ? Number(geraet.nutzbar_kwh) : 0,
+    speicherKwh,
     angebotssumme,
     vorgabe: {
       strompreis: Number(vorgabe?.strompreis ?? 0.32),
@@ -100,6 +129,20 @@ export async function planungFuerVorgang(
     }
   }
 
+  /*
+   * Die Geräte beim Namen nennen. „Wechselrichter: vorhanden" hilft
+   * niemandem — im Angebot steht, was verbaut wird.
+   */
+  const name = (
+    liste: Array<{ id: string; hersteller: string; bezeichnung: string }> | null,
+    id: string | null,
+  ): string | null => {
+    const treffer = (liste ?? []).find((x) => x.id === id);
+    return treffer ? geraetName(treffer) : null;
+  };
+
+  const modulAnzahl = plan.gruppen.reduce((sum, g) => sum + anzahlModule(g), 0);
+
   return {
     kwp: k.kwp,
     jahresertragKwh: k.jahresertragKwh,
@@ -109,5 +152,32 @@ export async function planungFuerVorgang(
     ersparnis20: k.ersparnis20,
     amortisationJahre: k.wirtschaft.amortisationJahre,
     bild,
+    /* Der Speicherort des Bildes — das Portal signiert ihn selbst. */
+    bildPfad: pfad ?? null,
+
+    /* ── Was bisher nur im Planungs-PDF stand ─────────────────── */
+    spezifisch: k.spezifischMittel,
+    monateKwh: k.monateKwh,
+    verschattungProzent: k.verschattung,
+    verbrauchKwh: plan.wirtschaft.verbrauchKwh ?? 4500,
+    eigenverbrauchKwh: k.wirtschaft.eigenverbrauchKwh,
+    einspeisungKwh: k.wirtschaft.einspeisungKwh,
+    strompreis: plan.wirtschaft.strompreis ?? Number(vorgabe?.strompreis ?? 0.32),
+    verguetung: plan.wirtschaft.verguetung ?? Number(vorgabe?.verguetung ?? 0.08),
+    steigerung: Number(vorgabe?.steigerung ?? 0.02),
+    investition: k.wirtschaft.investition,
+    modulAnzahl,
+    modulTyp: name(modulZeilen as never, plan.technik.modul),
+    wechselrichter: name(wrZeilen as never, plan.technik.wechselrichter),
+    speicher: geraet ? geraetName(geraet) : null,
+    speicherModule: geraet && geraet.modulgroesse_kwh ? modulzahl(geraet, plan.technik.speicherModule) : null,
+    flaechen: plan.flaechen.map((f) => ({
+      name: f.name,
+      neigung: f.neigung,
+      azimut: f.azimut,
+      module: plan.gruppen
+        .filter((g) => g.flaeche === f.id)
+        .reduce((sum, g) => sum + anzahlModule(g), 0),
+    })),
   };
 }

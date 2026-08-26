@@ -474,8 +474,9 @@ test.describe("Planer — Übergabe ins Angebot", () => {
       .eq("vorgang_id", projekt!.vorgang_id!);
 
     expect(pos!.length).toBeGreaterThanOrEqual(3);
-    const module = pos!.find((p) => Number(p.menge) > 10)!;
-    expect(module).toBeTruthy();
+    /* Nicht `module`: In Next.js ist der Name gesperrt. */
+    const modulzeile = pos!.find((p) => Number(p.menge) > 10)!;
+    expect(modulzeile).toBeTruthy();
 
     /* Vier Speichermodule und einmal das BMS. */
     const stapel = pos!.filter((p) => Number(p.menge) === 4);

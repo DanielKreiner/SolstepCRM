@@ -25,6 +25,12 @@ export interface KennzahlenEingabe {
   ursprung: { lat: number; lon: number };
   /** Nutzbare Speichergrösse des gewählten Geräts, falls eines dranhängt. */
   geraetSpeicherKwh: number;
+  /**
+   * Schon aufgelöste Speichergrösse — Stapel, Handeingabe oder Gerät.
+   * Gesetzt gewinnt sie: Bei einem modularen Speicher zählt die
+   * Modulzahl, und die kennt nur der Aufrufer.
+   */
+  speicherKwh?: number;
   /** Nettosumme des offenen Angebots, falls es eines gibt. */
   angebotssumme: number | null;
   vorgabe: {
@@ -93,7 +99,7 @@ export function planungKennzahlen(e: KennzahlenEingabe): Kennzahlen {
    * Gerät: Im Erstgespräch steht „zehn Kilowattstunden" fest, lange
    * bevor jemand ein Gerät aussucht.
    */
-  const speicherKwh = plan.wirtschaft.speicherKwh ?? e.geraetSpeicherKwh;
+  const speicherKwh = e.speicherKwh ?? plan.wirtschaft.speicherKwh ?? e.geraetSpeicherKwh;
 
   const anlagenpreis = anlagenpreisGilt(
     plan.wirtschaft.anlagenpreis,

@@ -8,6 +8,7 @@ import {
   PortalShell,
   type PortalBereich,
 } from "@/components/portal/PortalShell";
+import { PlanungsBlock } from "@/components/portal/PlanungsBlock";
 import { AngebotAnsicht } from "./AngebotAnsicht";
 import { OffeneAnfragen, PortalChat } from "./PortalChat";
 import { ConfirmAppointmentForm } from "../../PortalForms";
@@ -328,39 +329,12 @@ export default async function PortalVorgangPage({
             {/*
               * Was die Anlage bringt — vor den Positionen.
               *
-              * Der Kunde liest zuerst, was er spart, dann was es
-              * kostet. Vorher stand im Portal nur die Preisliste,
-              * während die Ertragsrechnung in einem zweiten PDF lag.
+              * Der Kunde liest zuerst, was er bekommt und was er spart,
+              * dann was es kostet. Vorher stand im Portal nur die
+              * Preisliste, während Dach, Ertrag und Wirtschaftlichkeit
+              * in einem zweiten PDF lagen.
               */}
-            {daten.planung && daten.planung.ersparnisJahr1 > 0 ? (
-              <div className="mb-6 rounded-[16px] border border-line bg-sunk p-5">
-                <p className="text-[20px] font-extrabold leading-[1.25] text-accent-ink">
-                  Du sparst rund{" "}
-                  <span className="num tabular-nums">
-                    {Math.round(daten.planung.ersparnisJahr1).toLocaleString("de-AT")} €
-                  </span>{" "}
-                  im Jahr.
-                </p>
-                <p className="mt-2 text-[13.5px] leading-[1.55] text-muted">
-                  {Math.round(daten.planung.jahresertragKwh).toLocaleString("de-AT")} kWh Ertrag,{" "}
-                  {Math.round(daten.planung.autarkie * 100)} % davon deckst du selbst
-                  {daten.planung.speicherKwh > 0
-                    ? ` — mit ${Math.round(daten.planung.speicherKwh * 10) / 10} kWh Speicher`
-                    : " — ohne Speicher"}
-                  . Über zwanzig Jahre rund{" "}
-                  {Math.round(daten.planung.ersparnis20).toLocaleString("de-AT")} €
-                  {daten.planung.amortisationJahre !== null
-                    ? `; bezahlt hat sich die Anlage nach etwa ${
-                        Math.round(daten.planung.amortisationJahre * 10) / 10
-                      } Jahren.`
-                    : "."}
-                </p>
-                <p className="mt-2 text-[11.5px] leading-[1.45] text-muted">
-                  Richtwerte aus der Planung — der Ertrag hängt vom Wetter ab, die Ersparnis vom
-                  Strompreis.
-                </p>
-              </div>
-            ) : null}
+            {daten.planung ? <PlanungsBlock planung={daten.planung} /> : null}
 
             <AngebotAnsicht
               positionen={positionen}
