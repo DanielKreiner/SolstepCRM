@@ -286,23 +286,49 @@ const s = StyleSheet.create({
   },
 
   /* ── Die Seiten aus der Planung ───────────────────────────────── */
-  balkenReihe: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3.5 },
-  balkenLabel: { width: 24, fontSize: 7.5, color: LEISE },
-  balkenBahn: { flex: 1, flexDirection: "row", height: 10, borderRadius: 3, overflow: "hidden" },
-  balkenWert: { width: 54, fontSize: 7.5, textAlign: "right", color: LEISE },
-  legende: { flexDirection: "row", gap: 14, marginTop: 8 },
-  legendePunkt: { flexDirection: "row", alignItems: "center", gap: 4 },
-  legendeKlecks: { width: 8, height: 8, borderRadius: 2 },
+
+  /*
+   * Der Aufbau folgt dem Kostenvoranschlag, den der Betrieb als Vorbild
+   * gegeben hat: grosse Überschrift, ein Satz darunter, was gezeigt
+   * wird — und dann Karten statt nackter Zeilen. Nackte Zeilen auf
+   * grauem Grund waren der Grund für „sieht designtechnisch komplett
+   * beschissen aus".
+   */
+  planTitel: { fontSize: 24, fontFamily: "Helvetica-Bold", letterSpacing: -0.7, lineHeight: 1.15 },
+  planLead: { fontSize: 10, color: LEISE, lineHeight: 1.55, marginTop: 8, marginBottom: 18 },
+  abschnitt: { fontSize: 8, fontFamily: "Helvetica-Bold", letterSpacing: 1.1, color: ZART, marginTop: 22, marginBottom: 9 },
+
+  karten: { flexDirection: "row", gap: 9 },
+  karte: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: LINIE,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  karteZahl: { fontSize: 17, fontFamily: "Helvetica-Bold", letterSpacing: -0.5, lineHeight: 1.2 },
+  karteLabel: { fontSize: 7.5, color: ZART, marginTop: 3, lineHeight: 1.4 },
+
+  tafel: { borderWidth: 1, borderColor: LINIE, borderRadius: 10, paddingHorizontal: 13, paddingVertical: 4 },
+
+  balkenReihe: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  balkenLabel: { width: 22, fontSize: 7.5, color: ZART },
+  balkenBahn: { flex: 1, flexDirection: "row", height: 11, borderRadius: 5.5, overflow: "hidden" },
+  balkenWert: { width: 56, fontSize: 7.5, textAlign: "right", color: LEISE },
+  legende: { flexDirection: "row", gap: 16, marginTop: 10 },
+  legendePunkt: { flexDirection: "row", alignItems: "center", gap: 5 },
+  legendeKlecks: { width: 9, height: 9, borderRadius: 4.5 },
   legendeText: { fontSize: 7.5, color: LEISE },
 
-  flussBahn: { flexDirection: "row", height: 16, borderRadius: 4, overflow: "hidden", marginTop: 6 },
+  flussBahn: { flexDirection: "row", height: 20, borderRadius: 10, overflow: "hidden", marginTop: 8 },
   flussTeil: { alignItems: "center", justifyContent: "center" },
   flussProzent: { fontSize: 7.5, color: "#FFFFFF", fontFamily: "Helvetica-Bold" },
 
-  quote: { flexDirection: "row", gap: 12, marginTop: 12 },
-  quoteFeld: { flex: 1, backgroundColor: FLAECHE, borderRadius: 8, padding: 11 },
-  quoteZahl: { fontSize: 19, fontFamily: "Helvetica-Bold" },
-  quoteText: { fontSize: 7.5, color: LEISE, lineHeight: 1.45, marginTop: 3 },
+  quote: { flexDirection: "row", gap: 10, marginTop: 14 },
+  quoteFeld: { flex: 1, backgroundColor: FLAECHE, borderRadius: 10, padding: 13 },
+  quoteZahl: { fontSize: 22, fontFamily: "Helvetica-Bold", letterSpacing: -0.6, lineHeight: 1.2 },
+  quoteText: { fontSize: 8, color: LEISE, lineHeight: 1.5, marginTop: 4 },
 
   kurveReihe: { flexDirection: "row", alignItems: "flex-end", gap: 2, height: 96, marginTop: 10 },
   kurveSaeule: { flex: 1, alignItems: "center", justifyContent: "flex-end" },
@@ -321,7 +347,7 @@ const s = StyleSheet.create({
 
   planBild: {
     width: "100%",
-    height: 205,
+    height: 230,
     objectFit: "cover",
     borderRadius: 8,
     marginTop: 4,
@@ -333,14 +359,15 @@ const s = StyleSheet.create({
   monatWert: { width: 56, fontSize: 8, textAlign: "right" },
   wertZeile: {
     flexDirection: "row",
-    alignItems: "baseline",
-    paddingVertical: 5.5,
+    /* Nicht `baseline`: Ein zweizeiliger Gerätename zöge das Label mit nach unten. */
+    alignItems: "flex-start",
+    paddingVertical: 7,
     borderBottomWidth: 0.5,
     borderBottomColor: LINIE,
   },
-  wertK: { color: LEISE },
-  wertV: { marginLeft: "auto", fontFamily: "Helvetica-Bold" },
-  spalten2: { flexDirection: "row", gap: 18 },
+  wertK: { color: LEISE, flex: 1, paddingRight: 8 },
+  wertV: { flex: 1.5, textAlign: "right", fontFamily: "Helvetica-Bold" },
+  spalten2: { flexDirection: "row", gap: 22 },
   spalte: { flex: 1 },
 
   /* -------------------------------------------------------------- TEXTE */
@@ -416,6 +443,10 @@ const s = StyleSheet.create({
     flexDirection: "row",
   },
 });
+
+/** Runde Beträge ohne Cent — für Kacheln, wo zwei Nachkommastellen nur Lärm sind. */
+const eurKurz = (n: number) =>
+  `${Math.round(n).toLocaleString("de-AT")} €`;
 
 const eur = (n: number) =>
   `${n.toLocaleString("de-AT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
@@ -946,39 +977,42 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
           {/* ── Seite: Deine Anlage ─────────────────────────────── */}
           <Page size="A4" style={s.page}>
             <PlanKopf data={data} nummer={nummer} />
-            <Text style={[s.h1, { color: akzent }]}>Deine Anlage</Text>
-            <View style={[s.bandStrich, { backgroundColor: akzent, width: 54, marginBottom: 10 }]} />
+            <Text style={s.planTitel}>Deine Anlage</Text>
+            <Text style={s.planLead}>
+              Das ist die Anlage, die wir für dich geplant haben — so liegt sie auf deinem
+              Dach, und das steckt darin.
+            </Text>
 
             {geplant.bild ? (
               /* eslint-disable-next-line jsx-a11y/alt-text -- siehe oben */
               <Image src={geplant.bild} style={s.planBild} />
             ) : null}
 
-            <View style={s.kennband}>
-              <View style={s.kennfeld}>
-                <Text style={[s.kennwert, { color: akzent }]}>{zahl(geplant.kwp)} kWp</Text>
-                <Text style={s.kennlabel}>Anlagenleistung</Text>
+            <View style={s.karten}>
+              <View style={s.karte}>
+                <Text style={[s.karteZahl, { color: akzent }]}>{zahl(geplant.kwp)} kWp</Text>
+                <Text style={s.karteLabel}>Anlagenleistung</Text>
               </View>
-              <View style={s.kennfeld}>
-                <Text style={s.kennwert}>{zahl(geplant.modulAnzahl)}</Text>
-                <Text style={s.kennlabel}>Module</Text>
+              <View style={s.karte}>
+                <Text style={s.karteZahl}>{zahl(geplant.modulAnzahl)}</Text>
+                <Text style={s.karteLabel}>Module auf dem Dach</Text>
               </View>
               {geplant.speicherKwh > 0 ? (
-                <View style={s.kennfeld}>
-                  <Text style={s.kennwert}>
+                <View style={s.karte}>
+                  <Text style={s.karteZahl}>
                     {zahl(Math.round(geplant.speicherKwh * 10) / 10)} kWh
                   </Text>
-                  <Text style={s.kennlabel}>Speicher</Text>
+                  <Text style={s.karteLabel}>Speicher</Text>
                 </View>
               ) : null}
-              <View style={s.kennfeld}>
-                <Text style={s.kennwert}>{zahl(Math.round(geplant.jahresertragKwh))} kWh</Text>
-                <Text style={s.kennlabel}>Ertrag im Jahr</Text>
+              <View style={s.karte}>
+                <Text style={s.karteZahl}>{zahl(Math.round(geplant.jahresertragKwh))} kWh</Text>
+                <Text style={s.karteLabel}>Ertrag im Jahr</Text>
               </View>
             </View>
 
-            <Text style={[s.h2, { marginTop: 18 }]}>Was verbaut wird</Text>
-            <View style={s.spalten2}>
+            <Text style={s.abschnitt}>WAS VERBAUT WIRD</Text>
+            <View style={[s.tafel, s.spalten2]}>
               <View style={s.spalte}>
                 {geplant.modulTyp ? (
                   <Wertzeile k={`Module (${zahl(geplant.modulAnzahl)} Stück)`} v={geplant.modulTyp} />
@@ -1029,16 +1063,14 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
           {/* ── Seite: Dein Strom ───────────────────────────────── */}
           <Page size="A4" style={s.page}>
             <PlanKopf data={data} nummer={nummer} />
-            <Text style={[s.h1, { color: akzent }]}>Dein Strom</Text>
-            <View style={[s.bandStrich, { backgroundColor: akzent, width: 54, marginBottom: 10 }]} />
-
-            <Text style={s.h2}>Was das Dach im Jahr liefert</Text>
-            <Text style={{ color: LEISE, marginBottom: 8 }}>
-              {zahl(Math.round(geplant.jahresertragKwh))} kWh, das sind{" "}
+            <Text style={s.planTitel}>Dein Strom</Text>
+            <Text style={s.planLead}>
+              {zahl(Math.round(geplant.jahresertragKwh))} kWh im Jahr, das sind{" "}
               {zahl(Math.round(geplant.spezifisch))} kWh je kWp — gerechnet aus Ausrichtung,
-              Neigung und Verschattung deines Dachs. Die Farben zeigen, was davon direkt ins
-              Haus geht, was über den Speicher läuft und was eingespeist wird.
+              Neigung und Verschattung deines Dachs.
             </Text>
+
+            <Text style={s.abschnitt}>MONAT FÜR MONAT</Text>
 
             {geplant.fluss.monate.map((m, i) => {
               const hoechst = Math.max(...geplant.fluss.monate.map((x) => x.produktion), 1);
@@ -1065,7 +1097,7 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
             />
 
             {/* Wohin geht der Strom */}
-            <Text style={[s.h2, { marginTop: 20 }]}>Wohin geht dein Strom?</Text>
+            <Text style={s.abschnitt}>WOHIN GEHT DEIN STROM?</Text>
             <Text style={{ color: LEISE }}>
               Von {zahl(Math.round(geplant.jahresertragKwh))} kWh Erzeugung bleiben{" "}
               {Math.round(geplant.eigenverbrauchQuote * 100)} % im Haus.
@@ -1087,7 +1119,7 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
             />
 
             {/* Woher kommt der Strom */}
-            <Text style={[s.h2, { marginTop: 18 }]}>Woher kommt dein Strom?</Text>
+            <Text style={s.abschnitt}>WOHER KOMMT DEIN STROM?</Text>
             <Text style={{ color: LEISE }}>
               Dein Haushalt braucht {zahl(Math.round(geplant.verbrauchKwh))} kWh im Jahr.
             </Text>
@@ -1136,22 +1168,25 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
           {/* ── Seite: Was die Anlage rechnet ───────────────────── */}
           <Page size="A4" style={s.page}>
             <PlanKopf data={data} nummer={nummer} />
-            <Text style={[s.h1, { color: akzent }]}>Was die Anlage rechnet</Text>
-            <View style={[s.bandStrich, { backgroundColor: akzent, width: 54, marginBottom: 10 }]} />
+            <Text style={s.planTitel}>Was die Anlage rechnet</Text>
+            <Text style={s.planLead}>
+              Gerechnet mit dem Preis aus deinem Angebot, deinem Verbrauch und deinem
+              Strompreis.
+            </Text>
 
-            <View style={s.kennband}>
-              <View style={s.kennfeld}>
-                <Text style={[s.kennwert, { color: akzent }]}>
-                  {eur(Math.round(geplant.ersparnis20))}
+            <View style={s.karten}>
+              <View style={s.karte}>
+                <Text style={[s.karteZahl, { color: akzent }]}>
+                  {eurKurz(geplant.ersparnis20)}
                 </Text>
-                <Text style={s.kennlabel}>Ersparnis in 20 Jahren</Text>
+                <Text style={s.karteLabel}>Ersparnis in 20 Jahren</Text>
               </View>
               {geplant.amortisationJahre !== null ? (
-                <View style={s.kennfeld}>
-                  <Text style={s.kennwert}>
+                <View style={s.karte}>
+                  <Text style={s.karteZahl}>
                     {zahl(Math.round(geplant.amortisationJahre * 10) / 10)} Jahre
                   </Text>
-                  <Text style={s.kennlabel}>
+                  <Text style={s.karteLabel}>
                     {geplant.breakEvenJahr !== null
                       ? `bezahlt im Jahr ${new Date(data.erstelltAm).getFullYear() + geplant.breakEvenJahr}`
                       : "bis sie sich bezahlt hat"}
@@ -1159,28 +1194,29 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
                 </View>
               ) : null}
               {geplant.rendite !== null ? (
-                <View style={s.kennfeld}>
-                  <Text style={s.kennwert}>
+                <View style={s.karte}>
+                  <Text style={s.karteZahl}>
                     {zahl(Math.round(geplant.rendite * 1000) / 10)} %
                   </Text>
-                  <Text style={s.kennlabel}>Rendite im Jahr</Text>
+                  <Text style={s.karteLabel}>Rendite im Jahr</Text>
                 </View>
               ) : null}
-              <View style={s.kennfeld}>
-                <Text style={s.kennwert}>{eur(Math.round(geplant.investition))}</Text>
-                <Text style={s.kennlabel}>Investition</Text>
+              <View style={s.karte}>
+                <Text style={s.karteZahl}>{eurKurz(geplant.investition)}</Text>
+                <Text style={s.karteLabel}>Investition laut Angebot</Text>
               </View>
             </View>
 
             {/* Kumulierte Ersparnis, Jahr für Jahr */}
-            <Text style={[s.h2, { marginTop: 18 }]}>Bis sie sich bezahlt hat</Text>
+            <Text style={s.abschnitt}>BIS SIE SICH BEZAHLT HAT</Text>
             <Text style={{ color: LEISE }}>
               Rot ist die Zeit, in der die Anlage noch nicht bezahlt ist. Ab dem grünen Jahr
               hast du mehr gespart als investiert.
             </Text>
             <Kurve kurve={geplant.kurve} start={new Date(data.erstelltAm).getFullYear() + 1} />
 
-            <View style={[s.spalten2, { marginTop: 16 }]}>
+            <Text style={s.abschnitt}>WOMIT GERECHNET WURDE</Text>
+            <View style={[s.tafel, s.spalten2]}>
               <View style={s.spalte}>
                 <Wertzeile k="Verbrauch im Haus" v={`${zahl(Math.round(geplant.verbrauchKwh))} kWh`} />
                 <Wertzeile k="Strompreis heute" v={`${eur(geplant.strompreis)} je kWh`} />
@@ -1202,7 +1238,7 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
             */}
             {geplant.speicherKwh > 0 && geplant.vergleich.preis > 0 ? (
               <>
-                <Text style={[s.h2, { marginTop: 20 }]}>Mit oder ohne Speicher</Text>
+                <Text style={s.abschnitt}>MIT ODER OHNE SPEICHER</Text>
                 <Text style={{ color: LEISE, marginBottom: 8 }}>
                   Dieselbe Anlage, zwei Rechnungen. Ohne Speicher ist sie billiger und deckt
                   weniger — was mehr Sinn ergibt, entscheidest du.
@@ -1364,6 +1400,20 @@ function Kurve({ kurve, start }: { kurve: number[]; start: number }) {
   return (
     <>
       <View style={s.kurveReihe}>
+        {/*
+          Die Nulllinie: ohne sie schweben die roten Balken, und man
+          sieht nicht, wo der Wechsel passiert.
+        */}
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 88 - nulllinie,
+            height: 0.7,
+            backgroundColor: LINIE,
+          }}
+        />
         {kurve.map((wert, i) => {
           const hoehe = (Math.abs(wert) / spanne) * 88;
           return (

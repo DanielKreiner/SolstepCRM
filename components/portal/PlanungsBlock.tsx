@@ -32,6 +32,40 @@ function himmelsrichtung(azimut: number): string {
   return namen[Math.round((((azimut % 360) + 360) % 360) / 45) % 8]!;
 }
 
+/** Kleine Überschrift in Versalien — dieselbe Sprache wie im PDF. */
+function Abschnitt({ children }: { children: React.ReactNode }) {
+  return (
+    <h4 className="mt-7 mb-3 text-[10.5px] font-bold tracking-[0.11em] text-faint uppercase">
+      {children}
+    </h4>
+  );
+}
+
+/** Eine Kennzahl in einer Karte: grosse Zahl, kleine Erklärung. */
+function Kachel({
+  zahl,
+  label,
+  akzent = false,
+}: {
+  zahl: string;
+  label: string;
+  akzent?: boolean;
+}) {
+  return (
+    <div className="rounded-[14px] border border-line p-4">
+      <p
+        className={[
+          "num text-[19px] leading-tight font-extrabold tracking-[-0.02em] tabular-nums",
+          akzent ? "text-accent-ink" : "",
+        ].join(" ")}
+      >
+        {zahl}
+      </p>
+      <p className="mt-1.5 text-[11.5px] leading-[1.4] text-muted">{label}</p>
+    </div>
+  );
+}
+
 function Zeile({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex items-baseline gap-3 border-b border-line py-[7px] last:border-b-0">
@@ -148,14 +182,31 @@ export function PlanungsBlock({ planung }: { planung: NonNullable<PortalDetail["
         />
       ) : null}
 
-      <div className="p-5">
-        <h3 className="text-[16px] font-bold">Deine Anlage</h3>
+      <div className="p-5 sm:p-6">
+        <h3 className="text-[19px] leading-tight font-bold tracking-[-0.02em]">Deine Anlage</h3>
+        <p className="mt-1.5 text-[13px] leading-[1.55] text-muted">
+          Das ist die Anlage, die wir für dich geplant haben — so liegt sie auf deinem Dach,
+          und das steckt darin.
+        </p>
 
-        <div className="mt-3 grid gap-x-8 gap-y-1 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <Kachel zahl={`${n(planung.kwp, 2)} kWp`} label="Anlagenleistung" akzent />
+          <Kachel zahl={n(planung.modulAnzahl)} label="Module auf dem Dach" />
+          {planung.speicherKwh > 0 ? (
+            <Kachel
+              zahl={`${n(Math.round(planung.speicherKwh * 10) / 10, 1)} kWh`}
+              label="Speicher"
+            />
+          ) : null}
+          <Kachel zahl={`${n(Math.round(planung.jahresertragKwh))} kWh`} label="Ertrag im Jahr" />
+        </div>
+
+        <Abschnitt>Was verbaut wird</Abschnitt>
+        <div className="grid gap-x-8 rounded-[14px] border border-line px-4 py-1 sm:grid-cols-2">
           <div>
-            <Zeile k="Leistung" v={`${n(planung.kwp, 2)} kWp`} />
-            <Zeile k="Module" v={`${n(planung.modulAnzahl)} Stück`} />
-            {planung.modulTyp ? <Zeile k="Modultyp" v={planung.modulTyp} /> : null}
+            {planung.modulTyp ? (
+              <Zeile k={`Module (${n(planung.modulAnzahl)} Stück)`} v={planung.modulTyp} />
+            ) : null}
             {planung.wechselrichter ? (
               <Zeile k="Wechselrichter" v={planung.wechselrichter} />
             ) : null}
@@ -186,8 +237,8 @@ export function PlanungsBlock({ planung }: { planung: NonNullable<PortalDetail["
         </div>
 
         {/* ── Was das Dach im Jahr liefert ─────────────────────── */}
-        <h4 className="mt-6 text-[14px] font-bold">Was das Dach im Jahr liefert</h4>
-        <p className="mt-1 text-[13px] leading-[1.5] text-muted">
+        <Abschnitt>Monat für Monat</Abschnitt>
+        <p className="-mt-1 mb-3 text-[13px] leading-[1.5] text-muted">
           <span className="num tabular-nums">{n(Math.round(planung.jahresertragKwh))}</span> kWh,
           das sind <span className="num tabular-nums">{n(Math.round(planung.spezifisch))}</span>{" "}
           kWh je kWp. Die Farben zeigen, was direkt ins Haus geht, was über den Speicher läuft
@@ -222,7 +273,7 @@ export function PlanungsBlock({ planung }: { planung: NonNullable<PortalDetail["
         />
 
         {/* ── Wohin und woher ──────────────────────────────────── */}
-        <h4 className="mt-6 text-[14px] font-bold">Wohin geht dein Strom?</h4>
+        <Abschnitt>Wohin geht dein Strom?</Abschnitt>
         <p className="mt-1 text-[13px] text-muted">
           Von <span className="num tabular-nums">{n(Math.round(planung.jahresertragKwh))}</span> kWh
           Erzeugung bleiben {Math.round(planung.eigenverbrauchQuote * 100)} % im Haus.
@@ -242,7 +293,7 @@ export function PlanungsBlock({ planung }: { planung: NonNullable<PortalDetail["
           ]}
         />
 
-        <h4 className="mt-6 text-[14px] font-bold">Woher kommt dein Strom?</h4>
+        <Abschnitt>Woher kommt dein Strom?</Abschnitt>
         <p className="mt-1 text-[13px] text-muted">
           Dein Haushalt braucht{" "}
           <span className="num tabular-nums">{n(Math.round(planung.verbrauchKwh))}</span> kWh im
@@ -287,8 +338,8 @@ export function PlanungsBlock({ planung }: { planung: NonNullable<PortalDetail["
         </div>
 
         {/* ── Was die Anlage rechnet ───────────────────────────── */}
-        <h4 className="mt-6 text-[14px] font-bold">Was die Anlage rechnet</h4>
-        <div className="mt-2 grid gap-x-8 gap-y-1 sm:grid-cols-2">
+        <Abschnitt>Was die Anlage rechnet</Abschnitt>
+        <div className="grid gap-x-8 rounded-[14px] border border-line px-4 py-1 sm:grid-cols-2">
           <div>
             <Zeile k="Investition" v={eur(planung.investition, 0)} />
             <Zeile k="Ersparnis im Jahr" v={eur(planung.ersparnisJahr1, 0)} />
@@ -316,8 +367,8 @@ export function PlanungsBlock({ planung }: { planung: NonNullable<PortalDetail["
         {/* ── Mit oder ohne Speicher ───────────────────────────── */}
         {planung.speicherKwh > 0 && planung.vergleich.preis > 0 ? (
           <>
-            <h4 className="mt-6 text-[14px] font-bold">Mit oder ohne Speicher</h4>
-            <p className="mt-1 text-[13px] leading-[1.5] text-muted">
+            <Abschnitt>Mit oder ohne Speicher</Abschnitt>
+            <p className="-mt-1 text-[13px] leading-[1.5] text-muted">
               Dieselbe Anlage, zwei Rechnungen. Ohne Speicher ist sie billiger und deckt
               weniger.
             </p>

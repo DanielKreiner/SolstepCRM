@@ -33,6 +33,16 @@ export interface KennzahlenEingabe {
   speicherKwh?: number;
   /** Nettosumme des offenen Angebots, falls es eines gibt. */
   angebotssumme: number | null;
+  /**
+   * Der Preis, mit dem gerechnet wird — wenn der Aufrufer ihn kennt.
+   *
+   * Für Kundendokumente ist das die Angebotssumme, und zwar auch dann,
+   * wenn im Planer ein Preis getippt steht: Der Planerpreis ist eine
+   * interne Vorkalkulation. Stand er im Angebots-PDF, las der Kunde
+   * eine Amortisation zu einem Preis, der nirgends auf seiner Rechnung
+   * auftaucht.
+   */
+  anlagenpreis?: number;
   vorgabe: {
     strompreis: number;
     verguetung: number;
@@ -101,11 +111,13 @@ export function planungKennzahlen(e: KennzahlenEingabe): Kennzahlen {
    */
   const speicherKwh = e.speicherKwh ?? plan.wirtschaft.speicherKwh ?? e.geraetSpeicherKwh;
 
-  const anlagenpreis = anlagenpreisGilt(
-    plan.wirtschaft.anlagenpreis,
-    e.angebotssumme,
-    richtpreis(leistung, vorgabe.staffel, speicherKwh * vorgabe.speicherEurProKwh),
-  ).wert;
+  const anlagenpreis =
+    e.anlagenpreis ??
+    anlagenpreisGilt(
+      plan.wirtschaft.anlagenpreis,
+      e.angebotssumme,
+      richtpreis(leistung, vorgabe.staffel, speicherKwh * vorgabe.speicherEurProKwh),
+    ).wert;
 
   const wirtschaft = rechne({
     ertragKwh: jahresertragKwh,

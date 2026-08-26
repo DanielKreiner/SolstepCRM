@@ -102,6 +102,16 @@ export async function planungFuerVorgang(
     },
     geraetSpeicherKwh: geraet ? Number(geraet.nutzbar_kwh) : 0,
     speicherKwh,
+    /*
+     * Für den Kunden zählt, was auf seinem Angebot steht.
+     *
+     * Der Preis aus dem Planer ist eine Vorkalkulation für den Betrieb.
+     * Stand er hier, las der Kunde eine Amortisation zu 17 000 € neben
+     * einem Angebot über 9 713 € — zwei Wahrheiten in einem Umschlag.
+     */
+    ...(angebotssumme !== null && angebotssumme > 0
+      ? { anlagenpreis: angebotssumme }
+      : {}),
     angebotssumme,
     vorgabe: {
       strompreis: Number(vorgabe?.strompreis ?? 0.32),
@@ -148,10 +158,14 @@ export async function planungFuerVorgang(
         sum + Number(x.menge) * Number(x.ep_netto) * (1 - Number(x.rabatt_prozent ?? 0) / 100),
       0,
     );
-  const speicherPreis =
-    speicherAusPositionen > 0
-      ? speicherAusPositionen
-      : speicherKwh * Number(vorgabe?.speicher_eur_pro_kwh ?? 0);
+  /*
+   * Kein Richtwert als Rückfall. Verglichen wird mit dem, was der
+   * Speicher im Angebot kostet — steht er dort nicht, gibt es nichts
+   * herauszurechnen, und der Vergleich unterbleibt. Ein geschätzter
+   * Abzug neben echten Positionen wäre eine Zahl, die der Kunde auf
+   * seiner Rechnung nirgends wiederfindet.
+   */
+  const speicherPreis = speicherAusPositionen;
 
   const flussEingabe = {
     ertragKwh: k.jahresertragKwh,
