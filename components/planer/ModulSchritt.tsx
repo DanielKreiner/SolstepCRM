@@ -10,6 +10,7 @@ import {
   anzahlModule,
   abstandVorschlag,
   autoBelegen,
+  ostWestWinkel,
   kwp,
   type Modulgruppe,
   modulEcken,
@@ -23,6 +24,7 @@ import { ZeichenModul, ZeichenPlus } from "./Zeichen";
 import { modulTyp, planMitModul } from "./modulwahl";
 import type { GeraetModul } from "./TechnikPanel";
 import type { Werkzeug } from "./Leinwand";
+import type { Aufbauart } from "@/lib/planer/setzen";
 
 /*
  * Schritt 2 — „Welche Module, und wie viele passen?"
@@ -45,6 +47,13 @@ export interface ModulSchrittProps {
   module: GeraetModul[];
   breitengrad: number;
   schreibrecht: boolean;
+  /**
+   * Die gewählte Aufständerung an den Planer melden.
+   *
+   * Sie muss bis zum einzeln gesetzten Modul durchkommen: Dort entsteht
+   * die Gruppe in der Leinwand, nicht hier.
+   */
+  onAufbau: (art: Aufbauart) => void;
   werkzeug: Werkzeug;
   onWerkzeug: (w: Werkzeug) => void;
 }
@@ -64,7 +73,7 @@ export function modulname(m: { hersteller: string; bezeichnung: string }): strin
 }
 
 /** Wie die Module auf einem Flachdach stehen. */
-type Aufbauart = "flach" | "sued" | "ost-west";
+
 
 /*
  * Ost/West steht oben und ist die Vorgabe.
@@ -106,6 +115,20 @@ function lageFuer(art: "sued" | "ost-west" | null): "hoch" | "quer" {
 
 export function ModulSchritt(p: ModulSchrittProps) {
   const [hinweis, setHinweis] = useState<string | null>(null);
+  /*
+   * Welche Fläche gerade auf die Frage nach der Aufständerung wartet —
+   * und wofür.
+   *
+   * Auf dem Flachdach entscheidet sie alles: Reihenabstand,
+   * Ausrichtung, Ertrag und Ballast. Deshalb wird sie gefragt, bevor
+   * das erste Modul liegt, und zwar auf BEIDEN Wegen. Vorher kam die
+   * Frage nur beim Vollbelegen; wer mit einem einzelnen Modul anfing,
+   * bekam stillschweigend Ost/West.
+   */
+  const [fragt, setFragt] = useState<{
+    flaeche: Dachflaeche;
+    fuer: "voll" | "einzeln";
+  } | null>(null);
   const gewaehltesModul = p.module.find((m) => m.id === p.plan.technik.modul) ?? null;
   /*
    * KEIN Rückfall auf die erste Fläche.
@@ -132,6 +155,16 @@ export function ModulSchritt(p: ModulSchrittProps) {
   const modulzahl = p.plan.gruppen.reduce((s, g) => s + anzahlModule(g), 0);
   const leistung = p.plan.gruppen.reduce((s, g) => s + kwp(g), 0);
 
+  /**
+   * Muss vor dem ersten Modul gefragt werden?
+   *
+   * Nur beim Flachdach, und nur solange dort noch nichts liegt: Bei
+   * einem geneigten Dach gibt es nichts zu entscheiden, und ein zweites
+   * Feld erbt die Bauart des ersten.
+   */
+  const fragenNoetig = (f: Dachflaeche) =>
+    f.neigung === 0 && !p.plan.gruppen.some((g) => g.flaeche === f.id);
+
   /** Module der übrigen Gruppen — die bleiben besetzt. */
   const besetzt = (f: Dachflaeche, ausser?: string) =>
     p.plan.gruppen
@@ -142,12 +175,12 @@ export function ModulSchritt(p: ModulSchrittProps) {
     const flach = f.neigung === 0;
     const typ = gewaehltesModul ? modulTyp(gewaehltesModul) : STANDARD_MODUL;
     /*
-     * Ost/West steht quer zur Nordrichtung: die Reihen laufen von Nord
-     * nach Süd, damit die Paare nach Osten und Westen kippen. Ohne die
-     * Drehung schaute die eine Hälfte nach Norden — genau das, was mit
-     * Ost/West vermieden werden soll.
+     * Ost/West kippt nach Osten und Westen, und die Reihen laufen dabei
+     * parallel zur passendsten Dachkante. Ein fester Winkel ging schief,
+     * sobald die Fläche eine Traufe trug: Das Raster hängt an ihren
+     * Achsen, und die Paare schauten dann nach Süden.
      */
-    const drehung = art === "ost-west" && flach ? -90 : 0;
+    const drehung = art === "ost-west" && flach ? ostWestWinkel(f) : 0;
     /*
      * Auf dem Flachdach entscheidet die Aufständerung alles: Reihenabstand,
      * Ausrichtung, Ertrag und Ballast. Deshalb wird sie GEFRAGT, bevor
@@ -197,7 +230,7 @@ export function ModulSchritt(p: ModulSchrittProps) {
       const umgestellt = {
         ...g,
         aufstaenderung,
-        winkel: aufstaenderung?.art === "ost-west" ? -90 : 0,
+        winkel: aufstaenderung?.art === "ost-west" ? ostWestWinkel(f) : 0,
         ausrichtung: lageFuer(aufstaenderung?.art ?? null),
       };
       return nachfuehren(
@@ -260,12 +293,62 @@ export function ModulSchritt(p: ModulSchrittProps) {
       {p.schreibrecht && flaeche ? (
         <Knopf
           art={p.werkzeug === "setzen" ? "haupt" : "zweit"}
-          onClick={() => p.onWerkzeug(p.werkzeug === "setzen" ? "auswahl" : "setzen")}
+          onClick={() => {
+            if (p.werkzeug === "setzen") {
+              p.onWerkzeug("auswahl");
+              return;
+            }
+            if (fragenNoetig(flaeche)) {
+              setFragt({ flaeche, fuer: "einzeln" });
+              return;
+            }
+            p.onWerkzeug("setzen");
+          }}
           zeichen={<ZeichenPlus />}
           aus={p.module.length > 0 && !gewaehltesModul}
         >
           {p.werkzeug === "setzen" ? "Setzen beenden" : "Modul einzeln setzen"}
         </Knopf>
+      ) : null}
+
+      {/*
+        Die Frage vor dem ersten Modul — auf beiden Wegen dieselbe.
+      */}
+      {p.schreibrecht && fragt ? (
+        <section className="flex flex-col gap-2 rounded-[14px] border border-accent bg-accent-sunk p-3.5">
+          <h3 className="text-[14px] font-bold">Wie sollen die Module stehen?</h3>
+          <p className="text-[12.5px] leading-[1.45] text-muted">
+            {fragt.flaeche.name} ist ein Flachdach. Die Aufständerung bestimmt Reihenabstand,
+            Ausrichtung und Ertrag — deshalb kommt sie vor dem ersten Modul.
+          </p>
+          {AUFBAUARTEN.map((a, i) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => {
+                const ziel = fragt;
+                setFragt(null);
+                p.onAufbau(a.id);
+                if (ziel.fuer === "voll") belegen(ziel.flaeche, a.id);
+                else p.onWerkzeug("setzen");
+              }}
+              className="flex flex-col items-start gap-0.5 rounded-[12px] border border-line bg-surface px-3.5 py-2.5 text-left transition-colors hover:border-accent"
+            >
+              <span className="text-[14px] font-bold">
+                {a.label}
+                {i === 0 ? " · Vorgabe" : ""}
+              </span>
+              <span className="text-[11.5px] leading-[1.4] text-muted">{a.hinweis}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFragt(null)}
+            className="h-9 text-[12.5px] font-semibold text-muted hover:text-ink"
+          >
+            Abbrechen
+          </button>
+        </section>
       ) : null}
 
       {/*
@@ -305,7 +388,13 @@ export function ModulSchritt(p: ModulSchrittProps) {
 
       {p.schreibrecht && flaeche ? (
         <Knopf
-          onClick={() => belegen(flaeche)}
+          onClick={() => {
+            if (fragenNoetig(flaeche)) {
+              setFragt({ flaeche, fuer: "voll" });
+              return;
+            }
+            belegen(flaeche);
+          }}
           zeichen={p.plan.gruppen.length === 0 ? <ZeichenModul /> : <ZeichenPlus />}
           aus={p.module.length > 0 && !gewaehltesModul}
           titel={

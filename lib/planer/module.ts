@@ -465,6 +465,53 @@ export function paareAusgleichen(g: Modulgruppe, aus: string[]): string[] {
 }
 
 /**
+ * Der Drehwinkel, mit dem ein Ost/West-Feld auf dieser Fläche liegt.
+ *
+ * Zwei Bedingungen, und beide sind unverhandelbar:
+ *
+ * 1. Die Module müssen nach Osten und Westen kippen. Ein fester Wert
+ *    ging schief, sobald die Fläche eine Traufe trug — die Achsen des
+ *    Rasters hängen daran, und aus „minus neunzig Grad" wurde
+ *    irgendeine Richtung. Auf dem Bildschirm schauten die Paare dann
+ *    nach Süden.
+ * 2. Die Reihen müssen parallel zu einer Dachkante laufen. Ein
+ *    Gestell, das schräg im Dach steht, baut niemand — und es sieht
+ *    auch nicht so aus, als hätte es jemand geplant.
+ *
+ * Gesucht wird deshalb die Kante, die am ehesten von Ost nach West
+ * zeigt; an ihr richtet sich die Kipprichtung aus. Bei einem Dach, das
+ * genau nach Norden ausgerichtet ist, kommt dabei exakt Ost heraus.
+ */
+export function ostWestWinkel(f: Dachflaeche): number {
+  const basis = achsen(
+    { winkel: 0 } as unknown as Modulgruppe,
+    f,
+  );
+
+  /* Die Kante mit dem grössten Ost-West-Anteil, immer nach Osten zeigend. */
+  let ziel: Meter = { x: 1, y: 0 };
+  let beste = 0;
+  for (let i = 0; i < f.punkte.length; i++) {
+    const a = f.punkte[i]!;
+    const b = f.punkte[(i + 1) % f.punkte.length]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const laenge = Math.hypot(dx, dy);
+    if (laenge < 0.2) continue;
+    const ost = Math.abs(dx) / laenge;
+    if (ost > beste) {
+      beste = ost;
+      ziel = dx >= 0 ? { x: dx / laenge, y: dy / laenge } : { x: -dx / laenge, y: -dy / laenge };
+    }
+  }
+
+  const grad = (v: Meter) => (Math.atan2(v.y, v.x) * 180) / Math.PI;
+  const w = grad(ziel) - grad(basis.laengs);
+  /* Auf −180…180 bringen, damit im Feld keine 350 Grad stehen. */
+  return Math.round((((w + 180) % 360) + 360) % 360 - 180);
+}
+
+/**
  * Der Reihenabstand, der zu dieser Aufständerung passt.
  *
  * Er hängt am Winkel, nicht am Geschmack — und deshalb wird er
@@ -668,9 +715,17 @@ export function einzelnesModul(
   opt: Omit<BelegOptionen, "besetzt"> & { besetzt?: Meter[][] },
 ): Modulgruppe | null {
   const gruppe = modulLage(f, mitte, id, name, opt);
-  const ecken = modulEcken(gruppe, f, 0, 0);
-  if (!modulPasst(ecken, f)) return null;
-  if (opt.besetzt && stoesstAn(ecken, opt.besetzt)) return null;
+
+  /*
+   * Bei Ost/West müssen BEIDE Module des Paares passen. Passt nur eines,
+   * ist an der Stelle kein Platz für ein Gestell — dann lieber nichts
+   * setzen als ein Modul, das so nicht gebaut wird.
+   */
+  for (let r = 0; r < gruppe.reihen; r++) {
+    const ecken = modulEcken(gruppe, f, r, 0);
+    if (!modulPasst(ecken, f)) return null;
+    if (opt.besetzt && stoesstAn(ecken, opt.besetzt)) return null;
+  }
   return gruppe;
 }
 
@@ -699,7 +754,12 @@ export function modulLage(
     winkel: opt.winkel,
     anker: { x: 0, y: 0 },
     spalten: 1,
-    reihen: 1,
+    /*
+     * Ost/West beginnt mit einem Paar. Ein Feld mit einer Reihe wäre
+     * ein halbes Gestell — es lässt sich nicht bestellen und steht
+     * ohne Gegenhalt.
+     */
+    reihen: opt.aufstaenderung?.art === "ost-west" ? 2 : 1,
     aufstaenderung: opt.aufstaenderung,
     aus: [],
     entfernt: [],
@@ -887,21 +947,40 @@ export function erweitere(
   const schrittLaengs = m.laengs + g.reihenabstand;
 
   const laengsRichtung = richtung === "oben" || richtung === "unten";
+
+  /*
+   * Ost/West wächst in Paaren, nicht in Reihen.
+   *
+   * Der Grund ist die Nummerierung: Reihe 0 und 1 sind ein Gestell,
+   * 2 und 3 das nächste. Wächst die Gruppe nach unten um EINE Reihe,
+   * verschieben sich alle Nummern um eins — und aus jedem Paar werden
+   * zwei Hälften, die zu den falschen Nachbarn gehören. Das war der
+   * Grund, warum man eine einzelne Ost/West-Reihe bekommen konnte.
+   */
+  const paare = laengsRichtung && istPaarweise(g);
+  const schritte = paare ? Math.ceil(Math.abs(anzahl) / 2) * 2 * Math.sign(anzahl) : anzahl;
+
   const neueZahl = Math.max(
     0,
-    (laengsRichtung ? g.reihen : g.spalten) + anzahl,
+    (laengsRichtung ? g.reihen : g.spalten) + schritte,
   );
   if (neueZahl === 0) return g;
 
   // Wächst die Gruppe nach unten oder links, verschiebt sich der Nullpunkt.
   const verschiebt = richtung === "unten" || richtung === "links";
-  const versatz = verschiebt ? anzahl : 0;
+  const versatz = verschiebt ? schritte : 0;
 
   let anker = g.anker;
   if (verschiebt) {
     const achse = laengsRichtung ? a.laengs : a.quer;
-    const schritt = laengsRichtung ? schrittLaengs : schrittQuer;
-    anker = { x: g.anker.x - achse.x * schritt * anzahl, y: g.anker.y - achse.y * schritt * anzahl };
+    /*
+     * Beim Paar ist der Schritt die Paarteilung, nicht die Reihenhöhe:
+     * zwei Module, die Luft dazwischen und der Gang zum nächsten Paar.
+     */
+    const weite = paare
+      ? ((2 * m.laengs + OST_WEST_FIRSTLUFT + g.reihenabstand) * schritte) / 2
+      : (laengsRichtung ? schrittLaengs : schrittQuer) * schritte;
+    anker = { x: g.anker.x - achse.x * weite, y: g.anker.y - achse.y * weite };
   }
 
   const verschiebeSchluessel = (s: string): string | null => {
@@ -1102,6 +1181,19 @@ export function anbaustellen(
 
       const ecken = eckenAn(g, f, reihe, spalte);
       if (!modulPasst(ecken, f) || stoesstAn(ecken, besetzt)) continue;
+
+      /*
+       * Bei Ost/West muss auch das Gegenstück Platz haben — sonst
+       * verspricht das Pluszeichen ein Modul, das der Klick gar nicht
+       * setzen kann.
+       */
+      if (istPaarweise(g)) {
+        const partner = paarReihe(reihe);
+        const p = eckenAn(g, f, partner, spalte);
+        const belegtPartner = belegt.has(zelle(partner, spalte));
+        if (!belegtPartner && (!modulPasst(p, f) || stoesstAn(p, besetzt))) continue;
+      }
+
       stellen.push({ reihe, spalte });
     }
   }
@@ -1125,12 +1217,20 @@ export function modulAnbauen(
   let neu = g;
   let { reihe, spalte } = stelle;
 
+  /*
+   * Ost/West wächst um ein ganzes Paar. Eine einzelne Reihe gäbe es auf
+   * dem Dach nicht — und die Nummerierung, an der die Paare hängen,
+   * bliebe nicht heil.
+   */
+  const paare = istPaarweise(g);
+  const stufe = paare ? 2 : 1;
+
   if (reihe < 0) {
-    neu = erweitere(neu, f, "unten", 1);
-    reihe = 0;
+    neu = erweitere(neu, f, "unten", stufe);
+    reihe += stufe;
   } else if (reihe >= g.reihen) {
-    neu = erweitere(neu, f, "oben", 1);
-    reihe = g.reihen;
+    neu = erweitere(neu, f, "oben", stufe);
+    reihe = paare ? Math.min(reihe, g.reihen + 1) : g.reihen;
   }
 
   if (spalte < 0) {
@@ -1147,7 +1247,7 @@ export function modulAnbauen(
    * Reihe an; hier soll genau ein Modul entstehen.
    */
   const vorher = new Set(aktiveZellen(g).map((z) => zelle(z.reihe, z.spalte)));
-  const versatzR = neu.reihen > g.reihen && stelle.reihe < 0 ? 1 : 0;
+  const versatzR = neu.reihen > g.reihen && stelle.reihe < 0 ? stufe : 0;
   const versatzC = neu.spalten > g.spalten && stelle.spalte < 0 ? 1 : 0;
   const vorherVerschoben = new Set(
     [...vorher].map((s) => {
@@ -1156,11 +1256,33 @@ export function modulAnbauen(
     }),
   );
 
+  /*
+   * Bei Ost/West sind es zwei Zellen: die getroffene und ihr
+   * Gegenstück. Ein Gestell trägt beide Module — eines allein steht
+   * ohne Gegenhalt im Wind und wird auch als Paar bestellt.
+   */
+  const ziele = new Set([zelle(reihe, spalte)]);
+  if (paare) {
+    const partner = paarReihe(reihe);
+    const drin = partner >= 0 && partner < neu.reihen;
+    const schonDa = drin && !leereZellen(neu).has(zelle(partner, spalte));
+    const passt = drin && modulPasst(eckenAn(neu, f, partner, spalte), f);
+    /*
+     * Passt das Gegenstück nicht, entsteht gar nichts. Ein halbes
+     * Gestell gibt es nicht zu kaufen — und ein Klick, der ein
+     * einzelnes schiefes Modul stehen lässt, ist schlimmer als einer,
+     * der nichts tut. Die Pluszeichen zeigen deshalb auch nur dort, wo
+     * ein ganzes Paar Platz hat.
+     */
+    if (!drin || (!schonDa && !passt)) return g;
+    ziele.add(zelle(partner, spalte));
+  }
+
   const aus: string[] = [];
   for (let r = 0; r < neu.reihen; r++) {
     for (let c = 0; c < neu.spalten; c++) {
       const s = zelle(r, c);
-      if (r === reihe && c === spalte) continue;
+      if (ziele.has(s)) continue;
       if (!vorherVerschoben.has(s)) aus.push(s);
     }
   }
@@ -1171,6 +1293,9 @@ export function modulAnbauen(
    * Ohne das blieb die Lücke bestehen, das Pluszeichen verschwand, und
    * es sah aus, als hätte der Klick nichts bewirkt.
    */
-  const ziel = zelle(reihe, spalte);
-  return { ...neu, aus, entfernt: (neu.entfernt ?? []).filter((s) => s !== ziel) };
+  return {
+    ...neu,
+    aus,
+    entfernt: (neu.entfernt ?? []).filter((s) => !ziele.has(s)),
+  };
 }

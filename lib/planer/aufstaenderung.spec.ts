@@ -7,6 +7,8 @@ import {
   anzahlModule,
   autoBelegen,
   eckenHub,
+  modulAnbauen,
+  ostWestWinkel,
   laengsVersatz,
   type Modulgruppe,
   OST_WEST_FIRSTLUFT,
@@ -15,7 +17,7 @@ import {
   rasterMitte,
   STANDARD_MODUL,
 } from "./module";
-import { modulEntfernen, modulSetzen } from "./setzen";
+import { anbaustelleSetzen, modulEntfernen, modulSetzen } from "./setzen";
 import type { Plan } from "./plan";
 
 /*
@@ -267,5 +269,92 @@ describe("Ein Klick legt bei Ost/West beide Module", () => {
     const nachher = modulEntfernen(p, "g1", 0, 0);
     // Von der Gruppe bleibt nichts übrig — beide Module gehören zusammen.
     expect(nachher.gruppen).toHaveLength(0);
+  });
+});
+
+describe("Anbauen bleibt paarweise", () => {
+  it("legt am Pluszeichen beide Module des Paares", () => {
+    const g = gruppe({ spalten: 1, reihen: 2 });
+    const neu = modulAnbauen(g, dach, { reihe: 0, spalte: 1 });
+    const inSpalte1 = aktiveZellen(neu)
+      .filter((z) => z.spalte === 1)
+      .map((z) => z.reihe)
+      .sort();
+    expect(inSpalte1).toEqual([0, 1]);
+  });
+
+  const weit: Dachflaeche = {
+    ...dach,
+    punkte: [
+      { x: -12, y: -12 },
+      { x: 24, y: -12 },
+      { x: 24, y: 24 },
+      { x: -12, y: 24 },
+    ],
+  };
+
+  it("wächst nach unten um ein ganzes Paar", () => {
+    /*
+     * Der Fehler dahinter: Wuchs die Gruppe um EINE Reihe nach unten,
+     * verschoben sich alle Nummern um eins — aus jedem Paar wurden zwei
+     * Hälften, und man konnte eine einzelne Ost/West-Reihe bekommen.
+     */
+    const g = gruppe({ spalten: 1, reihen: 2 });
+    const neu = modulAnbauen(g, weit, { reihe: -1, spalte: 0 });
+    expect(neu.reihen).toBe(4);
+    expect(anzahlModule(neu) % 2).toBe(0);
+    const belegt = new Set(aktiveZellen(neu).map((z) => `${z.reihe}:${z.spalte}`));
+    for (const z of aktiveZellen(neu)) {
+      const partner = z.reihe % 2 === 0 ? z.reihe + 1 : z.reihe - 1;
+      expect(belegt.has(`${partner}:${z.spalte}`)).toBe(true);
+    }
+  });
+
+  it("hält die Lage des bestehenden Paares beim Wachsen nach unten", () => {
+    const g = gruppe({ spalten: 1, reihen: 2 });
+    const vorher = rasterMitte(g, weit, 0, 0);
+    const neu = modulAnbauen(g, weit, { reihe: -1, spalte: 0 });
+    /* Aus Reihe 0 wird Reihe 2 — an derselben Stelle auf dem Dach. */
+    const nachher = rasterMitte(neu, weit, 2, 0);
+    expect(nachher.x).toBeCloseTo(vorher.x, 6);
+    expect(nachher.y).toBeCloseTo(vorher.y, 6);
+  });
+
+  it("setzt auch am Pluszeichen der räumlichen Ansicht ein Paar", () => {
+    const p = {
+      flaechen: [dach],
+      gruppen: [gruppe({ spalten: 1, reihen: 2 })],
+      strings: [],
+      objekte: [],
+    } as unknown as Plan;
+    const nachher = anbaustelleSetzen(p, "g1", 0, 1);
+    const g = nachher.gruppen[0]!;
+    expect(anzahlModule(g)).toBe(4);
+  });
+});
+
+describe("Ost/West richtet sich an einer Dachkante aus", () => {
+  it("kippt nach Ost und West, wenn das Dach nach Norden steht", () => {
+    /* Rechteck achsparallel: die Kipprichtung zeigt genau nach Osten. */
+    expect(Math.abs(ostWestWinkel(dach))).toBe(90);
+  });
+
+  it("folgt einer gedrehten Dachkante", () => {
+    const gedreht: Dachflaeche = {
+      ...dach,
+      punkte: [
+        { x: 0, y: 0 },
+        { x: 10, y: 2 },
+        { x: 8, y: 12 },
+        { x: -2, y: 10 },
+      ],
+    };
+    /*
+     * Die längste Ost-West-Kante steigt um gut elf Grad an; das Feld
+     * dreht sich mit, statt schräg im Dach zu stehen.
+     */
+    const w = ostWestWinkel(gedreht);
+    expect(w).toBeLessThan(-70);
+    expect(w).toBeGreaterThan(-85);
   });
 });

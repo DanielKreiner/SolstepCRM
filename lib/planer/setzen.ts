@@ -12,6 +12,7 @@ import {
   modulEcken,
   modulLage,
   modulPasst,
+  ostWestWinkel,
   rasterIndex,
   rasterMitte,
   STANDARD_MODUL,
@@ -37,6 +38,16 @@ import { naechsteId, type Plan } from "./plan";
  */
 
 /**
+ * Wie die Module auf einem Flachdach stehen sollen.
+ *
+ * Die Wahl fällt im Panel, bevor das erste Modul liegt — hier kommt sie
+ * nur an, damit auch das einzeln gesetzte Modul so steht, wie der
+ * Planer es gewählt hat. Ohne sie legte jeder erste Klick stillschweigend
+ * Ost/West.
+ */
+export type Aufbauart = "flach" | "sued" | "ost-west";
+
+/**
  * Auf welcher Fläche liegt der Punkt?
  *
  * Zuerst geometrisch — wer über das Nachbardach fährt, meint das
@@ -59,7 +70,12 @@ export function flaecheUnter(plan: Plan, punkt: Meter, aktiv: string | null) {
  * mit den Pluszeichen weiterbauen, weil die Raster nicht
  * zusammenpassen.
  */
-function vorbildFuer(plan: Plan, f: Dachflaeche, standard: Modultyp) {
+function vorbildFuer(
+  plan: Plan,
+  f: Dachflaeche,
+  standard: Modultyp,
+  wunsch?: Aufbauart | null,
+) {
   const vorbild = plan.gruppen.find((g) => g.flaeche === f.id);
   if (vorbild) {
     return {
@@ -80,14 +96,29 @@ function vorbildFuer(plan: Plan, f: Dachflaeche, standard: Modultyp) {
    * Fläche fertig belegte, hatte zwei Bauarten auf einem Dach.
    */
   if (f.neigung === 0) {
-    const aufstaenderung = { art: "ost-west" as const, winkel: 15 };
-    const lage = { typ, ausrichtung: "quer" as const, aufstaenderung };
+    const art = wunsch ?? "ost-west";
+    if (art === "flach") {
+      return {
+        typ,
+        ausrichtung: "hoch" as const,
+        reihenabstand: 0.02,
+        spaltenabstand: 0.02,
+        winkel: 0,
+        aufstaenderung: null,
+      };
+    }
+    const aufstaenderung = { art, winkel: 15 };
+    const lage = {
+      typ,
+      ausrichtung: art === "ost-west" ? ("quer" as const) : ("hoch" as const),
+      aufstaenderung,
+    };
     return {
       ...lage,
       /* Die Breite zählt nur bei Süd — Ost/West braucht einen Gang, keinen Schattenabstand. */
       reihenabstand: abstandVorschlag(lage, 48),
       spaltenabstand: 0.02,
-      winkel: -90,
+      winkel: art === "ost-west" ? ostWestWinkel(f) : 0,
     };
   }
 
@@ -192,6 +223,7 @@ export function modulVorschau(
   punkt: Meter,
   aktiv: string | null,
   standard: Modultyp = STANDARD_MODUL,
+  wunsch: Aufbauart | null = null,
 ): { ecken: Meter[]; passt: boolean; flaeche: string } | null {
   const f = flaecheUnter(plan, punkt, aktiv);
   if (!f) return null;
@@ -209,7 +241,7 @@ export function modulVorschau(
     return { ecken, passt: false, flaeche: f.id };
   }
 
-  const opt = vorbildFuer(plan, f, standard);
+  const opt = vorbildFuer(plan, f, standard, wunsch);
   const gruppe = einzelnesModul(f, punkt, "geist", "Geist", opt);
   if (gruppe) return { ecken: modulEcken(gruppe, f, 0, 0), passt: true, flaeche: f.id };
 
@@ -301,6 +333,7 @@ export function modulSetzen(
   punkt: Meter,
   aktiv: string | null,
   standard: Modultyp = STANDARD_MODUL,
+  wunsch: Aufbauart | null = null,
 ): Setzergebnis {
   const f = flaecheUnter(plan, punkt, aktiv);
   if (!f) return { ok: false, meldung: "Zuerst eine Dachfläche zeichnen." };
@@ -337,7 +370,7 @@ export function modulSetzen(
     punkt,
     naechsteId(plan.gruppen.map((g) => g.id), "g"),
     `Feld ${plan.gruppen.length + 1}`,
-    { ...vorbildFuer(plan, f, standard), besetzt: belegt },
+    { ...vorbildFuer(plan, f, standard, wunsch), besetzt: belegt },
   );
 
   if (!neu) {

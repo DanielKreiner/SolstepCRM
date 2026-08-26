@@ -39,6 +39,7 @@ import {
   strangFarbe,
 } from "@/lib/planer/plan";
 import { strangUmschalten, strangWeg } from "@/lib/planer/strings";
+import type { Aufbauart } from "@/lib/planer/setzen";
 import {
   anbaustelleSetzen,
   modulEntfernen,
@@ -164,6 +165,14 @@ export interface LeinwandProps {
   anbieter: AnbieterId;
   zoom: number;
   plan: Plan;
+  /**
+   * Wie die Module auf einem Flachdach stehen sollen.
+   *
+   * Gewählt wird das im Panel, bevor das erste Modul liegt. Ohne diese
+   * Angabe legte jeder erste Klick stillschweigend Ost/West — auch wenn
+   * der Planer vorher Süd gewählt hatte.
+   */
+  aufbau?: Aufbauart | null;
   werkzeug: Werkzeug;
   fang: FangOptionen;
   /** Gesetzt: das Foto ersetzt die Karte (Briefing 2.3). */
@@ -1199,7 +1208,13 @@ export function Leinwand(p: LeinwandProps) {
      */
     const geisterFuer = (m: Meter): { ecken: Meter[]; passt: boolean } | null => {
       const s = stand.current;
-      const v = modulVorschau(s.plan, m, s.aktiv, s.plan.gruppen[0]?.typ ?? STANDARD_MODUL);
+      const v = modulVorschau(
+        s.plan,
+        m,
+        s.aktiv,
+        s.plan.gruppen[0]?.typ ?? STANDARD_MODUL,
+        s.aufbau ?? null,
+      );
       return v ? { ecken: v.ecken, passt: v.passt } : null;
     };
 
@@ -1278,7 +1293,13 @@ export function Leinwand(p: LeinwandProps) {
          * vorher in Rot gesagt.
          */
         const m = bildZuMeter(kamera.current, bp);
-        const erg = modulSetzen(s.plan, m, s.aktiv, s.plan.gruppen[0]?.typ ?? STANDARD_MODUL);
+        const erg = modulSetzen(
+          s.plan,
+          m,
+          s.aktiv,
+          s.plan.gruppen[0]?.typ ?? STANDARD_MODUL,
+          s.aufbau ?? null,
+        );
         if (!erg.ok) {
           setMeldung(erg.meldung);
           zieht.current = null;

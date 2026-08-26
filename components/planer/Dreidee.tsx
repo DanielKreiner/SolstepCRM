@@ -20,7 +20,7 @@ import {
   weltPixel,
 } from "@/lib/planer/geo";
 import { anbieter as anbieterZu, kachelUrlGleicheHerkunft } from "@/lib/planer/anbieter";
-import { modulVorschau } from "@/lib/planer/setzen";
+import { modulVorschau, type Aufbauart } from "@/lib/planer/setzen";
 import type { AnbieterId } from "@/lib/planer/anbieter";
 import { type Plan, strangFarbe } from "@/lib/planer/plan";
 import { strangWeg } from "@/lib/planer/strings";
@@ -53,6 +53,8 @@ import { strangWeg } from "@/lib/planer/strings";
  */
 
 export interface DreideeProps {
+  /** Wie die Module auf einem Flachdach stehen sollen (Panelwahl). */
+  aufbau?: Aufbauart | null;
   plan: Plan;
   ursprung: { lat: number; lon: number };
   anbieter: AnbieterId;
@@ -530,7 +532,13 @@ export function Dreidee(p: DreideeProps) {
         return;
       }
 
-      const v = modulVorschau(s.plan, ziel2.punkt, s.aktiv ?? null, s.plan.gruppen[0]?.typ);
+      const v = modulVorschau(
+        s.plan,
+        ziel2.punkt,
+        s.aktiv ?? null,
+        s.plan.gruppen[0]?.typ,
+        s.aufbau ?? null,
+      );
       const f = v ? s.plan.flaechen.find((x) => x.id === v.flaeche) : null;
       if (!v || !f) return;
 

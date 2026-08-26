@@ -56,7 +56,12 @@ import {
 import { type Meter, ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { dachflaeche, FANG_STANDARD, type FangOptionen } from "@/lib/planer/flaeche";
 import { anzahlModule, kwp } from "@/lib/planer/module";
-import { anbaustelleSetzen, modulEntfernen, modulSetzen } from "@/lib/planer/setzen";
+import {
+  anbaustelleSetzen,
+  type Aufbauart,
+  modulEntfernen,
+  modulSetzen,
+} from "@/lib/planer/setzen";
 import { anlagenpreisGilt } from "@/lib/planer/wirtschaft";
 import { ursprungVersetzen } from "@/lib/planer/ursprung";
 import { strangUmschalten } from "@/lib/planer/strings";
@@ -233,6 +238,12 @@ export function Planer({
   const [anbieter, setAnbieter] = useState<AnbieterId>(projekt.anbieter);
   const [zoom, setZoom] = useState(projekt.zoom);
   const [werkzeug, setWerkzeug] = useState<Werkzeug>("auswahl");
+  /*
+   * Wie die Module auf einem Flachdach stehen sollen — die Antwort auf
+   * die Frage im Panel. Sie wird gebraucht, bis auf der Fläche ein Feld
+   * liegt; danach erbt jedes weitere Modul die Bauart dieses Feldes.
+   */
+  const [aufbau, setAufbau] = useState<Aufbauart | null>(null);
   const [aktiv, setAktiv] = useState<string | null>(null);
   const [aktiveGruppe, setAktiveGruppe] = useState<string | null>(null);
   const [aktiverStrang, setAktiverStrang] = useState<string | null>(null);
@@ -821,6 +832,7 @@ export function Planer({
           <div className="relative min-w-0 flex-1 bg-pl-flaeche">
             <Dreidee
               plan={plan}
+              aufbau={aufbau}
               ursprung={ursprung}
               anbieter={anbieter}
               /*
@@ -1039,6 +1051,7 @@ export function Planer({
               anbieter={anbieter}
               zoom={zoom}
               plan={plan}
+              aufbau={aufbau}
               werkzeug={schreibrecht ? werkzeug : "auswahl"}
               schreibrecht={schreibrecht}
               bearbeitbar={bearbeitbarIn(phase)}
@@ -1287,6 +1300,7 @@ export function Planer({
                     breitengrad={ursprung.lat}
                     schreibrecht={schreibrecht}
                     werkzeug={werkzeug}
+                    onAufbau={setAufbau}
                     onWerkzeug={setWerkzeug}
                   />
                 ) : phase === 3 ? (
