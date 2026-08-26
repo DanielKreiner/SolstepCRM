@@ -121,6 +121,34 @@ export function bedarfAusPlan(plan: Plan, geraete: GeraeteStand): BedarfPosition
    * Bestellung — sonst steht er auf dem Lieferschein und niemand weiss,
    * warum.
    */
+  /*
+   * Ein Speicher ohne Gerät ist trotzdem ein Speicher.
+   *
+   * Im Erstgespräch steht „zehn Kilowattstunden" fest, lange bevor
+   * jemand ein Gerät aussucht — und genau so kam die Planung ins
+   * Angebot: mit Modulen und Wechselrichter, aber ohne die Zeile, über
+   * die gesprochen wurde. Sie steht jetzt da, ohne Artikel und damit
+   * ohne Preis, mit dem Hinweis zum Zuordnen.
+   */
+  if (!sp && plan.wirtschaft.mitSpeicher && (plan.wirtschaft.speicherKwh ?? 0) > 0) {
+    const kwh = plan.wirtschaft.speicherKwh ?? 0;
+    positionen.push({
+      /*
+       * Die Steuereinheit steht im Text mit drin: Ohne sie lädt kein
+       * Hochvoltspeicher, und solange kein Gerät gewählt ist, weiss der
+       * Planer nicht, welches BMS es wird. Eine zweite leere Zeile wäre
+       * kein Gewinn — dieser Text erinnert daran, ohne etwas zu raten.
+       */
+      bezeichnung:
+        `Speicher ${kwh.toLocaleString("de-AT", { maximumFractionDigits: 1 })} kWh ` +
+        "inkl. Steuereinheit (BMS)",
+      menge: 1,
+      einheit: "Stk",
+      artikel_id: null,
+      schluessel: "speicher:frei",
+    });
+  }
+
   if (sp && plan.wirtschaft.mitSpeicher) {
     /*
      * Beim Stapel zwei Zeilen: die Module und einmal die Steuereinheit.

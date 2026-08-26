@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { admin, COMPANY_A, DEMO, login } from "./helpers";
-import { dachSetzen, vieleck } from "./planer-helfer";
+import { belegen, dachSetzen, vieleck } from "./planer-helfer";
 
 /*
  * Sperrzonen bewegen (Wunsch vom 13.08.2026: „Sperrzonen soll man
@@ -158,5 +158,54 @@ test.describe("Planer — Sperrzone ohne gewählte Fläche", () => {
     };
     await expect.poll(async () => (await zonen()).length, { timeout: 20_000 }).toBe(1);
     expect((await zonen())[0]!.art).toBe("polygon");
+  });
+});
+
+test.describe("Planer — Sperrzone über belegtem Dach", () => {
+  test("Module unter einer nachträglich gezeichneten Zone verschwinden", async ({ page }) => {
+    await login(page, DEMO.gf);
+    const id = await neuesProjekt(page);
+
+    await dachSetzen(page, "Pultdach", "18", "12");
+    await page.getByRole("button", { name: /^Fläche 1/ }).click();
+    await belegen(page);
+
+    const modulzahl = async () => {
+      const { data } = await admin().from("planer_projekt").select("plan").eq("id", id).single();
+      const plan = data!.plan as {
+        gruppen?: Array<{ reihen: number; spalten: number; aus?: string[]; entfernt?: string[] }>;
+      };
+      return (plan.gruppen ?? []).reduce(
+        (n, g) =>
+          n +
+          g.reihen * g.spalten -
+          new Set([...(g.aus ?? []), ...(g.entfernt ?? [])]).size,
+        0,
+      );
+    };
+
+    await expect.poll(modulzahl, { timeout: 20_000 }).toBeGreaterThan(10);
+    const vorher = await modulzahl();
+
+    /*
+     * Und jetzt die Zone mitten hinein — der gemeldete Fall: „wie kann
+     * es sein, wenn dort eine Sperrfläche ist, dass dort Module sind?"
+     * Vorher blieben die Module liegen: Die Fläche änderte sich, die
+     * Belegung wurde nicht nachgezogen.
+     */
+    /* Die Sperrzone wird im Dachschritt gezeichnet, nicht in der Belegung. */
+    await page.getByRole("button", { name: /^1 Dach/ }).click();
+    const k = (await page.getByTestId("planer-leinwand").boundingBox())!;
+    const m = { x: k.x + k.width / 2, y: k.y + k.height / 2 };
+    await page.getByRole("button", { name: /Sperrzone aufziehen/ }).click();
+    await vieleck(page, m, [
+      [-60, -40],
+      [60, -40],
+      [60, 40],
+      [-60, 40],
+    ]);
+
+    await expect(page.getByText(/Sperrzonen \(1\)/i)).toBeVisible();
+    await expect.poll(modulzahl, { timeout: 20_000 }).toBeLessThan(vorher);
   });
 });

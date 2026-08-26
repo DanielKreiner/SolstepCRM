@@ -19,6 +19,19 @@ import type { BedarfPosition } from "@/lib/planer/uebergabe";
  * Wahrheiten über den Preis.
  */
 
+/**
+ * Die Überschrift für die Anlage im Angebot.
+ *
+ * „PV-Anlage 9,4 kWp" — der Betrieb wollte es genau so: eine Gruppe,
+ * unter der Wechselrichter, Module und Speicher zusammenstehen, mit der
+ * Leistung im Namen. Ohne Leistung (noch kein Modul auf dem Dach)
+ * bleibt der Name schlicht.
+ */
+export function anlagenGruppe(kwp: number): string {
+  if (!(kwp > 0)) return "PV-Anlage";
+  return `PV-Anlage ${kwp.toLocaleString("de-AT", { maximumFractionDigits: 2 })} kWp`;
+}
+
 export interface PositionenErgebnis {
   angelegt: number;
   /** Stand schon im Angebot — am Artikel erkannt, nicht am Namen. */
@@ -36,6 +49,14 @@ export async function positionenSchreiben(
     /** Steuersatz des Vorgangs, für Zeilen ohne Artikel. */
     ustSatz: number;
     bedarf: BedarfPosition[];
+    /**
+     * Überschrift, unter der die Positionen im Angebot stehen.
+     *
+     * Wechselrichter, Module und Speicher gehören zusammen — sie sind
+     * die Anlage. Einzeln untereinander liest der Kunde eine Liste
+     * Bauteile; unter „PV-Anlage 9,4 kWp" liest er, was er kauft.
+     */
+    gruppenName?: string | null;
   },
 ): Promise<PositionenErgebnis> {
   const leer: PositionenErgebnis = { angelegt: 0, uebersprungen: 0, ohnePreis: 0, fehler: null };
@@ -107,7 +128,48 @@ export async function positionenSchreiben(
 
   if (zeilen.length === 0) return ergebnis;
 
+  /*
+   * Die Gruppe entsteht erst, wenn es auch Positionen dafür gibt — eine
+   * leere Überschrift im Angebot wäre schlimmer als keine. Gibt es sie
+   * schon (zweite Übergabe), wird sie weiterverwendet.
+   */
+  const gruppeId = opts.gruppenName
+    ? await gruppeHolen(supabase, opts.companyId, opts.vorgangId, opts.gruppenName)
+    : null;
+  if (gruppeId) for (const z of zeilen) z.gruppe_id = gruppeId;
+
   const { error } = await supabase.from("vorgang_position").insert(zeilen);
   if (error) return { ...ergebnis, fehler: error.message };
   return { ...ergebnis, angelegt: zeilen.length };
+}
+
+/** Die Gruppe dieses Namens — vorhanden oder neu. */
+async function gruppeHolen(
+  supabase: SupabaseClient,
+  companyId: string,
+  vorgangId: string,
+  name: string,
+): Promise<string | null> {
+  const { data: da } = await supabase
+    .from("vorgang_gruppe")
+    .select("id")
+    .eq("vorgang_id", vorgangId)
+    .is("dokument_id", null)
+    .eq("name", name)
+    .maybeSingle();
+  if (da) return da.id as string;
+
+  const { data: bestand } = await supabase
+    .from("vorgang_gruppe")
+    .select("sort")
+    .eq("vorgang_id", vorgangId)
+    .is("dokument_id", null);
+  const sort = Math.max(0, ...(bestand ?? []).map((g) => Number(g.sort ?? 0))) + 10;
+
+  const { data: neu } = await supabase
+    .from("vorgang_gruppe")
+    .insert({ company_id: companyId, vorgang_id: vorgangId, name, sort })
+    .select("id")
+    .single();
+  return (neu?.id as string | undefined) ?? null;
 }

@@ -9,7 +9,7 @@ import { ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { kwp, type Modulgruppe } from "@/lib/planer/module";
 import { planLesen, planSchema } from "@/lib/planer/plan";
 import { speicherKwhVonPlan } from "@/lib/planer/speicher";
-import { positionenSchreiben } from "@/lib/vorgang/planungPositionen";
+import { anlagenGruppe, positionenSchreiben } from "@/lib/vorgang/planungPositionen";
 import {
   abgleichen,
   type Abgleich,
@@ -785,6 +785,7 @@ export async function alsVorgangUebernehmen(
     vorgangId,
     ustSatz: Number(vorgangSatz?.ust_satz ?? 20),
     bedarf: fuersAngebot,
+    gruppenName: anlagenGruppe(Number(projekt.kwp ?? 0)),
   });
 
   await supabase

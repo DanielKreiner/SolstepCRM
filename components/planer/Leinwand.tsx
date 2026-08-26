@@ -992,10 +992,35 @@ export function Leinwand(p: LeinwandProps) {
   const aendereFlaeche = useCallback(
     (id: string, wie: (f: Dachflaeche) => Dachflaeche, schritt: boolean) => {
       const s = stand.current;
-      s.onPlan(
-        { ...s.plan, flaechen: s.plan.flaechen.map((f) => (f.id === id ? wie(f) : f)) },
-        schritt,
-      );
+      const flaechen = s.plan.flaechen.map((f) => (f.id === id ? wie(f) : f));
+      const ziel = flaechen.find((f) => f.id === id);
+
+      /*
+       * Ändert sich die Fläche, müssen die Module darauf nachziehen.
+       *
+       * Sonst blieben Module liegen, wo inzwischen eine Sperrzone ist:
+       * Wer zuerst belegt und danach die Zone um den Kamin zeichnet,
+       * sah die Module weiter mitten in der schraffierten Fläche
+       * stehen — sie wurden mitgezählt, mitbestellt und mitverkabelt.
+       * Dasselbe beim Verschieben oder Vergrössern einer Zone und beim
+       * Ziehen am Dachrand.
+       *
+       * `nachfuehren` schaltet nur `aus` — von Hand weggetippte Module
+       * bleiben weg, und was wieder Platz hat, kommt zurück.
+       */
+      const gruppen = !ziel
+        ? s.plan.gruppen
+        : s.plan.gruppen.map((g, i, alle) => {
+            if (g.flaeche !== id) return g;
+            const besetzt = alle
+              .filter((x) => x.flaeche === id && x !== alle[i])
+              .flatMap((x) =>
+                aktiveZellen(x).map((z) => modulEcken(x, ziel, z.reihe, z.spalte)),
+              );
+            return nachfuehren(g, ziel, besetzt);
+          });
+
+      s.onPlan({ ...s.plan, flaechen, gruppen }, schritt);
     },
     [],
   );

@@ -5,8 +5,9 @@ import { z } from "zod";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { planLesen } from "@/lib/planer/plan";
+import { kwp } from "@/lib/planer/module";
 import { bedarfAusPlan, type GeraeteStand } from "@/lib/planer/uebergabe";
-import { positionenSchreiben } from "@/lib/vorgang/planungPositionen";
+import { anlagenGruppe, positionenSchreiben } from "@/lib/vorgang/planungPositionen";
 
 /*
  * Die Brücke zwischen Vorgang und Planer.
@@ -209,6 +210,7 @@ export async function positionenAusPlanung(
     vorgangId,
     ustSatz: Number(vorgang.ust_satz ?? 20),
     bedarf,
+    gruppenName: anlagenGruppe(plan.gruppen.reduce((sum, g) => sum + kwp(g), 0)),
   });
   if (erg.fehler) return { error: `Übernahme fehlgeschlagen: ${erg.fehler}`, ok: null };
   if (erg.angelegt === 0) {

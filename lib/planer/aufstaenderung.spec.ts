@@ -3,6 +3,9 @@ import type { Dachflaeche } from "./flaeche";
 import type { Meter } from "./geo";
 import {
   abstandVorschlag,
+  modulEcken,
+  modulPasst,
+  nachfuehren,
   aktiveZellen,
   anzahlModule,
   autoBelegen,
@@ -357,4 +360,81 @@ describe("Ost/West richtet sich an einer Dachkante aus", () => {
     expect(w).toBeLessThan(-70);
     expect(w).toBeGreaterThan(-85);
   });
+});
+
+describe("Sperrzone hält Module heraus", () => {
+  /*
+   * Der gemeldete Fall: „wie kann es sein, wenn dort eine Sperrfläche
+   * ist, dass dort Module sind?" — zwei Löcher zusammen.
+   *
+   * Zum einen wurde ohne Saum gar nicht geprüft: Die Kantenprüfung lief
+   * über „Abstand KLEINER als der Saum", und bei einem Saum von null
+   * ist auch ein Schnitt (Abstand null) nicht kleiner. Zum anderen zog
+   * eine nachträglich gezeichnete Zone die Module nicht nach.
+   */
+  const zone = (punkte: Meter[]) => ({
+    id: "h1",
+    art: "polygon" as const,
+    name: "Sperrzone 1",
+    punkte,
+    abstand: 0,
+  });
+
+  it("lässt kein Modul durch eine Zone ohne Saum laufen", () => {
+    const g = gruppe({ aufstaenderung: null, ausrichtung: "hoch", winkel: 0, anker: { x: 1, y: 1 } });
+    const ecken = modulEcken(g, dach, 0, 0);
+    expect(modulPasst(ecken, dach)).toBe(true);
+
+    /* Ein Streifen quer durch das Modul — keine Modulecke liegt darin. */
+    const mitte = ecken.reduce(
+      (a, q) => ({ x: a.x + q.x / 4, y: a.y + q.y / 4 }),
+      { x: 0, y: 0 },
+    );
+    const quer = dachMitZone([
+      { x: mitte.x - 3, y: mitte.y - 0.1 },
+      { x: mitte.x + 3, y: mitte.y - 0.1 },
+      { x: mitte.x + 3, y: mitte.y + 0.1 },
+      { x: mitte.x - 3, y: mitte.y + 0.1 },
+    ]);
+    expect(modulPasst(ecken, quer)).toBe(false);
+  });
+
+  it("erkennt auch eine Zone, die ganz unter dem Modul liegt", () => {
+    const g = gruppe({ aufstaenderung: null, ausrichtung: "hoch", winkel: 0, anker: { x: 1, y: 1 } });
+    const ecken = modulEcken(g, dach, 0, 0);
+    const mitte = ecken.reduce(
+      (a, q) => ({ x: a.x + q.x / 4, y: a.y + q.y / 4 }),
+      { x: 0, y: 0 },
+    );
+    const klein = dachMitZone([
+      { x: mitte.x - 0.2, y: mitte.y - 0.2 },
+      { x: mitte.x + 0.2, y: mitte.y - 0.2 },
+      { x: mitte.x + 0.2, y: mitte.y + 0.2 },
+      { x: mitte.x - 0.2, y: mitte.y + 0.2 },
+    ]);
+    expect(modulPasst(ecken, klein)).toBe(false);
+  });
+
+  it("schaltet nachträglich gezeichnete Zonen aus dem Feld", () => {
+    const g = gruppe({ aufstaenderung: null, ausrichtung: "hoch", winkel: 0, spalten: 3, reihen: 3, anker: { x: 1, y: 1 } });
+    const voll = nachfuehren(g, dach, []);
+    expect(anzahlModule(voll)).toBe(9);
+
+    const mitte = modulEcken(voll, dach, 1, 1).reduce(
+      (a, q) => ({ x: a.x + q.x / 4, y: a.y + q.y / 4 }),
+      { x: 0, y: 0 },
+    );
+    const gesperrt = dachMitZone([
+      { x: mitte.x - 0.3, y: mitte.y - 0.3 },
+      { x: mitte.x + 0.3, y: mitte.y - 0.3 },
+      { x: mitte.x + 0.3, y: mitte.y + 0.3 },
+      { x: mitte.x - 0.3, y: mitte.y + 0.3 },
+    ]);
+    const nachher = nachfuehren(voll, gesperrt, []);
+    expect(anzahlModule(nachher)).toBe(8);
+  });
+
+  function dachMitZone(punkte: Meter[]): Dachflaeche {
+    return { ...dach, hindernisse: [zone(punkte)] };
+  }
 });

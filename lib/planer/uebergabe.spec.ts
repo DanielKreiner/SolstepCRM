@@ -239,3 +239,35 @@ describe("Abgleich bei erneuter Übergabe", () => {
     expect(fremd.artikel_id).toBeNull();
   });
 });
+
+describe("Speicher ohne Gerät", () => {
+  it("kommt trotzdem ins Angebot, samt Hinweis auf das BMS", () => {
+    /*
+     * Der gemeldete Fall: Module und Wechselrichter landeten im
+     * Angebot, der Speicher nicht. Er hing an einem gewählten Gerät —
+     * im Erstgespräch steht aber zuerst die Grösse fest.
+     */
+    const plan = planMit([{ typ: "AIKO Neostar 3P+", wp: 490, reihen: 2, spalten: 5 }]);
+    plan.technik = { modul: "m1", wechselrichter: "w1", speicher: null, speicherModule: null };
+    plan.wirtschaft.mitSpeicher = true;
+    plan.wirtschaft.speicherKwh = 12.6;
+
+    const p = bedarfAusPlan(plan, GERAETE);
+    const zeile = p.find((x) => x.schluessel === "speicher:frei");
+    expect(zeile).toBeTruthy();
+    expect(zeile!.bezeichnung).toContain("12,6 kWh");
+    expect(zeile!.bezeichnung).toContain("BMS");
+    expect(zeile!.artikel_id).toBeNull();
+  });
+
+  it("bleibt weg, wenn ohne Speicher gerechnet wird", () => {
+    const plan = planMit([{ typ: "AIKO Neostar 3P+", wp: 490, reihen: 2, spalten: 5 }]);
+    plan.technik = { modul: "m1", wechselrichter: "w1", speicher: null, speicherModule: null };
+    plan.wirtschaft.speicherKwh = 12.6;
+    plan.wirtschaft.mitSpeicher = false;
+
+    expect(bedarfAusPlan(plan, GERAETE).some((x) => x.schluessel.startsWith("speicher"))).toBe(
+      false,
+    );
+  });
+});

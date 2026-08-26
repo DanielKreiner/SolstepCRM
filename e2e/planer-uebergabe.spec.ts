@@ -470,10 +470,20 @@ test.describe("Planer — Übergabe ins Angebot", () => {
      */
     const { data: pos } = await db
       .from("vorgang_position")
-      .select("bezeichnung, menge, ep_netto")
+      .select("bezeichnung, menge, ep_netto, gruppe_id")
       .eq("vorgang_id", projekt!.vorgang_id!);
 
     expect(pos!.length).toBeGreaterThanOrEqual(3);
+
+    /*
+     * Und alles steht unter einer Überschrift: „PV-Anlage 9,4 kWp".
+     * Einzeln untereinander liest der Kunde eine Liste Bauteile.
+     */
+    const { data: gruppen } = await db
+      .from("vorgang_gruppe")
+      .select("name")
+      .eq("vorgang_id", projekt!.vorgang_id!);
+    expect(gruppen!.some((x) => String(x.name).startsWith("PV-Anlage"))).toBe(true);
     /* Nicht `module`: In Next.js ist der Name gesperrt. */
     const modulzeile = pos!.find((p) => Number(p.menge) > 10)!;
     expect(modulzeile).toBeTruthy();
@@ -481,6 +491,8 @@ test.describe("Planer — Übergabe ins Angebot", () => {
     /* Vier Speichermodule und einmal das BMS. */
     const stapel = pos!.filter((p) => Number(p.menge) === 4);
     expect(stapel.length).toBeGreaterThanOrEqual(1);
+
+    expect(pos!.every((p) => p.gruppe_id !== null)).toBe(true);
 
     /* Und Preise stehen dran — sie kommen aus dem Artikelstamm. */
     expect(pos!.some((p) => Number(p.ep_netto) > 0)).toBe(true);

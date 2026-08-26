@@ -356,10 +356,27 @@ export function modulPasst(ecken: Meter[], f: Dachflaeche): boolean {
   for (const h of f.hindernisse) {
     for (const k of kanten(h.punkte)) {
       for (let i = 0; i < ecken.length; i++) {
-        if (abstandStrecken(ecken[i]!, ecken[(i + 1) % ecken.length]!, k.a, k.b) < h.abstand) {
-          return false;
-        }
+        const d = abstandStrecken(ecken[i]!, ecken[(i + 1) % ecken.length]!, k.a, k.b);
+        /*
+         * `d === 0` heisst: die Kanten schneiden sich. Das muss auch
+         * dann greifen, wenn die Sperrzone ohne Saum gezeichnet ist —
+         * bei `abstand = 0` war `d < 0` nie wahr, und ein Modul durfte
+         * mitten durch die Zone laufen, solange keine seiner ECKEN
+         * darin lag. Auf dem Dach standen dann Module in der
+         * Sperrfläche.
+         */
+        if (d === 0 || d < h.abstand) return false;
       }
+    }
+
+    /*
+     * Und der umgekehrte Fall: eine kleine Zone, die ganz unter dem
+     * Modul verschwindet. Dann liegt keine Modulecke in der Zone, und
+     * keine Kante schneidet — geprüft wird deshalb auch, ob eine Ecke
+     * der Zone unter dem Modul liegt.
+     */
+    for (const q of h.punkte) {
+      if (punktInPolygon(q, ecken)) return false;
     }
   }
   return true;
