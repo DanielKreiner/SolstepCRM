@@ -1,4 +1,5 @@
 import { energiefluss, renditeProJahr, speicherVergleich } from "./energiefluss";
+import { berechne } from "@/lib/vorgang/preis";
 import { planungKennzahlen } from "./kennzahlen";
 import { geraetName } from "./geraetname";
 import { anzahlModule } from "./module";
@@ -44,6 +45,8 @@ export async function planungFuerVorgang(
     { data: positionen },
     { data: modulZeilen },
     { data: wrZeilen },
+    { data: rahmenZeile },
+    { data: gruppenZeilen },
   ] = await Promise.all([
     supabase
       .from("planer_wirtschaft_vorgabe")
@@ -56,27 +59,72 @@ export async function planungFuerVorgang(
       ),
     supabase
       .from("vorgang_position")
-      .select("menge, ep_netto, rabatt_prozent, article_id")
+      .select(
+        "menge, ep_netto, ust_satz, rabatt_prozent, optional, kunden_auswahl, gruppe_id, article_id",
+      )
       .eq("vorgang_id", vorgangId)
       .is("dokument_id", null),
     supabase.from("planer_modul").select("id, hersteller, bezeichnung"),
     supabase.from("planer_wechselrichter").select("id, hersteller, bezeichnung"),
+    supabase
+      .from("vorgang")
+      .select("ust_satz, rabatt_prozent, lieferung_netto")
+      .eq("id", vorgangId)
+      .maybeSingle(),
+    supabase
+      .from("vorgang_gruppe")
+      .select("id, paket_preis")
+      .eq("vorgang_id", vorgangId)
+      .is("dokument_id", null),
   ]);
 
   const zeilen = (positionen ?? []) as Array<{
     menge: number | string;
     ep_netto: number | string;
+    ust_satz: number | string;
     rabatt_prozent: number | string | null;
+    optional: boolean;
+    kunden_auswahl: string | null;
+    gruppe_id: string | null;
     article_id: string | null;
   }>;
-  const angebotssumme =
-    zeilen.length > 0
-      ? zeilen.reduce(
-          (sum, x) =>
-            sum + Number(x.menge) * Number(x.ep_netto) * (1 - Number(x.rabatt_prozent ?? 0) / 100),
-          0,
-        )
-      : null;
+
+  /*
+   * Die Investition ist das, was auf der Rechnung steht: GESAMT BRUTTO,
+   * inklusive Lieferung, ohne die Optionen, die der Kunde nicht gewählt
+   * hat.
+   *
+   * Vorher stand hier die rohe Nettosumme aller Zeilen — Optionen
+   * eingerechnet, Steuer nicht. Der Kunde las eine Amortisation zu
+   * einem Betrag, den er nirgends wiederfindet: unter dem Angebot steht
+   * brutto, und was er nicht angekreuzt hat, zahlt er auch nicht.
+   *
+   * Gerechnet wird mit derselben Funktion wie die Summenzeile im Portal
+   * und im PDF — zwei Preisrechnungen in einem Dokument gäbe es sonst
+   * wieder.
+   */
+  const preis = berechne(
+    zeilen.map((x, i) => ({
+      id: String(i),
+      gruppeId: x.gruppe_id,
+      menge: Number(x.menge),
+      epNetto: Number(x.ep_netto),
+      ustSatz: Number(x.ust_satz),
+      rabattProzent: Number(x.rabatt_prozent ?? 0),
+      optional: Boolean(x.optional),
+      gewaehlt: x.kunden_auswahl === "gewaehlt",
+    })),
+    ((gruppenZeilen ?? []) as Array<{ id: string; paket_preis: string | null }>).map((g) => ({
+      id: g.id,
+      paketPreis: g.paket_preis === null ? null : Number(g.paket_preis),
+    })),
+    {
+      ustSatz: Number(rahmenZeile?.ust_satz ?? 20),
+      rabattProzent: Number(rahmenZeile?.rabatt_prozent ?? 0),
+      lieferungNetto: Number(rahmenZeile?.lieferung_netto ?? 0),
+    },
+  );
+  const angebotssumme = zeilen.length > 0 ? preis.gesamt : null;
 
   const speicherTypen = ((speicherZeilen ?? []) as Array<Record<string, unknown>>).map((sp) => ({
     id: sp.id as string,

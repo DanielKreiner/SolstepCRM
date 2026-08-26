@@ -2,7 +2,10 @@ import {
   Document,
   Image,
   Page,
+  Path,
+  Rect,
   StyleSheet,
+  Svg,
   Text,
   View,
 } from "@react-pdf/renderer";
@@ -203,10 +206,13 @@ const LEISE = "#6A625A";
 const ZART = "#9C9289";
 const LINIE = "#E7E1D9";
 const FLAECHE = "#F7F5F2";
-/* Für die Strom- und Geldbilder — dieselben Farben wie am Bildschirm. */
-const GRUEN = "#3E9E6B";
-const ROT = "#D2543F";
-const SPEICHERFARBE = "#E8C07A";
+/*
+ * Für die Strom- und Geldbilder.
+ *
+ * Nach der Vorlage tragen die Bilder nur drei Werte: die Akzentfarbe
+ * des Betriebs, die Tinte und ein Grau. Grün und Rot sind bewusst
+ * weg — ein Angebot ist keine Ampel.
+ */
 const NETZFARBE = "#8E93A1";
 
 const s = StyleSheet.create({
@@ -286,6 +292,94 @@ const s = StyleSheet.create({
   },
 
   /* ── Die Seiten aus der Planung ───────────────────────────────── */
+
+  /*
+   * Vier Entscheidungen aus der Vorlage, hier wie am Bildschirm:
+   * keine Rundungen, getrennt wird durch Linien; Überschriften gross
+   * und schwer mit einem Versal-Label darüber; Kennzahlen unter einer
+   * Haarlinie statt in einem Kasten; Zahlen gross genug, um über den
+   * Tisch gelesen zu werden.
+   *
+   * Die Anzeigeschrift ist Helvetica-Bold statt der Archivo aus der
+   * Vorlage: @react-pdf liest nur TTF und OTF, und im Repo liegen die
+   * Schriften als woff2. Der Charakter — schwere Grotesk, enge
+   * Laufweite — stimmt, die Zeichnung der Buchstaben nicht ganz.
+   */
+  kapitel: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: 1.4,
+    color: ZART,
+    marginBottom: 7,
+  },
+  schlagzeile: {
+    fontSize: 34,
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: -1.2,
+    lineHeight: 1.03,
+  },
+  planTitel2: {
+    fontSize: 22,
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: -0.8,
+    lineHeight: 1.1,
+  },
+  zwischen: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  lauftext: { fontSize: 10, color: LEISE, lineHeight: 1.6 },
+  kleingedruckt: { fontSize: 7.5, color: ZART, lineHeight: 1.5 },
+
+  kennreihe: { flexDirection: "row", gap: 14, marginTop: 22 },
+  kennsaeule: { flex: 1, borderTopWidth: 1.5, borderTopColor: TINTE, paddingTop: 9 },
+  kennsaeuleAkzent: { flex: 1, borderTopWidth: 1.5, paddingTop: 9 },
+  kennzahl: { fontSize: 17, fontFamily: "Helvetica-Bold", letterSpacing: -0.7, lineHeight: 1.15 },
+  kennlabel2: {
+    fontSize: 6.5,
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: 0.9,
+    color: LEISE,
+    marginTop: 6,
+  },
+
+  wertreihe: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 7,
+    borderBottomWidth: 0.5,
+    borderBottomColor: LINIE,
+  },
+  wertLabel: {
+    width: "40%",
+    fontSize: 6.5,
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: 0.8,
+    color: LEISE,
+    paddingRight: 8,
+  },
+  wertText: { flex: 1, fontSize: 9.5, fontFamily: "Helvetica-Bold", lineHeight: 1.35 },
+
+  saeulenfeld: { flexDirection: "row", alignItems: "flex-end", gap: 4, height: 120, marginTop: 14 },
+  saeule: { flex: 1, alignItems: "center", justifyContent: "flex-end" },
+  saeuleWert: { fontSize: 6, color: LEISE, marginBottom: 3 },
+  monatsachse: {
+    flexDirection: "row",
+    gap: 4,
+    borderTopWidth: 1,
+    borderTopColor: TINTE,
+    paddingTop: 4,
+  },
+  monatsname: { flex: 1, fontSize: 6.5, color: LEISE, textAlign: "center" },
+
+  anteilBand: { flexDirection: "row", height: 22, marginTop: 8 },
+  anteilFuss: { flexDirection: "row", marginTop: 6 },
+  anteilProzent: { fontSize: 8, fontFamily: "Helvetica-Bold" },
+  anteilName: { fontSize: 8 },
+  anteilMenge: { fontSize: 7.5, color: LEISE },
+
 
   /*
    * Der Aufbau folgt dem Kostenvoranschlag, den der Betrieb als Vorbild
@@ -974,324 +1068,347 @@ export function VorgangPdf({ data }: { data: VorgangPdfData }) {
       {/* ═══════════════ DIE PLANUNG, WENN EINE DRANHÄNGT ═══════════ */}
       {istAngebot && geplant ? (
         <>
-          {/* ── Seite: Deine Anlage ─────────────────────────────── */}
+          {/* ── Dein Ergebnis ──────────────────────────────────── */}
           <Page size="A4" style={s.page}>
             <PlanKopf data={data} nummer={nummer} />
-            <Text style={s.planTitel}>Deine Anlage</Text>
-            <Text style={s.planLead}>
+
+            <Kapitel>Dein Ergebnis</Kapitel>
+            {geplant.ersparnisJahr1 > 0 ? (
+              <Text style={s.schlagzeile}>
+                {data.kunde.name.split(" ")[0]}, du sparst rund{" "}
+                <Text style={{ color: akzent }}>
+                  {zahl(Math.round(geplant.ersparnisJahr1))} €
+                </Text>{" "}
+                im Jahr.
+              </Text>
+            ) : (
+              <Text style={s.schlagzeile}>Deine Anlage im Detail.</Text>
+            )}
+
+            <Text style={[s.lauftext, { marginTop: 16 }]}>
+              Gerechnet mit deinem Verbrauch, {zahl(Math.round(geplant.jahresertragKwh))} kWh
+              Ertrag und {Math.round(geplant.autarkie * 100)} % Autarkie
+              {geplant.speicherKwh > 0
+                ? ` — mit ${zahl(Math.round(geplant.speicherKwh * 10) / 10)} kWh Speicher`
+                : " — ohne Speicher"}
+              . Über zwanzig Jahre sind das rund {zahl(Math.round(geplant.ersparnis20))} €
+              {geplant.amortisationJahre !== null
+                ? `; die Anlage hat sich nach etwa ${zahl(
+                    Math.round(geplant.amortisationJahre * 10) / 10,
+                  )} Jahren bezahlt.`
+                : "."}
+            </Text>
+            <Text style={[s.kleingedruckt, { marginTop: 10 }]}>
+              Richtwerte aus der Planung — der tatsächliche Ertrag hängt vom Wetter ab, die
+              Ersparnis vom Strompreis. Steigt er, wird die Rechnung besser.
+            </Text>
+
+            <View style={s.kennreihe}>
+              <Kennsaeule zahl={`${zahl(geplant.kwp)} kWp`} label="Anlagenleistung" />
+              <Kennsaeule zahl={zahl(geplant.modulAnzahl)} label="Module auf dem Dach" />
+              {geplant.speicherKwh > 0 ? (
+                <Kennsaeule
+                  zahl={`${zahl(Math.round(geplant.speicherKwh * 10) / 10)} kWh`}
+                  label="Speicher"
+                />
+              ) : null}
+              <Kennsaeule
+                zahl={`${zahl(Math.round(geplant.jahresertragKwh))} kWh`}
+                label="Ertrag im Jahr"
+                akzent={akzent}
+              />
+            </View>
+
+            {geplant.bild ? (
+              /* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/Image ist kein <img> */
+              <Image src={geplant.bild} style={[s.planBild, { marginTop: 26 }]} />
+            ) : null}
+
+            <PlanFuss firma={data.firma.name} />
+          </Page>
+
+          {/* ── Deine Anlage ───────────────────────────────────── */}
+          <Page size="A4" style={s.page}>
+            <PlanKopf data={data} nummer={nummer} />
+
+            <Kapitel>Deine Anlage</Kapitel>
+            <Text style={s.planTitel2}>Was verbaut wird</Text>
+            <Text style={[s.lauftext, { marginTop: 12 }]}>
               Das ist die Anlage, die wir für dich geplant haben — so liegt sie auf deinem
               Dach, und das steckt darin.
             </Text>
 
-            {geplant.bild ? (
-              /* eslint-disable-next-line jsx-a11y/alt-text -- siehe oben */
-              <Image src={geplant.bild} style={s.planBild} />
-            ) : null}
-
-            <View style={s.karten}>
-              <View style={s.karte}>
-                <Text style={[s.karteZahl, { color: akzent }]}>{zahl(geplant.kwp)} kWp</Text>
-                <Text style={s.karteLabel}>Anlagenleistung</Text>
-              </View>
-              <View style={s.karte}>
-                <Text style={s.karteZahl}>{zahl(geplant.modulAnzahl)}</Text>
-                <Text style={s.karteLabel}>Module auf dem Dach</Text>
-              </View>
-              {geplant.speicherKwh > 0 ? (
-                <View style={s.karte}>
-                  <Text style={s.karteZahl}>
-                    {zahl(Math.round(geplant.speicherKwh * 10) / 10)} kWh
-                  </Text>
-                  <Text style={s.karteLabel}>Speicher</Text>
-                </View>
+            <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: TINTE }}>
+              {geplant.modulTyp ? (
+                <Wertreihe k={`Module (${zahl(geplant.modulAnzahl)} Stück)`} v={geplant.modulTyp} />
               ) : null}
-              <View style={s.karte}>
-                <Text style={s.karteZahl}>{zahl(Math.round(geplant.jahresertragKwh))} kWh</Text>
-                <Text style={s.karteLabel}>Ertrag im Jahr</Text>
-              </View>
+              {geplant.wechselrichter ? (
+                <Wertreihe k="Wechselrichter" v={geplant.wechselrichter} />
+              ) : null}
+              {geplant.speicherKwh > 0 ? (
+                <Wertreihe
+                  k="Speicher"
+                  v={[
+                    geplant.speicher,
+                    geplant.speicherModule ? `${geplant.speicherModule} Module` : null,
+                    `${zahl(Math.round(geplant.speicherKwh * 10) / 10)} kWh`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                />
+              ) : null}
+              {geplant.flaechen
+                .filter((f) => f.module > 0)
+                .map((f) => (
+                  <Wertreihe
+                    key={f.name}
+                    k={f.name}
+                    v={`${zahl(f.module)} Module · ${zahl(f.neigung)}° · ${himmelsrichtung(f.azimut)}`}
+                  />
+                ))}
+              {geplant.verschattungProzent > 0.005 ? (
+                <Wertreihe
+                  k="Verschattung"
+                  v={`− ${zahl(Math.round(geplant.verschattungProzent * 1000) / 10)} %`}
+                />
+              ) : null}
             </View>
 
-            <Text style={s.abschnitt}>WAS VERBAUT WIRD</Text>
-            <View style={[s.tafel, s.spalten2]}>
-              <View style={s.spalte}>
-                {geplant.modulTyp ? (
-                  <Wertzeile k={`Module (${zahl(geplant.modulAnzahl)} Stück)`} v={geplant.modulTyp} />
-                ) : null}
-                {geplant.wechselrichter ? (
-                  <Wertzeile k="Wechselrichter" v={geplant.wechselrichter} />
-                ) : null}
-                {geplant.speicherKwh > 0 ? (
-                  <Wertzeile
-                    k="Speicher"
-                    v={[
-                      geplant.speicher,
-                      geplant.speicherModule ? `${geplant.speicherModule} Module` : null,
-                      `${zahl(Math.round(geplant.speicherKwh * 10) / 10)} kWh`,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  />
-                ) : null}
-              </View>
-              <View style={s.spalte}>
-                {geplant.flaechen
-                  .filter((f) => f.module > 0)
-                  .map((f) => (
-                    <Wertzeile
-                      key={f.name}
-                      k={f.name}
-                      v={`${zahl(f.module)} Module · ${zahl(f.neigung)}° · ${himmelsrichtung(f.azimut)}`}
-                    />
-                  ))}
-                {geplant.verschattungProzent > 0.005 ? (
-                  <Wertzeile
-                    k="Verschattung"
-                    v={`− ${zahl(Math.round(geplant.verschattungProzent * 1000) / 10)} %`}
-                  />
-                ) : null}
-              </View>
-            </View>
-
-            <Text style={s.hinweis}>
-              Die Belegung zeigt den geplanten Stand. Was vor Ort tatsächlich möglich ist,
-              stellen wir bei der Aufnahme fest und besprechen es vorher mit dir.
+            <Text style={[s.kleingedruckt, { marginTop: 14 }]}>
+              Die Belegung zeigt den geplanten Stand. Was vor Ort möglich ist, stellen wir bei
+              der Aufnahme fest und besprechen es vorher mit dir.
             </Text>
 
             <PlanFuss firma={data.firma.name} />
           </Page>
 
-          {/* ── Seite: Dein Strom ───────────────────────────────── */}
+          {/* ── Dein Strom ─────────────────────────────────────── */}
           <Page size="A4" style={s.page}>
             <PlanKopf data={data} nummer={nummer} />
-            <Text style={s.planTitel}>Dein Strom</Text>
-            <Text style={s.planLead}>
+
+            <Kapitel>Dein Strom</Kapitel>
+            <Text style={s.planTitel2}>Monat für Monat</Text>
+            <Text style={[s.lauftext, { marginTop: 12 }]}>
               {zahl(Math.round(geplant.jahresertragKwh))} kWh im Jahr, das sind{" "}
               {zahl(Math.round(geplant.spezifisch))} kWh je kWp — gerechnet aus Ausrichtung,
-              Neigung und Verschattung deines Dachs.
+              Neigung und Verschattung deines Dachs. Die Farben zeigen, was direkt ins Haus
+              geht, was über den Speicher läuft und was eingespeist wird.
             </Text>
 
-            <Text style={s.abschnitt}>MONAT FÜR MONAT</Text>
-
-            {geplant.fluss.monate.map((m, i) => {
-              const hoechst = Math.max(...geplant.fluss.monate.map((x) => x.produktion), 1);
-              const teil = (wert: number) => `${(wert / hoechst) * 100}%`;
-              return (
-                <View key={MONATE[i]} style={s.balkenReihe}>
-                  <Text style={s.balkenLabel}>{MONATE[i]}</Text>
-                  <View style={[s.balkenBahn, { backgroundColor: "#F2EEE9" }]}>
-                    <View style={{ width: teil(m.direkt), backgroundColor: akzent }} />
-                    <View style={{ width: teil(m.speicher), backgroundColor: SPEICHERFARBE }} />
-                    <View style={{ width: teil(m.einspeisung), backgroundColor: NETZFARBE }} />
+            <View style={s.saeulenfeld}>
+              {geplant.fluss.monate.map((mo, i) => {
+                const hoechst = Math.max(...geplant.fluss.monate.map((x) => x.produktion), 1);
+                const anteil = (w: number) =>
+                  `${(w / (mo.produktion || 1)) * 100}%`;
+                return (
+                  <View key={MONATE[i]} style={s.saeule}>
+                    <Text style={s.saeuleWert}>{zahl(Math.round(mo.produktion))}</Text>
+                    <View
+                      style={{
+                        width: "100%",
+                        height: `${(mo.produktion / hoechst) * 100}%`,
+                        justifyContent: "flex-end",
+                      }}
+                    >
+                      <View style={{ height: anteil(mo.einspeisung), backgroundColor: "#D7D3D3" }} />
+                      <View style={{ height: anteil(mo.speicher), backgroundColor: TINTE }} />
+                      <View style={{ height: anteil(mo.direkt), backgroundColor: akzent }} />
+                    </View>
                   </View>
-                  <Text style={s.balkenWert}>{zahl(Math.round(m.produktion))} kWh</Text>
-                </View>
-              );
-            })}
+                );
+              })}
+            </View>
+            <View style={s.monatsachse}>
+              {MONATE.map((mo) => (
+                <Text key={mo} style={s.monatsname}>
+                  {mo}
+                </Text>
+              ))}
+            </View>
             <Legende
               akzent={akzent}
               eintraege={[
                 ["Direkt verbraucht", akzent],
-                ["Über den Speicher", SPEICHERFARBE],
-                ["Ins Netz", NETZFARBE],
+                ["Über den Speicher", TINTE],
+                ["Ins Netz", "#D7D3D3"],
               ]}
             />
 
-            {/* Wohin geht der Strom */}
-            <Text style={s.abschnitt}>WOHIN GEHT DEIN STROM?</Text>
-            <Text style={{ color: LEISE }}>
-              Von {zahl(Math.round(geplant.jahresertragKwh))} kWh Erzeugung bleiben{" "}
-              {Math.round(geplant.eigenverbrauchQuote * 100)} % im Haus.
-            </Text>
-            <Flussband
-              teile={[
-                { wert: geplant.fluss.direktKwh, farbe: akzent },
-                { wert: geplant.fluss.ueberSpeicherKwh, farbe: SPEICHERFARBE },
-                { wert: geplant.fluss.einspeisungKwh, farbe: NETZFARBE },
-              ]}
-            />
-            <Legende
-              akzent={akzent}
-              eintraege={[
-                [`Direkt ${zahl(Math.round(geplant.fluss.direktKwh))} kWh`, akzent],
-                [`Speicher ${zahl(Math.round(geplant.fluss.ueberSpeicherKwh))} kWh`, SPEICHERFARBE],
-                [`Netz ${zahl(Math.round(geplant.fluss.einspeisungKwh))} kWh`, NETZFARBE],
-              ]}
-            />
-
-            {/* Woher kommt der Strom */}
-            <Text style={s.abschnitt}>WOHER KOMMT DEIN STROM?</Text>
-            <Text style={{ color: LEISE }}>
-              Dein Haushalt braucht {zahl(Math.round(geplant.verbrauchKwh))} kWh im Jahr.
-            </Text>
-            <Flussband
-              teile={[
-                { wert: geplant.fluss.direktKwh, farbe: akzent },
-                { wert: geplant.fluss.ueberSpeicherKwh, farbe: SPEICHERFARBE },
-                { wert: geplant.fluss.netzbezugKwh, farbe: NETZFARBE },
-              ]}
-            />
-            <Legende
-              akzent={akzent}
-              eintraege={[
-                [`Vom Dach ${zahl(Math.round(geplant.fluss.direktKwh))} kWh`, akzent],
-                [
-                  `Aus dem Speicher ${zahl(Math.round(geplant.fluss.ueberSpeicherKwh))} kWh`,
-                  SPEICHERFARBE,
-                ],
-                [`Aus dem Netz ${zahl(Math.round(geplant.fluss.netzbezugKwh))} kWh`, NETZFARBE],
-              ]}
-            />
-
-            <View style={s.quote}>
-              <View style={s.quoteFeld}>
-                <Text style={[s.quoteZahl, { color: akzent }]}>
-                  {Math.round(geplant.autarkie * 100)} %
+            <View style={[s.spalten2, { marginTop: 26 }]}>
+              <View style={s.spalte}>
+                <Text style={s.zwischen}>WOHIN GEHT DEIN STROM?</Text>
+                <Text style={s.kleingedruckt}>
+                  Von {zahl(Math.round(geplant.jahresertragKwh))} kWh Erzeugung bleiben{" "}
+                  {Math.round(geplant.eigenverbrauchQuote * 100)} % im Haus.
                 </Text>
-                <Text style={s.quoteText}>
-                  Autarkie — so viel deines Verbrauchs deckst du selbst, statt ihn zu kaufen.
-                </Text>
+                <Anteilsband
+                  teile={[
+                    { wert: geplant.fluss.direktKwh, farbe: akzent, name: "Direkt" },
+                    { wert: geplant.fluss.ueberSpeicherKwh, farbe: TINTE, name: "Speicher" },
+                    { wert: geplant.fluss.einspeisungKwh, farbe: "#D7D3D3", name: "Ins Netz" },
+                  ]}
+                />
               </View>
-              <View style={s.quoteFeld}>
-                <Text style={s.quoteZahl}>
-                  {Math.round(geplant.eigenverbrauchQuote * 100)} %
+              <View style={s.spalte}>
+                <Text style={s.zwischen}>WOHER KOMMT DEIN STROM?</Text>
+                <Text style={s.kleingedruckt}>
+                  Dein Haushalt braucht {zahl(Math.round(geplant.verbrauchKwh))} kWh im Jahr.
                 </Text>
-                <Text style={s.quoteText}>
-                  Eigenverbrauch — so viel des erzeugten Stroms bleibt im Haus, der Rest geht
-                  ins Netz.
-                </Text>
+                <Anteilsband
+                  teile={[
+                    { wert: geplant.fluss.direktKwh, farbe: akzent, name: "Vom Dach" },
+                    { wert: geplant.fluss.ueberSpeicherKwh, farbe: TINTE, name: "Aus dem Speicher" },
+                    { wert: geplant.fluss.netzbezugKwh, farbe: "#D7D3D3", name: "Aus dem Netz" },
+                  ]}
+                />
               </View>
+            </View>
+
+            <Text style={[s.zwischen, { marginTop: 26 }]}>ENERGIEFLUSS</Text>
+            <Text style={s.kleingedruckt}>
+              Vom Dach ins Haus, in den Speicher und ins Netz — Bandbreite gleich Strommenge.
+            </Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
+              <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold" }}>
+                Photovoltaik · {zahl(Math.round(geplant.jahresertragKwh))} kWh
+              </Text>
+              <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold" }}>
+                Haushalt · {zahl(Math.round(geplant.verbrauchKwh))} kWh
+              </Text>
+            </View>
+            <SankeyPdf
+              akzent={akzent}
+              direkt={geplant.fluss.direktKwh}
+              speicher={geplant.fluss.ueberSpeicherKwh}
+              einspeisung={geplant.fluss.einspeisungKwh}
+              netzbezug={geplant.fluss.netzbezugKwh}
+              produktion={geplant.jahresertragKwh}
+              verbrauch={geplant.verbrauchKwh}
+            />
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <Text style={s.kleingedruckt}>
+                Netzbezug · {zahl(Math.round(geplant.fluss.netzbezugKwh))} kWh
+              </Text>
+              <Text style={s.kleingedruckt}>
+                Netz · {zahl(Math.round(geplant.fluss.einspeisungKwh))} kWh
+              </Text>
+            </View>
+
+            <View style={s.kennreihe}>
+              <Kennsaeule
+                zahl={`${Math.round(geplant.autarkie * 100)} %`}
+                label="Autarkie — so viel deines Verbrauchs deckst du selbst"
+                akzent={akzent}
+              />
+              <Kennsaeule
+                zahl={`${Math.round(geplant.eigenverbrauchQuote * 100)} %`}
+                label="Eigenverbrauch — so viel bleibt im Haus"
+              />
             </View>
 
             <PlanFuss firma={data.firma.name} />
           </Page>
 
-          {/* ── Seite: Was die Anlage rechnet ───────────────────── */}
+          {/* ── Was die Anlage rechnet ─────────────────────────── */}
           <Page size="A4" style={s.page}>
             <PlanKopf data={data} nummer={nummer} />
-            <Text style={s.planTitel}>Was die Anlage rechnet</Text>
-            <Text style={s.planLead}>
-              Gerechnet mit dem Preis aus deinem Angebot, deinem Verbrauch und deinem
-              Strompreis.
-            </Text>
 
-            <View style={s.karten}>
-              <View style={s.karte}>
-                <Text style={[s.karteZahl, { color: akzent }]}>
-                  {eurKurz(geplant.ersparnis20)}
-                </Text>
-                <Text style={s.karteLabel}>Ersparnis in 20 Jahren</Text>
-              </View>
+            <Kapitel>Wirtschaftlichkeit</Kapitel>
+            <Text style={s.planTitel2}>Was die Anlage rechnet</Text>
+
+            <View style={s.kennreihe}>
+              <Kennsaeule
+                zahl={eurKurz(geplant.ersparnis20)}
+                label="Ersparnis in 20 Jahren"
+                akzent={akzent}
+              />
               {geplant.amortisationJahre !== null ? (
-                <View style={s.karte}>
-                  <Text style={s.karteZahl}>
-                    {zahl(Math.round(geplant.amortisationJahre * 10) / 10)} Jahre
-                  </Text>
-                  <Text style={s.karteLabel}>
-                    {geplant.breakEvenJahr !== null
+                <Kennsaeule
+                  zahl={`${zahl(Math.round(geplant.amortisationJahre * 10) / 10)} Jahre`}
+                  label={
+                    geplant.breakEvenJahr !== null
                       ? `bezahlt im Jahr ${new Date(data.erstelltAm).getFullYear() + geplant.breakEvenJahr}`
-                      : "bis sie sich bezahlt hat"}
-                  </Text>
-                </View>
+                      : "bis sie sich bezahlt hat"
+                  }
+                />
               ) : null}
               {geplant.rendite !== null ? (
-                <View style={s.karte}>
-                  <Text style={s.karteZahl}>
-                    {zahl(Math.round(geplant.rendite * 1000) / 10)} %
+                <Kennsaeule
+                  zahl={`${zahl(Math.round(geplant.rendite * 1000) / 10)} %`}
+                  label="Rendite im Jahr"
+                />
+              ) : null}
+              <Kennsaeule zahl={eurKurz(geplant.investition)} label="Investition laut Angebot" />
+            </View>
+
+            <Text style={[s.zwischen, { marginTop: 26 }]}>BIS SIE SICH BEZAHLT HAT</Text>
+            <Text style={s.kleingedruckt}>
+              Jeder Balken ist ein Jahr: in der Akzentfarbe, solange die Anlage noch nicht
+              bezahlt ist — danach im Plus.
+            </Text>
+            <Kurve
+              kurve={geplant.kurve}
+              start={new Date(data.erstelltAm).getFullYear() + 1}
+              akzent={akzent}
+            />
+
+            <View style={[s.spalten2, { marginTop: 26 }]}>
+              <View style={s.spalte}>
+                <Text style={s.zwischen}>WOMIT GERECHNET WURDE</Text>
+                <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: TINTE }}>
+                  <Wertreihe
+                    k="Verbrauch im Haus"
+                    v={`${zahl(Math.round(geplant.verbrauchKwh))} kWh`}
+                  />
+                  <Wertreihe k="Strompreis heute" v={`${eur(geplant.strompreis)} je kWh`} />
+                  <Wertreihe k="Einspeisevergütung" v={`${eur(geplant.verguetung)} je kWh`} />
+                  <Wertreihe
+                    k="Angenommene Steigerung"
+                    v={`${zahl(Math.round(geplant.steigerung * 1000) / 10)} % im Jahr`}
+                  />
+                </View>
+              </View>
+
+              {geplant.speicherKwh > 0 && geplant.vergleich.preis > 0 ? (
+                <View style={s.spalte}>
+                  <Text style={s.zwischen}>MIT ODER OHNE SPEICHER</Text>
+                  <View style={[s.vglKopf, { marginTop: 8 }]}>
+                    <Text style={s.vglSache}> </Text>
+                    <Text style={[s.vglWert, { color: akzent, fontSize: 7 }]}>
+                      MIT {zahl(Math.round(geplant.speicherKwh * 10) / 10)} KWH
+                    </Text>
+                    <Text style={[s.vglWert, { color: LEISE, fontSize: 7 }]}>OHNE SPEICHER</Text>
+                  </View>
+                  <Vergleichszeile
+                    k="Investition"
+                    a={eurKurz(geplant.vergleich.mit.investition)}
+                    b={eurKurz(geplant.vergleich.ohne.investition)}
+                  />
+                  <Vergleichszeile
+                    k="Autarkie"
+                    a={`${Math.round(geplant.vergleich.mit.autarkie * 100)} %`}
+                    b={`${Math.round(geplant.vergleich.ohne.autarkie * 100)} %`}
+                  />
+                  <Vergleichszeile
+                    k="Strom aus dem Netz"
+                    a={`${zahl(Math.round(geplant.vergleich.mit.netzbezugKwh))} kWh`}
+                    b={`${zahl(Math.round(geplant.vergleich.ohne.netzbezugKwh))} kWh`}
+                  />
+                  <Vergleichszeile
+                    k="Ersparnis im Jahr"
+                    a={eurKurz(geplant.vergleich.mit.ersparnisJahr1)}
+                    b={eurKurz(geplant.vergleich.ohne.ersparnisJahr1)}
+                  />
+                  <Text style={[s.kleingedruckt, { marginTop: 10 }]}>
+                    Der Speicher kostet {eurKurz(geplant.vergleich.preis)} und hebt die Autarkie
+                    um {Math.round(geplant.vergleich.mehrAutarkie * 100)} Punkte. Er spart{" "}
+                    {eurKurz(geplant.vergleich.mehrErsparnisJahr)} im Jahr, weil{" "}
+                    {zahl(Math.round(geplant.vergleich.wenigerNetzbezugKwh))} kWh weniger aus dem
+                    Netz kommen.
                   </Text>
-                  <Text style={s.karteLabel}>Rendite im Jahr</Text>
                 </View>
               ) : null}
-              <View style={s.karte}>
-                <Text style={s.karteZahl}>{eurKurz(geplant.investition)}</Text>
-                <Text style={s.karteLabel}>Investition laut Angebot</Text>
-              </View>
             </View>
-
-            {/* Kumulierte Ersparnis, Jahr für Jahr */}
-            <Text style={s.abschnitt}>BIS SIE SICH BEZAHLT HAT</Text>
-            <Text style={{ color: LEISE }}>
-              Rot ist die Zeit, in der die Anlage noch nicht bezahlt ist. Ab dem grünen Jahr
-              hast du mehr gespart als investiert.
-            </Text>
-            <Kurve kurve={geplant.kurve} start={new Date(data.erstelltAm).getFullYear() + 1} />
-
-            <Text style={s.abschnitt}>WOMIT GERECHNET WURDE</Text>
-            <View style={[s.tafel, s.spalten2]}>
-              <View style={s.spalte}>
-                <Wertzeile k="Verbrauch im Haus" v={`${zahl(Math.round(geplant.verbrauchKwh))} kWh`} />
-                <Wertzeile k="Strompreis heute" v={`${eur(geplant.strompreis)} je kWh`} />
-              </View>
-              <View style={s.spalte}>
-                <Wertzeile k="Einspeisevergütung" v={`${eur(geplant.verguetung)} je kWh`} />
-                <Wertzeile
-                  k="angenommene Steigerung"
-                  v={`${zahl(Math.round(geplant.steigerung * 1000) / 10)} % im Jahr`}
-                />
-              </View>
-            </View>
-
-            {/* Mit oder ohne Speicher */}
-            {/*
-              Verglichen wird nur, wenn der Speicher auch im Preis steckt.
-              Ein Angebot ohne Speicherposition liesse sich nicht ehrlich
-              gegenrechnen — dann stünde dieselbe Summe auf beiden Seiten.
-            */}
-            {geplant.speicherKwh > 0 && geplant.vergleich.preis > 0 ? (
-              <>
-                <Text style={s.abschnitt}>MIT ODER OHNE SPEICHER</Text>
-                <Text style={{ color: LEISE, marginBottom: 8 }}>
-                  Dieselbe Anlage, zwei Rechnungen. Ohne Speicher ist sie billiger und deckt
-                  weniger — was mehr Sinn ergibt, entscheidest du.
-                </Text>
-                <View style={s.vglKopf}>
-                  <Text style={s.vglSache}> </Text>
-                  <Text style={[s.vglWert, { color: akzent }]}>
-                    mit {zahl(Math.round(geplant.speicherKwh * 10) / 10)} kWh
-                  </Text>
-                  <Text style={s.vglWert}>ohne Speicher</Text>
-                </View>
-                <Vergleichszeile
-                  k="Investition"
-                  a={eur(Math.round(geplant.vergleich.mit.investition))}
-                  b={eur(Math.round(geplant.vergleich.ohne.investition))}
-                />
-                <Vergleichszeile
-                  k="Autarkie"
-                  a={`${Math.round(geplant.vergleich.mit.autarkie * 100)} %`}
-                  b={`${Math.round(geplant.vergleich.ohne.autarkie * 100)} %`}
-                />
-                <Vergleichszeile
-                  k="Strom aus dem Netz"
-                  a={`${zahl(Math.round(geplant.vergleich.mit.netzbezugKwh))} kWh`}
-                  b={`${zahl(Math.round(geplant.vergleich.ohne.netzbezugKwh))} kWh`}
-                />
-                <Vergleichszeile
-                  k="Ersparnis im Jahr"
-                  a={eur(Math.round(geplant.vergleich.mit.ersparnisJahr1))}
-                  b={eur(Math.round(geplant.vergleich.ohne.ersparnisJahr1))}
-                />
-                <Vergleichszeile
-                  k="bezahlt nach"
-                  a={
-                    geplant.vergleich.mit.amortisationJahre !== null
-                      ? `${zahl(Math.round(geplant.vergleich.mit.amortisationJahre * 10) / 10)} Jahren`
-                      : "—"
-                  }
-                  b={
-                    geplant.vergleich.ohne.amortisationJahre !== null
-                      ? `${zahl(Math.round(geplant.vergleich.ohne.amortisationJahre * 10) / 10)} Jahren`
-                      : "—"
-                  }
-                />
-                <Text style={s.hinweis}>
-                  Der Speicher kostet {eur(Math.round(geplant.vergleich.preis))} und hebt die
-                  Autarkie um {Math.round(geplant.vergleich.mehrAutarkie * 100)} Punkte. Er
-                  spart {eur(Math.round(geplant.vergleich.mehrErsparnisJahr))} im Jahr, weil{" "}
-                  {zahl(Math.round(geplant.vergleich.wenigerNetzbezugKwh))} kWh weniger aus dem
-                  Netz kommen.
-                </Text>
-              </>
-            ) : null}
 
             <PlanFuss firma={data.firma.name} />
           </Page>
@@ -1390,7 +1507,15 @@ function Legende({
  * Bild, das der Betrieb aus anderen Angeboten kennt. Die Nulllinie
  * liegt dort, wo der Wechsel passiert.
  */
-function Kurve({ kurve, start }: { kurve: number[]; start: number }) {
+function Kurve({
+  kurve,
+  start,
+  akzent,
+}: {
+  kurve: number[];
+  start: number;
+  akzent: string;
+}) {
   if (kurve.length === 0) return null;
   const hoch = Math.max(...kurve, 0);
   const tief = Math.min(...kurve, 0);
@@ -1423,7 +1548,7 @@ function Kurve({ kurve, start }: { kurve: number[]; start: number }) {
                   style={{
                     width: "72%",
                     height: hoehe,
-                    backgroundColor: GRUEN,
+                    backgroundColor: TINTE,
                     borderRadius: 1.5,
                     marginBottom: 88 - nulllinie,
                   }}
@@ -1433,7 +1558,7 @@ function Kurve({ kurve, start }: { kurve: number[]; start: number }) {
                   style={{
                     width: "72%",
                     height: hoehe,
-                    backgroundColor: ROT,
+                    backgroundColor: akzent,
                     borderRadius: 1.5,
                     marginBottom: 88 - nulllinie - hoehe,
                   }}
@@ -1452,6 +1577,135 @@ function Kurve({ kurve, start }: { kurve: number[]; start: number }) {
         ))}
       </View>
     </>
+  );
+}
+
+/* ── Bausteine der Planungsseiten, nach der Vorlage ───────────────── */
+
+function Kapitel({ children }: { children: string }) {
+  return <Text style={s.kapitel}>{children.toUpperCase()}</Text>;
+}
+
+/** Kennzahl unter einer Haarlinie — genau eine je Reihe im Akzent. */
+function Kennsaeule({
+  zahl,
+  label,
+  akzent,
+}: {
+  zahl: string;
+  label: string;
+  akzent?: string;
+}) {
+  return (
+    <View style={akzent ? [s.kennsaeuleAkzent, { borderTopColor: akzent }] : s.kennsaeule}>
+      <Text style={akzent ? [s.kennzahl, { color: akzent }] : s.kennzahl}>{zahl}</Text>
+      <Text style={s.kennlabel2}>{label.toUpperCase()}</Text>
+    </View>
+  );
+}
+
+function Wertreihe({ k, v }: { k: string; v: string }) {
+  return (
+    <View style={s.wertreihe}>
+      <Text style={s.wertLabel}>{k.toUpperCase()}</Text>
+      <Text style={s.wertText}>{v}</Text>
+    </View>
+  );
+}
+
+/** Anteilsband mit Prozent, Name und Menge darunter. */
+function Anteilsband({
+  teile,
+}: {
+  teile: Array<{ wert: number; farbe: string; name: string }>;
+}) {
+  const gesamt = teile.reduce((a, t) => a + Math.max(0, t.wert), 0) || 1;
+  const breit = (w: number) => `${(Math.max(0, w) / gesamt) * 100}%`;
+  return (
+    <>
+      <View style={s.anteilBand}>
+        {teile.map((t) => (
+          <View key={t.name} style={{ width: breit(t.wert), backgroundColor: t.farbe }} />
+        ))}
+      </View>
+      <View style={s.anteilFuss}>
+        {teile.map((t) => (
+          <View key={t.name} style={{ width: breit(t.wert), paddingRight: 6 }}>
+            <Text style={s.anteilProzent}>
+              {Math.round((Math.max(0, t.wert) / gesamt) * 100)} %
+            </Text>
+            <Text style={s.anteilName}>{t.name}</Text>
+            <Text style={s.anteilMenge}>{zahl(Math.round(t.wert))} kWh</Text>
+          </View>
+        ))}
+      </View>
+    </>
+  );
+}
+
+/**
+ * Der Energiefluss als Sankey — dieselben vier Bänder wie im Portal.
+ *
+ * Breite gleich Strommenge: Wer das Bild sieht, versteht ohne Legende,
+ * wohin der grösste Teil geht.
+ */
+function SankeyPdf({
+  akzent,
+  direkt,
+  speicher,
+  einspeisung,
+  netzbezug,
+  produktion,
+  verbrauch,
+}: {
+  akzent: string;
+  direkt: number;
+  speicher: number;
+  einspeisung: number;
+  netzbezug: number;
+  produktion: number;
+  verbrauch: number;
+}) {
+  const B = 1000;
+  const H = 300;
+  const stab = 10;
+  const x1 = stab;
+  const x2 = B - stab;
+  const m = B / 2;
+
+  const gesamt = Math.max(produktion, verbrauch + einspeisung, 1);
+  const px = (kwh: number) => (Math.max(0, kwh) / gesamt) * H;
+
+  const hD = px(direkt);
+  const hS = px(speicher);
+  const hE = px(einspeisung);
+  const hN = px(netzbezug);
+
+  const ausD = 0;
+  const ausS = hD;
+  const ausE = hD + hS;
+  const ausN = ausE + hE;
+
+  const einD = 0;
+  const einS = hD;
+  const einN = hD + hS;
+  const einNetz = einN + hN;
+
+  const band = (y1: number, y2: number, h: number) =>
+    `M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2} L${x2},${y2 + h} C${m},${y2 + h} ${m},${y1 + h} ${x1},${y1 + h} Z`;
+
+  return (
+    <Svg viewBox={`0 0 ${B} ${H}`} style={{ width: "100%", height: 150, marginTop: 8 }}>
+      <Path d={band(ausD, einD, hD)} fill={akzent} fillOpacity={0.9} />
+      <Path d={band(ausS, einS, hS)} fill={TINTE} fillOpacity={0.8} />
+      <Path d={band(ausE, einNetz, hE)} fill="#C9C5BC" fillOpacity={0.75} />
+      <Path d={band(ausN, einN, hN)} fill={NETZFARBE} fillOpacity={0.75} />
+
+      <Rect x={0} y={0} width={stab} height={hD + hS + hE} fill={akzent} />
+      <Rect x={0} y={ausN} width={stab} height={hN} fill={NETZFARBE} />
+      <Rect x={B - stab} y={0} width={stab} height={hD + hS + hN} fill={TINTE} />
+      <Rect x={B - stab} y={einNetz} width={stab} height={hE} fill="#C9C5BC" />
+    </Svg>
   );
 }
 
