@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   PHASE_LABEL,
@@ -460,6 +461,103 @@ export async function vorgangReaktivieren(
 
   frisch(id.data);
   return { error: null, ok: "Wieder aufgenommen." };
+}
+
+/* ------------------------------------------------------------- LÖSCHEN */
+
+/**
+ * Einen Vorgang löschen.
+ *
+ * Bewusst mit einer Bremse: Sobald eine Rechnung dranhängt, wird nicht
+ * gelöscht. Rechnungen sind sieben Jahre aufzubewahren (CLAUDE.md 11),
+ * und ein Beleg, dessen Vorgang fehlt, ist im Zweifel nicht mehr
+ * erklärbar. Für erledigte Geschäfte gibt es „als verloren markieren" —
+ * das behält die Auswertung.
+ *
+ * Was mitgeht, geht wirklich mit: Positionen, Gruppen, Dokumente,
+ * Aufgaben, Gates, Nachrichten, Bedarfsliste. Was den Vorgang nur
+ * kannte, verliert den Verweis und bleibt bestehen: gebuchte Zeiten,
+ * Lagerbewegungen, Einsätze, die Planung. Deshalb steht in der Meldung,
+ * was übrig bleibt — wer eine Zeitbuchung sucht, findet sie danach im
+ * Sammelkonto und nicht mehr am Vorgang.
+ */
+export async function vorgangLoeschen(
+  _prev: VorgangStatus,
+  formData: FormData,
+): Promise<VorgangStatus> {
+  const z1 = await schreibzugang();
+  if (!z1.ok) return z1.status;
+
+  const id = z.string().uuid().safeParse(formData.get("vorgangId"));
+  if (!id.success) return { error: "Vorgang fehlt.", ok: null };
+
+  const supabase = await createClient();
+  const { data: v } = await supabase
+    .from("vorgang")
+    .select("id, number")
+    .eq("id", id.data)
+    .maybeSingle();
+  if (!v) return { error: "Vorgang nicht gefunden.", ok: null };
+
+  const { count: rechnungen } = await supabase
+    .from("vorgang_dokument")
+    .select("id", { count: "exact", head: true })
+    .eq("vorgang_id", id.data)
+    .in("typ", ["anzahlungsrechnung", "schlussrechnung"]);
+
+  if ((rechnungen ?? 0) > 0) {
+    return {
+      error:
+        `${v.number as string} hat schon eine Rechnung — gelöscht wird da nichts. ` +
+        "Rechnungen sind aufzubewahren. Wenn der Auftrag nicht zustande kam: als verloren markieren.",
+      ok: null,
+    };
+  }
+
+  /*
+   * Was hängen bleibt, wird gezählt BEVOR gelöscht wird — danach zeigt
+   * kein Verweis mehr hierher.
+   */
+  const [{ count: zeiten }, { count: bewegungen }, { count: einsaetze }] = await Promise.all([
+    supabase
+      .from("time_entry")
+      .select("id", { count: "exact", head: true })
+      .eq("vorgang_id", id.data),
+    supabase
+      .from("lagerbewegung")
+      .select("id", { count: "exact", head: true })
+      .eq("vorgang_id", id.data),
+    supabase
+      .from("einsatz")
+      .select("id", { count: "exact", head: true })
+      .eq("vorgang_id", id.data),
+  ]);
+
+  const { error } = await supabase.from("vorgang").delete().eq("id", id.data);
+  if (error) return { error: `Löschen fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/vorgaenge");
+  revalidatePath("/cockpit");
+  revalidatePath("/planung");
+
+  const bleibt = [
+    (zeiten ?? 0) > 0 ? `${zeiten} Zeitbuchungen` : null,
+    (bewegungen ?? 0) > 0 ? `${bewegungen} Lagerbewegungen` : null,
+    (einsaetze ?? 0) > 0 ? `${einsaetze} Einsätze` : null,
+  ].filter(Boolean);
+
+  /*
+   * Und weg von der Seite, die es nicht mehr gibt.
+   *
+   * Der Umweg über den Browser („nach dem Erfolg umleiten") kam zu
+   * spät: Die Serveraktion frischt den Pfad auf, Next rendert die Seite
+   * des gelöschten Vorgangs neu — und der Betrieb sah für einen Moment
+   * eine 404. Die Meldung reist als Parameter mit.
+   */
+  const meldung =
+    `${v.number as string} gelöscht.` +
+    (bleibt.length > 0 ? ` ${bleibt.join(", ")} bleiben bestehen, ohne Vorgangsbezug.` : "");
+  redirect(`/vorgaenge?weg=${encodeURIComponent(meldung)}`);
 }
 
 /* --------------------------------------------------------------- GATES */

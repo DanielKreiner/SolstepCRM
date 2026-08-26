@@ -14,6 +14,7 @@ import {
 } from "@/lib/vorgang/modell";
 import {
   phaseWechseln,
+  vorgangLoeschen,
   vorgangReaktivieren,
   vorgangVerloren,
 } from "@/app/(app)/vorgaenge/actions";
@@ -180,13 +181,76 @@ export function Aktionspanel({
       ) : null}
 
       {darfSchreiben ? (
-        <VerlorenKnopf vorgangId={vorgangId} phase={phase} />
+        <>
+          <VerlorenKnopf vorgangId={vorgangId} phase={phase} />
+          <LoeschKnopf vorgangId={vorgangId} />
+        </>
       ) : (
         <p className="mt-3 text-[11.5px] text-faint">
           Diese Rolle löst keine Phasenwechsel aus.
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * Vorgang löschen — mit Rückfrage, nicht mit einem Klick.
+ *
+ * Ein Vorgang trägt Angebot, Termine, Material und die Erwartung des
+ * Kunden. Sobald eine Rechnung dranhängt, lehnt die Serveraktion ab;
+ * das steht hier auch dran, damit niemand erst klickt und dann liest.
+ */
+function LoeschKnopf({ vorgangId }: { vorgangId: string }) {
+  const [frage, setFrage] = useState(false);
+  const [status, formAction] = useActionState<AktionsStatus, FormData>(
+    vorgangLoeschen,
+    LEER,
+  );
+
+  /*
+   * Umgeleitet wird serverseitig: Nach dem Löschen gibt es diese Seite
+   * nicht mehr, und ein Sprung aus dem Browser käme zu spät — Next
+   * rendert die Seite des gelöschten Vorgangs vorher neu und zeigt eine
+   * 404. Hier bleibt nur die Fehlermeldung, etwa bei einer Rechnung.
+   */
+
+  if (!frage) {
+    return (
+      <button
+        type="button"
+        onClick={() => setFrage(true)}
+        className="mt-3 ml-4 cursor-pointer border-0 bg-transparent text-[12.5px] font-medium text-muted underline hover:text-s-crit"
+      >
+        Vorgang löschen
+      </button>
+    );
+  }
+
+  return (
+    <form action={formAction} className="mt-4 border-t border-line pt-4">
+      <input type="hidden" name="vorgangId" value={vorgangId} />
+      <h3 className="text-[13.5px] font-semibold">Vorgang wirklich löschen?</h3>
+      <p className="mt-1 mb-3 text-[12px] leading-[1.5] text-muted">
+        Angebot, Positionen, Dokumente, Aufgaben und die Bedarfsliste gehen mit. Gebuchte
+        Zeiten, Lagerbewegungen und Einsätze bleiben bestehen, verlieren aber den Bezug.
+        Hängt schon eine Rechnung dran, wird nicht gelöscht — dann ist {"\u201E"}als
+        verloren markieren{"\u201C"} der richtige Weg.
+      </p>
+
+      <Meldung status={status} />
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <LoeschAbsenden />
+        <button
+          type="button"
+          onClick={() => setFrage(false)}
+          className="cursor-pointer border-0 bg-transparent text-[12.5px] text-muted underline"
+        >
+          abbrechen
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -354,6 +418,19 @@ function VerlorenKnopf({
 
       <Meldung status={status} />
     </form>
+  );
+}
+
+function LoeschAbsenden() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="min-h-[44px] cursor-pointer rounded-pill border-0 bg-s-crit px-[20px] text-[13.5px] font-semibold text-white disabled:opacity-50"
+    >
+      {pending ? "Wird gelöscht …" : "Endgültig löschen"}
+    </button>
   );
 }
 

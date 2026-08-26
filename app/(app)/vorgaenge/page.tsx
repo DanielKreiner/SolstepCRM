@@ -64,10 +64,10 @@ function avatarFarbe(name: string): string {
 export default async function VorgaengePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; kunde?: string }>;
+  searchParams: Promise<{ tab?: string; kunde?: string; weg?: string }>;
 }) {
   const me = await requireMe();
-  const { tab = "offen", kunde } = await searchParams;
+  const { tab = "offen", kunde, weg } = await searchParams;
   const supabase = await createClient();
 
   const [{ data: vorgaenge }, { data: werte }, { data: gates }, { data: kunden }] =
@@ -211,6 +211,20 @@ export default async function VorgaengePage({
           </div>
         }
       />
+
+      {/*
+        Was gerade gelöscht wurde. Die Meldung kommt als Parameter von
+        der Serveraktion — auf der Seite des Vorgangs liesse sie sich
+        nicht mehr zeigen, die gibt es ja nicht mehr.
+      */}
+      {weg ? (
+        <p
+          role="status"
+          className="mb-4 rounded-[16px] bg-surface px-5 py-4 text-[13.5px] font-medium shadow-soft"
+        >
+          {weg}
+        </p>
+      ) : null}
 
       {tab === "verloren" ? (
         <VerlorenListe zeilen={verloren} darfBetraege={darfBetraege} wertJe={wertJe} />
