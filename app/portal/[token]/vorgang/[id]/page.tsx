@@ -312,10 +312,11 @@ export default async function PortalVorgangPage({
 
         {bereich === "angebot" && positionen.length > 0 ? (
           <section className="mb-4">
-            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-[21px] font-bold tracking-[-0.02em]">
-                {angenommen ? "Ihr Auftrag" : "Ihr Angebot"}
-              </h2>
+            {/*
+              Keine zweite Überschrift: „Ihr Angebot" steht schon im Kopf
+              der Seite. Der Platz gehört dem Dach.
+            */}
+            <div className="mb-3 flex justify-end">
               <a
                 href={`/api/portal/${token}/pdf/${v.id}?art=${angenommen ? "ab" : "angebot"}`}
                 target="_blank"
@@ -334,7 +335,13 @@ export default async function PortalVorgangPage({
               * Preisliste, während Dach, Ertrag und Wirtschaftlichkeit
               * in einem zweiten PDF lagen.
               */}
-            {daten.planung ? <PlanungsBlock planung={daten.planung} /> : null}
+            {daten.planung ? (
+              <PlanungsBlock
+                planung={daten.planung}
+                kunde={session.customerName}
+                adresse={[v.adresse, v.ort].filter(Boolean).join(", ") || null}
+              />
+            ) : null}
 
             <AngebotAnsicht
               positionen={positionen}

@@ -41,27 +41,35 @@ function Abschnitt({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Eine Kennzahl in einer Karte: grosse Zahl, kleine Erklärung. */
-function Kachel({
+/**
+ * Eine Kennzahl im Band: grosse Zahl, kleine Erklärung, Haarlinie davor.
+ *
+ * Ohne Rahmen — vier umrandete Kästchen nebeneinander sehen aus wie ein
+ * Formular. Die Trennlinie reicht, damit die Zahlen nicht ineinander
+ * laufen.
+ */
+function Kennzahl({
   zahl,
   label,
   akzent = false,
+  strich = false,
 }: {
   zahl: string;
   label: string;
   akzent?: boolean;
+  strich?: boolean;
 }) {
   return (
-    <div className="rounded-[14px] border border-line p-4">
+    <div className={strich ? "sm:border-l sm:border-line sm:pl-5" : ""}>
       <p
         className={[
-          "num text-[19px] leading-tight font-extrabold tracking-[-0.02em] tabular-nums",
+          "num text-[23px] leading-none font-extrabold tracking-[-0.03em] tabular-nums",
           akzent ? "text-accent-ink" : "",
         ].join(" ")}
       >
         {zahl}
       </p>
-      <p className="mt-1.5 text-[11.5px] leading-[1.4] text-muted">{label}</p>
+      <p className="mt-2 text-[11.5px] leading-[1.4] text-muted">{label}</p>
     </div>
   );
 }
@@ -168,37 +176,89 @@ function Vergleich({ k, a, b }: { k: string; a: string; b: string }) {
   );
 }
 
-export function PlanungsBlock({ planung }: { planung: NonNullable<PortalDetail["planung"]> }) {
+export function PlanungsBlock({
+  planung,
+  kunde,
+  adresse,
+}: {
+  planung: NonNullable<PortalDetail["planung"]>;
+  /** Für den Titel über dem Dach — der Kunde soll sein Haus erkennen. */
+  kunde?: string;
+  adresse?: string | null;
+}) {
   const hoechst = Math.max(...planung.monateKwh, 1);
 
   return (
-    <section className="mb-6 overflow-hidden rounded-[18px] border border-line bg-surface">
+    <section className="mb-6 overflow-hidden rounded-[22px] bg-surface shadow-soft">
+      {/*
+        Das Dach als Aufmacher, nicht als Illustration.
+        
+        Der Kunde sieht sein eigenes Haus mit den Modulen darauf, und
+        darüber liegt der einzige Satz, der ihn wirklich interessiert:
+        was er im Jahr spart. Vorher war das Foto eine Kachel unter
+        anderen, und die Seite las sich wie ein Formular.
+      */}
       {planung.bildUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- signierter Link, 15 Minuten gültig
-        <img
-          src={planung.bildUrl}
-          alt="Das geplante Dach mit den Modulen"
-          className="h-[220px] w-full object-cover"
-        />
+        <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element -- signierter Link, 15 Minuten gültig */}
+          <img
+            src={planung.bildUrl}
+            alt="Das geplante Dach mit den Modulen"
+            className="h-[300px] w-full object-cover sm:h-[380px]"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(12,11,10,.88)_0%,rgba(12,11,10,.55)_38%,rgba(12,11,10,.05)_72%)]" />
+
+          <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7">
+            {adresse ? (
+              <p className="num text-[11.5px] tracking-[0.06em] text-white/70 uppercase">
+                {adresse}
+              </p>
+            ) : null}
+            <h3 className="mt-1 max-w-[22ch] text-[26px] leading-[1.15] font-extrabold tracking-[-0.03em] text-white sm:text-[32px]">
+              {planung.ersparnisJahr1 > 0 ? (
+                <>
+                  {kunde ? `${kunde.split(" ")[0]}, du sparst ` : "Du sparst "}
+                  <span className="num text-accent-from">
+                    {n(Math.round(planung.ersparnisJahr1))} €
+                  </span>{" "}
+                  im Jahr.
+                </>
+              ) : (
+                "Deine Anlage auf deinem Dach."
+              )}
+            </h3>
+            <p className="mt-2 max-w-[52ch] text-[13px] leading-[1.55] text-white/75">
+              {n(planung.kwp, 2)} kWp auf {n(planung.modulAnzahl)} Modulen
+              {planung.speicherKwh > 0
+                ? `, dazu ${n(Math.round(planung.speicherKwh * 10) / 10, 1)} kWh Speicher`
+                : ""}{" "}
+              — {Math.round(planung.autarkie * 100)} % deines Stroms kommen dann vom eigenen
+              Dach.
+            </p>
+          </div>
+        </div>
       ) : null}
 
-      <div className="p-5 sm:p-6">
-        <h3 className="text-[19px] leading-tight font-bold tracking-[-0.02em]">Deine Anlage</h3>
-        <p className="mt-1.5 text-[13px] leading-[1.55] text-muted">
-          Das ist die Anlage, die wir für dich geplant haben — so liegt sie auf deinem Dach,
-          und das steckt darin.
-        </p>
-
-        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          <Kachel zahl={`${n(planung.kwp, 2)} kWp`} label="Anlagenleistung" akzent />
-          <Kachel zahl={n(planung.modulAnzahl)} label="Module auf dem Dach" />
+      <div className="p-5 sm:p-7">
+        {/*
+          Die Kennzahlen als Band mit Haarlinien statt vier Kästchen:
+          weniger Rahmen, mehr Ruhe, und die Zahlen dürfen gross sein.
+        */}
+        <div className="grid grid-cols-2 gap-y-5 sm:grid-cols-4 sm:gap-y-0">
+          <Kennzahl zahl={`${n(planung.kwp, 2)} kWp`} label="Anlagenleistung" akzent />
+          <Kennzahl zahl={n(planung.modulAnzahl)} label="Module auf dem Dach" strich />
           {planung.speicherKwh > 0 ? (
-            <Kachel
+            <Kennzahl
               zahl={`${n(Math.round(planung.speicherKwh * 10) / 10, 1)} kWh`}
               label="Speicher"
+              strich
             />
           ) : null}
-          <Kachel zahl={`${n(Math.round(planung.jahresertragKwh))} kWh`} label="Ertrag im Jahr" />
+          <Kennzahl
+            zahl={`${n(Math.round(planung.jahresertragKwh))} kWh`}
+            label="Ertrag im Jahr"
+            strich
+          />
         </div>
 
         <Abschnitt>Was verbaut wird</Abschnitt>

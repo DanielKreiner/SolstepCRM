@@ -1,0 +1,23 @@
+{
+  "skill_name": "betriebsmeldung",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "In der Plantafel leg ich einen Einsatz von 8-12h an, in der Wochenansicht steht er dann aber von 10-14. Was soll das?",
+      "expected_output": "Findet die Zeitzonenumrechnung als Ursache (Wanduhrzeit über die Zone des Prozesses statt über Europe/Vienna), behebt sie an der gemeinsamen Stelle statt nur im Dialog, prüft die Nachbarstellen (Anzeige, Verschieben, Wochenfenster), schreibt einen Test, der den gespeicherten UTC-Zeitpunkt prüft und nicht die Anzeige.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Bei der Anzahlungsrechnung fehlt auf einmal die Beschreibung unter den Positionen, im Angebot steht sie noch. Screenshot hab ich keinen.",
+      "expected_output": "Erkennt, dass Belege eingefrorene Kopien mit dokument_id sind, findet die Stelle, an der beim Kopieren ein Feld fehlt, behebt es dort, prüft ob weitere Felder fehlen, zieht bestehende Belege nach und schreibt einen e2e-Test, der gegen die Datenbank prüft.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "im planer: ich zieh den randabstand von 0,3 auf 0 und trotzdem bleiben die module vom dachrand weg. sollte doch bis ganz nach außen gehen oder?",
+      "expected_output": "Erkennt den Grenzfall bei null (Vergleich mit < greift bei einem Abstand von null nie bzw. immer, je nach Richtung), prüft die Prüffunktion statt der Oberfläche, behebt es in lib/planer, schreibt einen vitest-Fall für den Nullfall und prüft, ob die Belegung nach der Änderung nachgeführt wird.",
+      "files": []
+    }
+  ]
+}
