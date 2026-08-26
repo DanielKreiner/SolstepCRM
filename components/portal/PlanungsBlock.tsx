@@ -3,15 +3,21 @@ import type { PortalDetail } from "@/lib/portal/vorgang";
 /*
  * Die Planung im Kundenportal.
  *
- * Derselbe Aufbau wie im Angebots-PDF: das Dach als Bild, die Anlage in
- * Zahlen, der Ertrag übers Jahr, was sie rechnet. Vorher stand im
- * Portal nur die Preisliste, während die Ertragsrechnung in einem
- * zweiten PDF lag — der Kunde musste zwei Dokumente nebeneinanderlegen,
- * um zu verstehen, wofür er zahlt.
+ * Der Aufbau folgt der Vorlage, die der Betrieb vorgegeben hat: ein
+ * modernistisches Blatt statt einer Kachelsammlung. Was das ausmacht,
+ * sind vier Entscheidungen, die überall gelten —
  *
- * Bewusst ohne Diagrammbibliothek: zwölf Balken sind zwölf divs mit
- * einer Breite in Prozent. Alles andere wäre ein halbes Megabyte
- * JavaScript für eine Kurve, die sich nicht bewegt.
+ *   1. Keine Rundungen, keine Schatten. Getrennt wird durch Linien und
+ *      Luft. Ein Angebot ist kein Dashboard.
+ *   2. Überschriften gross und schwer, mit einem kleinen Versal-Label
+ *      darüber, das sagt, in welchem Kapitel man ist.
+ *   3. Kennzahlen stehen unter einer Haarlinie, nicht in einem Kasten.
+ *      Die erste Zahl trägt die Akzentfarbe — sonst keine.
+ *   4. Zahlen sind gross genug, um über den Tisch gelesen zu werden.
+ *
+ * Bewusst ohne Diagrammbibliothek: die Balken sind divs, der Sankey
+ * sind sechs SVG-Pfade. Alles andere wäre ein halbes Megabyte
+ * JavaScript für Bilder, die sich nicht bewegen.
  */
 
 const MONATE = ["Jän", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
@@ -32,238 +38,293 @@ function himmelsrichtung(azimut: number): string {
   return namen[Math.round((((azimut % 360) + 360) % 360) / 45) % 8]!;
 }
 
-/** Kleine Überschrift in Versalien — dieselbe Sprache wie im PDF. */
-function Abschnitt({ children }: { children: React.ReactNode }) {
+/* ── Bausteine ────────────────────────────────────────────────────── */
+
+/** Das kleine Versal-Label über einer Überschrift. */
+function Kapitel({ children }: { children: React.ReactNode }) {
   return (
-    <h4 className="mt-7 mb-3 text-[10.5px] font-bold tracking-[0.11em] text-faint uppercase">
+    <p className="mb-2 text-[11.5px] font-bold tracking-[0.14em] text-faint uppercase">
       {children}
-    </h4>
+    </p>
+  );
+}
+
+/** Die grosse Überschrift eines Abschnitts. */
+function Titel({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="text-[30px] leading-[1.05] font-extrabold tracking-[-0.035em] sm:text-[38px]">
+      {children}
+    </h3>
+  );
+}
+
+/** Zwischenüberschrift in Versalien — gliedert innerhalb eines Kapitels. */
+function Zwischen({ children }: { children: React.ReactNode }) {
+  return (
+    <h4 className="text-[15px] font-extrabold tracking-[0.04em] uppercase">{children}</h4>
   );
 }
 
 /**
- * Eine Kennzahl im Band: grosse Zahl, kleine Erklärung, Haarlinie davor.
+ * Eine Kennzahl unter einer Haarlinie.
  *
- * Ohne Rahmen — vier umrandete Kästchen nebeneinander sehen aus wie ein
- * Formular. Die Trennlinie reicht, damit die Zahlen nicht ineinander
- * laufen.
+ * Die Linie trägt die Zahl, nicht ein Rahmen um sie herum. Genau eine
+ * Kennzahl je Reihe darf die Akzentfarbe haben; mehr, und keine sticht
+ * mehr heraus.
  */
 function Kennzahl({
   zahl,
   label,
   akzent = false,
-  strich = false,
 }: {
   zahl: string;
   label: string;
   akzent?: boolean;
-  strich?: boolean;
 }) {
   return (
-    <div className={strich ? "sm:border-l sm:border-line sm:pl-5" : ""}>
+    <div className={`border-t-2 pt-4 ${akzent ? "border-accent" : "border-ink"}`}>
       <p
+        /*
+         * Hier ausdrücklich NICHT die Monoschrift.
+         *
+         * Sonst reisst die Ziffernsperrung die Zahl auseinander, und aus
+         * „1 322 €" wird ein Wort mit Lücken. Für Tabellen und Listen
+         * bleibt die Monoschrift richtig — für Schaustücke nicht.
+         */
         className={[
-          "num text-[23px] leading-none font-extrabold tracking-[-0.03em] tabular-nums",
+          "text-[26px] leading-none font-extrabold tracking-[-0.04em] tabular-nums sm:text-[32px]",
           akzent ? "text-accent-ink" : "",
         ].join(" ")}
       >
         {zahl}
       </p>
-      <p className="mt-2 text-[11.5px] leading-[1.4] text-muted">{label}</p>
+      <p className="mt-2.5 text-[11px] font-semibold tracking-[0.1em] text-muted uppercase">
+        {label}
+      </p>
     </div>
   );
 }
 
-function Zeile({ k, v }: { k: string; v: string }) {
+/** Eine Zeile in einer Werteliste: Label links, Wert rechts, Linie darunter. */
+function Zeile({
+  k,
+  v,
+  unter,
+}: {
+  k: string;
+  v: string;
+  unter?: string | null;
+}) {
   return (
-    <div className="flex items-baseline gap-3 border-b border-line py-[7px] last:border-b-0">
-      <span className="text-[13px] text-muted">{k}</span>
-      <span className="num ml-auto text-[13px] font-semibold tabular-nums">{v}</span>
+    <div className="flex items-start gap-4 border-b border-line py-3.5 last:border-b-0">
+      <span className="w-[38%] shrink-0 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
+        {k}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] leading-snug font-bold">{v}</span>
+        {unter ? <span className="mt-0.5 block text-[12.5px] text-muted">{unter}</span> : null}
+      </span>
     </div>
   );
 }
 
-/** Ein waagrechtes Band, in Anteilen eingefärbt. */
-function Flussband({ teile }: { teile: Array<{ wert: number; klasse: string }> }) {
+/** Ein Anteilsband mit Prozentzahl, darunter die Erklärung. */
+function Anteile({
+  teile,
+}: {
+  teile: Array<{ wert: number; klasse: string; name: string }>;
+}) {
   const gesamt = teile.reduce((a, t) => a + Math.max(0, t.wert), 0) || 1;
   return (
-    <div className="mt-2 flex h-[22px] overflow-hidden rounded-[8px]">
-      {teile.map((t, i) => {
-        const anteil = Math.max(0, t.wert) / gesamt;
-        return (
-          <div
-            key={i}
-            className={`grid place-items-center ${t.klasse}`}
-            style={{ width: `${anteil * 100}%` }}
-          >
-            {/* Unter acht Prozent ist kein Platz für eine Zahl. */}
-            {anteil > 0.08 ? (
-              <span className="num text-[10.5px] font-bold text-white">
-                {Math.round(anteil * 100)} %
-              </span>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Legende({ eintraege }: { eintraege: Array<[string, string]> }) {
-  return (
-    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-      {eintraege.map(([text, klasse]) => (
-        <span key={text} className="flex items-center gap-1.5 text-[11.5px] text-muted">
-          <span className={`h-2.5 w-2.5 rounded-[3px] ${klasse}`} />
-          {text}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Die kumulierte Ersparnis als Säulen.
- *
- * Rot, solange die Anlage nicht bezahlt ist, danach grün. Zwölf Balken
- * mit einer Höhe in Prozent — dafür braucht es keine Diagrammbibliothek.
- */
-function Kurve({ kurve }: { kurve: number[] }) {
-  if (kurve.length === 0) return null;
-  const hoch = Math.max(...kurve, 0);
-  const tief = Math.min(...kurve, 0);
-  const spanne = hoch - tief || 1;
-  const jahr = new Date().getFullYear();
-
-  return (
     <>
-      <div className="mt-4 flex h-[120px] items-end gap-[3px]">
-        {kurve.map((wert, i) => (
-          <div key={i} className="flex h-full flex-1 flex-col justify-end">
-            <div
-              className={wert >= 0 ? "rounded-t-[3px] bg-s-done" : "rounded-b-[3px] bg-s-crit"}
-              style={{
-                height: `${(Math.abs(wert) / spanne) * 100}%`,
-                marginTop: wert >= 0 ? "auto" : 0,
-                marginBottom: wert >= 0 ? `${(Math.abs(tief) / spanne) * 100}%` : `${((Math.abs(tief) - Math.abs(wert)) / spanne) * 100}%`,
-              }}
-            />
+      <div className="mt-3 flex h-[44px] w-full">
+        {teile.map((t) => (
+          <div
+            key={t.name}
+            className={t.klasse}
+            style={{ width: `${(Math.max(0, t.wert) / gesamt) * 100}%` }}
+          />
+        ))}
+      </div>
+      <div className="mt-2.5 flex">
+        {teile.map((t) => (
+          <div
+            key={t.name}
+            className="min-w-0 pr-3"
+            style={{ width: `${(Math.max(0, t.wert) / gesamt) * 100}%` }}
+          >
+            <p className="num text-[12.5px] font-bold tabular-nums">
+              {Math.round((Math.max(0, t.wert) / gesamt) * 100)} %
+            </p>
+            <p className="truncate text-[12.5px]">{t.name}</p>
+            <p className="num truncate text-[12px] tabular-nums text-muted">
+              {n(Math.round(t.wert))} kWh
+            </p>
           </div>
         ))}
       </div>
-      <div className="mt-1 flex gap-[3px]">
-        {kurve.map((_, i) => (
-          <span key={i} className="num flex-1 text-center text-[9px] text-faint">
-            {i === 0 || (i + 1) % 5 === 0 ? jahr + 1 + i : ""}
-          </span>
-        ))}
-      </div>
-      <p className="mt-1 text-[11.5px] leading-[1.45] text-muted">
-        Rot ist die Zeit, in der die Anlage noch nicht bezahlt ist. Ab dem grünen Jahr hast du
-        mehr gespart als investiert.
-      </p>
     </>
   );
 }
 
-function Vergleich({ k, a, b }: { k: string; a: string; b: string }) {
+/**
+ * Der Energiefluss als Sankey.
+ *
+ * Sechs Bänder, deren Breite die Strommenge ist — links das Dach,
+ * rechts Haushalt und Netz. Ein Diagramm, das man ohne Legende
+ * versteht: dick ist viel.
+ */
+function Sankey({
+  produktion,
+  direkt,
+  speicher,
+  einspeisung,
+  netzbezug,
+  verbrauch,
+}: {
+  produktion: number;
+  direkt: number;
+  speicher: number;
+  einspeisung: number;
+  netzbezug: number;
+  verbrauch: number;
+}) {
+  const H = 320;
+  const B = 1000;
+  const links = 10;
+  const rechts = B - 10;
+  const stab = 10;
+
+  /* Massstab: die grössere der beiden Seiten füllt die Höhe. */
+  const gesamt = Math.max(produktion, verbrauch + einspeisung, 1);
+  const px = (kwh: number) => (Math.max(0, kwh) / gesamt) * H;
+
+  /* Links stapeln sich die drei Wege aus der Produktion. */
+  const hDirekt = px(direkt);
+  const hSpeicher = px(speicher);
+  const hEinspeisung = px(einspeisung);
+  const hNetzbezug = px(netzbezug);
+
+  let y = 0;
+  const aus = { direkt: y, speicher: (y += hDirekt), einspeisung: (y += hSpeicher) };
+  const ausNetzbezug = aus.einspeisung + hEinspeisung;
+
+  /* Rechts oben der Haushalt, darunter das Netz. */
+  let z = 0;
+  const ein = { direkt: z, speicher: (z += hDirekt), netzbezug: (z += hSpeicher) };
+  const einNetz = ein.netzbezug + hNetzbezug;
+
+  const band = (y1: number, y2: number, h: number, farbe: string, deckung = 0.9) => {
+    const x1 = links + stab;
+    const x2 = rechts - stab;
+    const m = (x1 + x2) / 2;
+    return (
+      <path
+        d={`M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2} L${x2},${y2 + h} C${m},${y2 + h} ${m},${y1 + h} ${x1},${y1 + h} Z`}
+        fill={farbe}
+        fillOpacity={deckung}
+      />
+    );
+  };
+
   return (
-    <tr className="border-b border-line last:border-b-0">
-      <td className="py-[7px] text-muted">{k}</td>
-      <td className="num py-[7px] text-right font-semibold tabular-nums">{a}</td>
-      <td className="num py-[7px] text-right tabular-nums text-muted">{b}</td>
-    </tr>
+    <svg viewBox={`0 0 ${B} ${H}`} className="mt-4 h-auto w-full" role="img" aria-label="Energiefluss">
+      {/* Die Bänder zuerst, damit die Stäbe darüber liegen. */}
+      {band(aus.direkt, ein.direkt, hDirekt, "var(--accent)")}
+      {band(aus.speicher, ein.speicher, hSpeicher, "#2E2C27", 0.82)}
+      {band(aus.einspeisung, einNetz, hEinspeisung, "#B4B3A8", 0.6)}
+      {band(ausNetzbezug, ein.netzbezug, hNetzbezug, "#8E93A1", 0.75)}
+
+      {/* Stäbe links und rechts. */}
+      <rect x={links} y={0} width={stab} height={hDirekt + hSpeicher + hEinspeisung} fill="var(--accent)" />
+      <rect x={links} y={ausNetzbezug} width={stab} height={hNetzbezug} fill="#8E93A1" />
+      <rect x={rechts - stab} y={0} width={stab} height={hDirekt + hSpeicher + hNetzbezug} fill="#2E2C27" />
+      <rect x={rechts - stab} y={einNetz} width={stab} height={hEinspeisung} fill="#B4B3A8" />
+    </svg>
   );
 }
+
+/* ── Der Block ────────────────────────────────────────────────────── */
 
 export function PlanungsBlock({
   planung,
   kunde,
-  adresse,
 }: {
   planung: NonNullable<PortalDetail["planung"]>;
-  /** Für den Titel über dem Dach — der Kunde soll sein Haus erkennen. */
+  /** Vorname für die Anrede in der Überschrift — „Roman, du sparst …". */
   kunde?: string;
-  adresse?: string | null;
 }) {
-  const hoechst = Math.max(...planung.monateKwh, 1);
+  const hoechst = Math.max(...planung.fluss.monate.map((m) => m.produktion), 1);
+  const jahr = new Date().getFullYear() + 1;
+
+  const kurveHoch = Math.max(...planung.kurve, 0);
+  const kurveTief = Math.min(...planung.kurve, 0);
+  const kurveSpanne = kurveHoch - kurveTief || 1;
+  const bezahltJahr =
+    planung.amortisationJahre !== null
+      ? jahr + Math.max(0, Math.round(planung.amortisationJahre) - 1)
+      : null;
 
   return (
-    <section className="mb-6 overflow-hidden rounded-[22px] bg-surface shadow-soft">
-      {/*
-        Das Dach als Aufmacher, nicht als Illustration.
-        
-        Der Kunde sieht sein eigenes Haus mit den Modulen darauf, und
-        darüber liegt der einzige Satz, der ihn wirklich interessiert:
-        was er im Jahr spart. Vorher war das Foto eine Kachel unter
-        anderen, und die Seite las sich wie ein Formular.
-      */}
-      {planung.bildUrl ? (
-        <div className="relative">
-          {/* eslint-disable-next-line @next/next/no-img-element -- signierter Link, 15 Minuten gültig */}
-          <img
-            src={planung.bildUrl}
-            alt="Das geplante Dach mit den Modulen"
-            className="h-[300px] w-full object-cover sm:h-[380px]"
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(12,11,10,.88)_0%,rgba(12,11,10,.55)_38%,rgba(12,11,10,.05)_72%)]" />
+    <section className="mb-6 bg-surface px-5 py-9 sm:px-9 sm:py-12">
+      {/* ── Dein Ergebnis ──────────────────────────────────────── */}
+      <Kapitel>Dein Ergebnis</Kapitel>
+      {planung.ersparnisJahr1 > 0 ? (
+        <h2 className="max-w-[16ch] text-[42px] leading-[0.98] font-extrabold tracking-[-0.045em] sm:text-[68px]">
+          {kunde ? `${kunde.split(" ")[0]}, du ` : "Du "}sparst rund{" "}
+          <span className="text-accent-ink">{n(Math.round(planung.ersparnisJahr1))} €</span> im
+          Jahr.
+        </h2>
+      ) : (
+        <h2 className="text-[42px] leading-[0.98] font-extrabold tracking-[-0.045em] sm:text-[68px]">
+          Deine Anlage im Detail.
+        </h2>
+      )}
 
-          <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7">
-            {adresse ? (
-              <p className="num text-[11.5px] tracking-[0.06em] text-white/70 uppercase">
-                {adresse}
-              </p>
-            ) : null}
-            <h3 className="mt-1 max-w-[22ch] text-[26px] leading-[1.15] font-extrabold tracking-[-0.03em] text-white sm:text-[32px]">
-              {planung.ersparnisJahr1 > 0 ? (
-                <>
-                  {kunde ? `${kunde.split(" ")[0]}, du sparst ` : "Du sparst "}
-                  <span className="num text-accent-from">
-                    {n(Math.round(planung.ersparnisJahr1))} €
-                  </span>{" "}
-                  im Jahr.
-                </>
-              ) : (
-                "Deine Anlage auf deinem Dach."
-              )}
-            </h3>
-            <p className="mt-2 max-w-[52ch] text-[13px] leading-[1.55] text-white/75">
-              {n(planung.kwp, 2)} kWp auf {n(planung.modulAnzahl)} Modulen
-              {planung.speicherKwh > 0
-                ? `, dazu ${n(Math.round(planung.speicherKwh * 10) / 10, 1)} kWh Speicher`
-                : ""}{" "}
-              — {Math.round(planung.autarkie * 100)} % deines Stroms kommen dann vom eigenen
-              Dach.
-            </p>
-          </div>
-        </div>
-      ) : null}
+      <p className="mt-6 max-w-[58ch] text-[16px] leading-[1.6] text-muted">
+        Gerechnet mit deinem Verbrauch, {n(Math.round(planung.jahresertragKwh))} kWh Ertrag und{" "}
+        {Math.round(planung.autarkie * 100)} % Autarkie
+        {planung.speicherKwh > 0
+          ? ` — mit ${n(Math.round(planung.speicherKwh * 10) / 10, 1)} kWh Speicher`
+          : " — ohne Speicher"}
+        . Über zwanzig Jahre sind das rund {n(Math.round(planung.ersparnis20))} €
+        {planung.amortisationJahre !== null
+          ? `; die Anlage hat sich nach etwa ${n(Math.round(planung.amortisationJahre * 10) / 10, 1)} Jahren bezahlt.`
+          : "."}
+      </p>
+      <p className="mt-4 max-w-[58ch] text-[12.5px] leading-[1.5] text-faint">
+        Richtwerte aus der Planung — der tatsächliche Ertrag hängt vom Wetter ab, die Ersparnis
+        vom Strompreis. Steigt er, wird die Rechnung besser.
+      </p>
 
-      <div className="p-5 sm:p-7">
-        {/*
-          Die Kennzahlen als Band mit Haarlinien statt vier Kästchen:
-          weniger Rahmen, mehr Ruhe, und die Zahlen dürfen gross sein.
-        */}
-        <div className="grid grid-cols-2 gap-y-5 sm:grid-cols-4 sm:gap-y-0">
-          <Kennzahl zahl={`${n(planung.kwp, 2)} kWp`} label="Anlagenleistung" akzent />
-          <Kennzahl zahl={n(planung.modulAnzahl)} label="Module auf dem Dach" strich />
-          {planung.speicherKwh > 0 ? (
-            <Kennzahl
-              zahl={`${n(Math.round(planung.speicherKwh * 10) / 10, 1)} kWh`}
-              label="Speicher"
-              strich
-            />
-          ) : null}
+      <div className="mt-10 grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-4">
+        <Kennzahl zahl={`${n(planung.kwp, 2)} kWp`} label="Anlagenleistung" />
+        <Kennzahl zahl={n(planung.modulAnzahl)} label="Module auf dem Dach" />
+        {planung.speicherKwh > 0 ? (
           <Kennzahl
-            zahl={`${n(Math.round(planung.jahresertragKwh))} kWh`}
-            label="Ertrag im Jahr"
-            strich
+            zahl={`${n(Math.round(planung.speicherKwh * 10) / 10, 1)} kWh`}
+            label="Speicher"
           />
-        </div>
+        ) : null}
+        <Kennzahl
+          zahl={`${n(Math.round(planung.jahresertragKwh))} kWh`}
+          label="Ertrag im Jahr"
+          akzent
+        />
+      </div>
 
-        <Abschnitt>Was verbaut wird</Abschnitt>
-        <div className="grid gap-x-8 rounded-[14px] border border-line px-4 py-1 sm:grid-cols-2">
-          <div>
+      {/* ── Deine Anlage ───────────────────────────────────────── */}
+      <hr className="my-12 border-t border-ink/25" />
+      <div className="grid gap-10 lg:grid-cols-2">
+        <div>
+          <Kapitel>Deine Anlage</Kapitel>
+          <Titel>Was verbaut wird</Titel>
+          <p className="mt-4 max-w-[46ch] text-[15px] leading-[1.6] text-muted">
+            Das ist die Anlage, die wir für dich geplant haben — so liegt sie auf deinem Dach,
+            und das steckt darin.
+          </p>
+
+          <div className="mt-7 border-t border-ink">
             {planung.modulTyp ? (
               <Zeile k={`Module (${n(planung.modulAnzahl)} Stück)`} v={planung.modulTyp} />
             ) : null}
@@ -282,8 +343,6 @@ export function PlanungsBlock({
                   .join(" · ")}
               />
             ) : null}
-          </div>
-          <div>
             {planung.flaechen
               .filter((f) => f.module > 0)
               .map((f) => (
@@ -294,209 +353,310 @@ export function PlanungsBlock({
                 />
               ))}
           </div>
+
+          <p className="mt-5 max-w-[46ch] text-[12.5px] leading-[1.55] text-faint">
+            Die Belegung zeigt den geplanten Stand. Was vor Ort möglich ist, stellen wir bei der
+            Aufnahme fest und besprechen es vorher mit dir.
+          </p>
         </div>
 
-        {/* ── Was das Dach im Jahr liefert ─────────────────────── */}
-        <Abschnitt>Monat für Monat</Abschnitt>
-        <p className="-mt-1 mb-3 text-[13px] leading-[1.5] text-muted">
-          <span className="num tabular-nums">{n(Math.round(planung.jahresertragKwh))}</span> kWh,
-          das sind <span className="num tabular-nums">{n(Math.round(planung.spezifisch))}</span>{" "}
-          kWh je kWp. Die Farben zeigen, was direkt ins Haus geht, was über den Speicher läuft
-          und was eingespeist wird.
+        <div>
+          {planung.bildUrl ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- signierter Link, 15 Minuten gültig */}
+              <img
+                src={planung.bildUrl}
+                alt="Das geplante Dach mit den Modulen"
+                className="h-[300px] w-full object-cover sm:h-[420px]"
+              />
+              <p className="mt-2.5 text-[12.5px] text-muted">
+                {planung.flaechen.find((f) => f.module > 0)?.name ?? "Dachfläche"} · geplante
+                Belegung
+              </p>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {/* ── Dein Strom ─────────────────────────────────────────── */}
+      <hr className="my-12 border-t border-ink/25" />
+      <Kapitel>Dein Strom</Kapitel>
+      <Titel>Monat für Monat</Titel>
+      <p className="mt-4 max-w-[60ch] text-[15px] leading-[1.6] text-muted">
+        {n(Math.round(planung.jahresertragKwh))} kWh im Jahr, das sind{" "}
+        {n(Math.round(planung.spezifisch))} kWh je kWp — gerechnet aus Ausrichtung, Neigung und
+        Verschattung deines Dachs. Die Farben zeigen, was direkt ins Haus geht, was über den
+        Speicher läuft und was eingespeist wird.
+      </p>
+
+      <div className="mt-8 flex h-[240px] items-end gap-[6px] sm:gap-[10px]">
+        {planung.fluss.monate.map((m, i) => (
+          <div key={MONATE[i]} className="flex h-full flex-1 flex-col justify-end">
+            <p className="mb-1.5 text-center text-[11px] tabular-nums text-muted">
+              {n(Math.round(m.produktion))}
+            </p>
+            <div
+              className="flex w-full flex-col justify-end"
+              style={{ height: `${(m.produktion / hoechst) * 100}%` }}
+            >
+              <div
+                className="w-full bg-[#D7D3D3]"
+                style={{ height: `${(m.einspeisung / (m.produktion || 1)) * 100}%` }}
+              />
+              <div
+                className="w-full bg-ink"
+                style={{ height: `${(m.speicher / (m.produktion || 1)) * 100}%` }}
+              />
+              <div
+                className="w-full bg-accent"
+                style={{ height: `${(m.direkt / (m.produktion || 1)) * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-[6px] border-t border-ink pt-2 sm:gap-[10px]">
+        {MONATE.map((mo) => (
+          <span key={mo} className="flex-1 text-center text-[11.5px] text-muted">
+            {mo}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-x-7 gap-y-2">
+        {[
+          ["Direkt verbraucht", "bg-accent"],
+          ["Über den Speicher", "bg-ink"],
+          ["Ins Netz", "bg-[#D7D3D3]"],
+        ].map(([text, klasse]) => (
+          <span key={text} className="flex items-center gap-2 text-[12.5px]">
+            <span className={`h-3 w-3 ${klasse}`} />
+            {text}
+          </span>
+        ))}
+      </div>
+
+      {/* Wohin / Woher */}
+      <div className="mt-12 grid gap-10 lg:grid-cols-2">
+        <div>
+          <Zwischen>Wohin geht dein Strom?</Zwischen>
+          <p className="mt-1.5 text-[13px] text-muted">
+            Von {n(Math.round(planung.jahresertragKwh))} kWh Erzeugung bleiben{" "}
+            {Math.round(planung.eigenverbrauchQuote * 100)} % im Haus.
+          </p>
+          <Anteile
+            teile={[
+              { wert: planung.fluss.direktKwh, klasse: "bg-accent", name: "Direkt" },
+              { wert: planung.fluss.ueberSpeicherKwh, klasse: "bg-ink", name: "Speicher" },
+              { wert: planung.fluss.einspeisungKwh, klasse: "bg-[#D7D3D3]", name: "Ins Netz" },
+            ]}
+          />
+        </div>
+        <div>
+          <Zwischen>Woher kommt dein Strom?</Zwischen>
+          <p className="mt-1.5 text-[13px] text-muted">
+            Dein Haushalt braucht {n(Math.round(planung.verbrauchKwh))} kWh im Jahr.
+          </p>
+          <Anteile
+            teile={[
+              { wert: planung.fluss.direktKwh, klasse: "bg-accent", name: "Vom Dach" },
+              { wert: planung.fluss.ueberSpeicherKwh, klasse: "bg-ink", name: "Aus dem Speicher" },
+              { wert: planung.fluss.netzbezugKwh, klasse: "bg-[#D7D3D3]", name: "Aus dem Netz" },
+            ]}
+          />
+        </div>
+      </div>
+
+      {/* Energiefluss */}
+      <div className="mt-12">
+        <Zwischen>Energiefluss</Zwischen>
+        <p className="mt-1.5 text-[13px] text-muted">
+          Vom Dach ins Haus, in den Speicher und ins Netz — Bandbreite gleich Strommenge.
+        </p>
+        <div className="mt-3 flex flex-wrap justify-between gap-2 text-[12.5px] font-bold">
+          <span>Photovoltaik · {n(Math.round(planung.jahresertragKwh))} kWh</span>
+          <span>Haushalt · {n(Math.round(planung.verbrauchKwh))} kWh</span>
+        </div>
+        <Sankey
+          produktion={planung.jahresertragKwh}
+          direkt={planung.fluss.direktKwh}
+          speicher={planung.fluss.ueberSpeicherKwh}
+          einspeisung={planung.fluss.einspeisungKwh}
+          netzbezug={planung.fluss.netzbezugKwh}
+          verbrauch={planung.verbrauchKwh}
+        />
+        <div className="flex flex-wrap justify-between gap-2 text-[12.5px] text-muted">
+          <span>Netzbezug · {n(Math.round(planung.fluss.netzbezugKwh))} kWh</span>
+          <span>Netz · {n(Math.round(planung.fluss.einspeisungKwh))} kWh</span>
+        </div>
+      </div>
+
+      <div className="mt-12 grid gap-10 lg:grid-cols-2">
+        <div className="border-t-2 border-accent pt-4">
+          <p className="text-[44px] leading-none font-extrabold tracking-[-0.045em] tabular-nums text-accent-ink">
+            {Math.round(planung.autarkie * 100)} %
+          </p>
+          <p className="mt-3 max-w-[42ch] text-[13px] leading-[1.55] text-muted">
+            Autarkie — so viel deines Verbrauchs deckst du selbst, statt ihn zu kaufen.
+          </p>
+        </div>
+        <div className="border-t-2 border-ink pt-4">
+          <p className="text-[44px] leading-none font-extrabold tracking-[-0.045em] tabular-nums">
+            {Math.round(planung.eigenverbrauchQuote * 100)} %
+          </p>
+          <p className="mt-3 max-w-[42ch] text-[13px] leading-[1.55] text-muted">
+            Eigenverbrauch — so viel des erzeugten Stroms bleibt im Haus, der Rest geht ins Netz.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Wirtschaftlichkeit ─────────────────────────────────── */}
+      <hr className="my-12 border-t border-ink/25" />
+      <Kapitel>Wirtschaftlichkeit</Kapitel>
+      <Titel>Was die Anlage rechnet</Titel>
+
+      <div className="mt-8 grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-4">
+        <Kennzahl zahl={eur(planung.ersparnis20, 0)} label="Ersparnis in 20 Jahren" akzent />
+        {planung.amortisationJahre !== null ? (
+          <Kennzahl
+            zahl={`${n(Math.round(planung.amortisationJahre * 10) / 10, 1)} Jahre`}
+            label={bezahltJahr ? `bezahlt im Jahr ${bezahltJahr}` : "bis sie sich bezahlt hat"}
+          />
+        ) : null}
+        {planung.rendite !== null ? (
+          <Kennzahl
+            zahl={`${n(Math.round(planung.rendite * 1000) / 10, 1)} %`}
+            label="Rendite im Jahr"
+          />
+        ) : null}
+        <Kennzahl zahl={eur(planung.investition, 0)} label="Investition laut Angebot" />
+      </div>
+
+      <div className="mt-12">
+        <Zwischen>Bis sie sich bezahlt hat</Zwischen>
+        <p className="mt-1.5 max-w-[70ch] text-[13px] text-muted">
+          Jeder Balken ist ein Jahr: in der Akzentfarbe, solange die Anlage noch nicht bezahlt
+          ist{bezahltJahr ? ` — ab ${bezahltJahr} bist du im Plus` : ""}.
         </p>
 
-        <div className="mt-3 flex flex-col gap-[3px]">
-          {planung.fluss.monate.map((m, i) => {
-            const hoechst = Math.max(...planung.fluss.monate.map((x) => x.produktion), 1);
-            const breit = (wert: number) => `${(wert / hoechst) * 100}%`;
-            return (
-              <div key={MONATE[i]} className="flex items-center gap-2.5">
-                <span className="w-8 shrink-0 text-[11.5px] text-muted">{MONATE[i]}</span>
-                <div className="flex h-[10px] flex-1 overflow-hidden rounded-pill bg-sunk">
-                  <div className="h-full bg-accent" style={{ width: breit(m.direkt) }} />
-                  <div className="h-full bg-s-warn/45" style={{ width: breit(m.speicher) }} />
-                  <div className="h-full bg-faint/40" style={{ width: breit(m.einspeisung) }} />
-                </div>
-                <span className="num w-[62px] shrink-0 text-right text-[11.5px] tabular-nums text-muted">
-                  {n(Math.round(m.produktion))} kWh
-                </span>
+        <div className="relative mt-6 flex h-[220px] items-stretch gap-[4px]">
+          {planung.kurve.map((wert, i) => (
+            <div key={i} className="flex flex-1 flex-col">
+              <div
+                className="flex flex-col justify-end"
+                style={{ height: `${(kurveHoch / kurveSpanne) * 100}%` }}
+              >
+                {wert >= 0 ? (
+                  <div
+                    className="w-full bg-ink"
+                    style={{ height: `${(wert / kurveSpanne) * 100 * (kurveSpanne / (kurveHoch || 1))}%` }}
+                  />
+                ) : null}
               </div>
-            );
-          })}
-        </div>
-        <Legende
-          eintraege={[
-            ["Direkt verbraucht", "bg-accent"],
-            ["Über den Speicher", "bg-s-warn/45"],
-            ["Ins Netz", "bg-faint/40"],
-          ]}
-        />
-
-        {/* ── Wohin und woher ──────────────────────────────────── */}
-        <Abschnitt>Wohin geht dein Strom?</Abschnitt>
-        <p className="mt-1 text-[13px] text-muted">
-          Von <span className="num tabular-nums">{n(Math.round(planung.jahresertragKwh))}</span> kWh
-          Erzeugung bleiben {Math.round(planung.eigenverbrauchQuote * 100)} % im Haus.
-        </p>
-        <Flussband
-          teile={[
-            { wert: planung.fluss.direktKwh, klasse: "bg-accent" },
-            { wert: planung.fluss.ueberSpeicherKwh, klasse: "bg-s-warn/45" },
-            { wert: planung.fluss.einspeisungKwh, klasse: "bg-faint/40" },
-          ]}
-        />
-        <Legende
-          eintraege={[
-            [`Direkt ${n(Math.round(planung.fluss.direktKwh))} kWh`, "bg-accent"],
-            [`Speicher ${n(Math.round(planung.fluss.ueberSpeicherKwh))} kWh`, "bg-s-warn/45"],
-            [`Netz ${n(Math.round(planung.fluss.einspeisungKwh))} kWh`, "bg-faint/40"],
-          ]}
-        />
-
-        <Abschnitt>Woher kommt dein Strom?</Abschnitt>
-        <p className="mt-1 text-[13px] text-muted">
-          Dein Haushalt braucht{" "}
-          <span className="num tabular-nums">{n(Math.round(planung.verbrauchKwh))}</span> kWh im
-          Jahr.
-        </p>
-        <Flussband
-          teile={[
-            { wert: planung.fluss.direktKwh, klasse: "bg-accent" },
-            { wert: planung.fluss.ueberSpeicherKwh, klasse: "bg-s-warn/45" },
-            { wert: planung.fluss.netzbezugKwh, klasse: "bg-faint/40" },
-          ]}
-        />
-        <Legende
-          eintraege={[
-            [`Vom Dach ${n(Math.round(planung.fluss.direktKwh))} kWh`, "bg-accent"],
-            [
-              `Aus dem Speicher ${n(Math.round(planung.fluss.ueberSpeicherKwh))} kWh`,
-              "bg-s-warn/45",
-            ],
-            [`Aus dem Netz ${n(Math.round(planung.fluss.netzbezugKwh))} kWh`, "bg-faint/40"],
-          ]}
-        />
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-[14px] bg-sunk p-4">
-            <p className="num text-[22px] leading-none font-extrabold text-accent-ink">
-              {Math.round(planung.autarkie * 100)} %
-            </p>
-            <p className="mt-1.5 text-[12px] leading-[1.45] text-muted">
-              Autarkie — so viel deines Verbrauchs deckst du selbst, statt ihn zu kaufen.
-            </p>
-          </div>
-          <div className="rounded-[14px] bg-sunk p-4">
-            <p className="num text-[22px] leading-none font-extrabold">
-              {Math.round(planung.eigenverbrauchQuote * 100)} %
-            </p>
-            <p className="mt-1.5 text-[12px] leading-[1.45] text-muted">
-              Eigenverbrauch — so viel des erzeugten Stroms bleibt im Haus, der Rest geht ins
-              Netz.
-            </p>
-          </div>
+              <div style={{ height: `${(Math.abs(kurveTief) / kurveSpanne) * 100}%` }}>
+                {wert < 0 ? (
+                  <div
+                    className="w-full bg-accent"
+                    style={{
+                      height: `${(Math.abs(wert) / (Math.abs(kurveTief) || 1)) * 100}%`,
+                    }}
+                  />
+                ) : null}
+              </div>
+            </div>
+          ))}
+          {/* Die Nulllinie liegt dort, wo der Wechsel passiert. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 border-t border-ink"
+            style={{ top: `${(kurveHoch / kurveSpanne) * 100}%` }}
+          />
         </div>
 
-        {/* ── Was die Anlage rechnet ───────────────────────────── */}
-        <Abschnitt>Was die Anlage rechnet</Abschnitt>
-        <div className="grid gap-x-8 rounded-[14px] border border-line px-4 py-1 sm:grid-cols-2">
-          <div>
-            <Zeile k="Investition" v={eur(planung.investition, 0)} />
-            <Zeile k="Ersparnis im Jahr" v={eur(planung.ersparnisJahr1, 0)} />
-            {planung.amortisationJahre !== null ? (
-              <Zeile
-                k="bezahlt nach"
-                v={`${n(Math.round(planung.amortisationJahre * 10) / 10, 1)} Jahren`}
-              />
-            ) : null}
-          </div>
-          <div>
-            {planung.rendite !== null ? (
-              <Zeile
-                k="Rendite im Jahr"
-                v={`${n(Math.round(planung.rendite * 1000) / 10, 1)} %`}
-              />
-            ) : null}
+        <div className="mt-2 flex gap-[4px]">
+          {planung.kurve.map((_, i) => (
+            <span
+              key={i}
+              className={[
+                "num flex-1 text-center text-[10.5px] tabular-nums",
+                bezahltJahr === jahr + i ? "font-bold text-accent-ink" : "text-faint",
+              ].join(" ")}
+            >
+              {i === 0 || (i + 1) % 5 === 0 || bezahltJahr === jahr + i ? jahr + i : ""}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-12 grid gap-10 lg:grid-cols-2">
+        <div>
+          <Zwischen>Womit gerechnet wurde</Zwischen>
+          <div className="mt-4 border-t border-ink">
+            <Zeile k="Verbrauch im Haus" v={`${n(Math.round(planung.verbrauchKwh))} kWh`} />
             <Zeile k="Strompreis heute" v={`${eur(planung.strompreis)} je kWh`} />
             <Zeile k="Einspeisevergütung" v={`${eur(planung.verguetung)} je kWh`} />
+            <Zeile
+              k="Angenommene Steigerung"
+              v={`${n(Math.round(planung.steigerung * 1000) / 10, 1)} % im Jahr`}
+            />
           </div>
         </div>
 
-        <Kurve kurve={planung.kurve} />
-
-        {/* ── Mit oder ohne Speicher ───────────────────────────── */}
         {planung.speicherKwh > 0 && planung.vergleich.preis > 0 ? (
-          <>
-            <Abschnitt>Mit oder ohne Speicher</Abschnitt>
-            <p className="-mt-1 text-[13px] leading-[1.5] text-muted">
-              Dieselbe Anlage, zwei Rechnungen. Ohne Speicher ist sie billiger und deckt
-              weniger.
-            </p>
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full min-w-[380px] border-collapse text-[13px]">
-                <thead>
-                  <tr className="border-b border-line text-[11.5px] text-muted">
-                    <th className="py-2 text-left font-medium"> </th>
-                    <th className="py-2 text-right font-semibold text-accent-ink">
-                      mit {n(Math.round(planung.speicherKwh * 10) / 10, 1)} kWh
-                    </th>
-                    <th className="py-2 text-right font-medium">ohne Speicher</th>
+          <div>
+            <Zwischen>Mit oder ohne Speicher</Zwischen>
+            <table className="mt-4 w-full border-collapse text-[13.5px]">
+              <thead>
+                <tr className="border-b border-ink">
+                  <th className="py-2.5 text-left"> </th>
+                  <th className="py-2.5 text-right text-[11px] font-bold tracking-[0.08em] text-accent-ink uppercase">
+                    mit {n(Math.round(planung.speicherKwh * 10) / 10, 1)} kWh
+                  </th>
+                  <th className="py-2.5 text-right text-[11px] font-bold tracking-[0.08em] text-muted uppercase">
+                    ohne Speicher
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  [
+                    "Investition",
+                    eur(planung.vergleich.mit.investition, 0),
+                    eur(planung.vergleich.ohne.investition, 0),
+                  ],
+                  [
+                    "Autarkie",
+                    `${Math.round(planung.vergleich.mit.autarkie * 100)} %`,
+                    `${Math.round(planung.vergleich.ohne.autarkie * 100)} %`,
+                  ],
+                  [
+                    "Strom aus dem Netz",
+                    `${n(Math.round(planung.vergleich.mit.netzbezugKwh))} kWh`,
+                    `${n(Math.round(planung.vergleich.ohne.netzbezugKwh))} kWh`,
+                  ],
+                  [
+                    "Ersparnis im Jahr",
+                    eur(planung.vergleich.mit.ersparnisJahr1, 0),
+                    eur(planung.vergleich.ohne.ersparnisJahr1, 0),
+                  ],
+                ].map(([k, a, b]) => (
+                  <tr key={k} className="border-b border-line">
+                    <td className="py-3">{k}</td>
+                    <td className="num py-3 text-right font-bold tabular-nums">{a}</td>
+                    <td className="num py-3 text-right tabular-nums text-muted">{b}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  <Vergleich
-                    k="Investition"
-                    a={eur(planung.vergleich.mit.investition, 0)}
-                    b={eur(planung.vergleich.ohne.investition, 0)}
-                  />
-                  <Vergleich
-                    k="Autarkie"
-                    a={`${Math.round(planung.vergleich.mit.autarkie * 100)} %`}
-                    b={`${Math.round(planung.vergleich.ohne.autarkie * 100)} %`}
-                  />
-                  <Vergleich
-                    k="Strom aus dem Netz"
-                    a={`${n(Math.round(planung.vergleich.mit.netzbezugKwh))} kWh`}
-                    b={`${n(Math.round(planung.vergleich.ohne.netzbezugKwh))} kWh`}
-                  />
-                  <Vergleich
-                    k="Ersparnis im Jahr"
-                    a={eur(planung.vergleich.mit.ersparnisJahr1, 0)}
-                    b={eur(planung.vergleich.ohne.ersparnisJahr1, 0)}
-                  />
-                </tbody>
-              </table>
-            </div>
-            <p className="mt-2 text-[12px] leading-[1.5] text-muted">
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-4 max-w-[52ch] text-[12.5px] leading-[1.55] text-muted">
               Der Speicher kostet {eur(planung.vergleich.preis, 0)} und hebt die Autarkie um{" "}
               {Math.round(planung.vergleich.mehrAutarkie * 100)} Punkte. Er spart{" "}
               {eur(planung.vergleich.mehrErsparnisJahr, 0)} im Jahr, weil{" "}
               {n(Math.round(planung.vergleich.wenigerNetzbezugKwh))} kWh weniger aus dem Netz
               kommen.
             </p>
-          </>
+          </div>
         ) : null}
-
-        <div className="mt-5 rounded-[14px] bg-sunk p-4">
-          <p className="text-[19px] font-extrabold leading-[1.25] text-accent-ink">
-            Du sparst rund{" "}
-            <span className="num tabular-nums">{n(Math.round(planung.ersparnisJahr1))} €</span> im
-            Jahr.
-          </p>
-          <p className="mt-1.5 text-[13px] leading-[1.5] text-muted">
-            Über zwanzig Jahre sind das rund{" "}
-            <span className="num tabular-nums">{n(Math.round(planung.ersparnis20))} €</span>
-            {planung.amortisationJahre !== null
-              ? `; bezahlt hat sich die Anlage nach etwa ${
-                  n(Math.round(planung.amortisationJahre * 10) / 10, 1)
-                } Jahren.`
-              : "."}
-          </p>
-          <p className="mt-2 text-[11.5px] leading-[1.45] text-muted">
-            Richtwerte aus der Planung — der Ertrag hängt vom Wetter ab, die Ersparnis vom
-            Strompreis. Steigt er, wird die Rechnung besser.
-          </p>
-        </div>
       </div>
     </section>
   );

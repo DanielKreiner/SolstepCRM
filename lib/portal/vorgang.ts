@@ -172,6 +172,7 @@ export type PortalDetail = {
     };
     kurve: number[];
     rendite: number | null;
+    steigerung: number;
     vergleich: {
       mit: { autarkie: number; netzbezugKwh: number; ersparnisJahr1: number; investition: number; amortisationJahre: number | null };
       ohne: { autarkie: number; netzbezugKwh: number; ersparnisJahr1: number; investition: number; amortisationJahre: number | null };

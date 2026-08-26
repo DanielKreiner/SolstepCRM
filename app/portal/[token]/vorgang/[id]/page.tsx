@@ -336,11 +336,7 @@ export default async function PortalVorgangPage({
               * in einem zweiten PDF lagen.
               */}
             {daten.planung ? (
-              <PlanungsBlock
-                planung={daten.planung}
-                kunde={session.customerName}
-                adresse={[v.adresse, v.ort].filter(Boolean).join(", ") || null}
-              />
+              <PlanungsBlock planung={daten.planung} kunde={session.customerName} />
             ) : null}
 
             <AngebotAnsicht
