@@ -38,6 +38,7 @@ async function aufraeumen(): Promise<void> {
     await db.from("lagerbewegung").delete().eq("vorgang_id", v.id);
     await db.from("vorgang_event").delete().eq("vorgang_id", v.id);
     await db.from("vorgang_position").delete().eq("vorgang_id", v.id);
+    await db.from("vorgang_gruppe").delete().eq("vorgang_id", v.id);
     await db.from("vorgang_gate").delete().eq("vorgang_id", v.id);
     await db.from("vorgang_termin").delete().eq("vorgang_id", v.id);
     await db.from("vorgang_dokument").delete().eq("vorgang_id", v.id);
@@ -211,6 +212,28 @@ test("2 — Positionen im Vorgang zusammenstellen, ohne Seitenwechsel", async ({
     .eq("id", zustand.vorgangId!)
     .single();
   expect(Number(v!.angebotswert_netto)).toBeGreaterThan(0);
+
+  /*
+   * Beide Positionen in ein Paket mit verstecktem Einzelpreis. Damit
+   * prüft Test 3, ob die Annahme das Paket mitnimmt — auf der
+   * Auftragsbestätigung und allem, was daraus entsteht.
+   */
+  const { data: gruppe } = await db
+    .from("vorgang_gruppe")
+    .insert({
+      company_id: COMPANY_A,
+      vorgang_id: zustand.vorgangId!,
+      name: "Paket",
+      sort: 10,
+      einzelpreise_verstecken: true,
+    })
+    .select("id")
+    .single();
+  await db
+    .from("vorgang_position")
+    .update({ gruppe_id: gruppe!.id })
+    .eq("vorgang_id", zustand.vorgangId!)
+    .is("dokument_id", null);
 });
 
 test("3 — Die Annahme löst alles auf einmal aus", async ({ page }) => {
@@ -312,6 +335,36 @@ test("3 — Die Annahme löst alles auf einmal aus", async ({ page }) => {
   expect(eingefroren.map((p) => p.bezeichnung).sort()).toEqual(
     entwurf.map((p) => p.bezeichnung).sort(),
   );
+
+  /*
+   * Und das Paket friert mit ein.
+   *
+   * Vorher wurden nur die Positionen kopiert. Damit fand jedes spätere
+   * Dokument — Auftragsbestätigung, Anzahlungs- und Schlussrechnung,
+   * „Ihr Auftrag" im Portal — keine Gruppe zu seinen Positionen und
+   * zeigte jede Zeile einzeln mit ihrem Preis. Genau den hatte der
+   * Betrieb im Angebot versteckt.
+   */
+  const { data: abDok } = await db
+    .from("vorgang_dokument")
+    .select("id")
+    .eq("vorgang_id", zustand.vorgangId!)
+    .eq("typ", "ab")
+    .single();
+
+  const { data: abGruppen } = await db
+    .from("vorgang_gruppe")
+    .select("id, name, einzelpreise_verstecken")
+    .eq("dokument_id", abDok!.id);
+  expect(abGruppen).toHaveLength(1);
+  expect(abGruppen![0]!.name).toBe("Paket");
+  expect(abGruppen![0]!.einzelpreise_verstecken).toBe(true);
+
+  const { data: abPos } = await db
+    .from("vorgang_position")
+    .select("gruppe_id")
+    .eq("dokument_id", abDok!.id);
+  expect(abPos!.every((p) => p.gruppe_id === abGruppen![0]!.id)).toBe(true);
 
   /* ---- Gates ---- */
   const { data: gates } = await db

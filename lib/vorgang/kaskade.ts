@@ -77,7 +77,7 @@ export async function kaskadeAusloesen(
   const { data: posRoh } = await supabase
     .from("vorgang_position")
     .select(
-      "id, sort, article_id, bezeichnung, menge, einheit, ep_netto, ust_satz, kalk_stunden, kalk_ek, ist_material, bild_url, beschreibung",
+      "id, sort, gruppe_id, article_id, bezeichnung, menge, einheit, ep_netto, ust_satz, kalk_stunden, kalk_ek, ist_material, bild_url, beschreibung, rabatt_prozent, optional",
     )
     .eq("vorgang_id", d.vorgangId)
     .is("dokument_id", null)
@@ -132,6 +132,49 @@ export async function kaskadeAusloesen(
   }
 
   /*
+   * Erst die Gruppen, dann die Positionen.
+   *
+   * Die AB fror bisher nur die Positionen ein — die Gruppen blieben
+   * zurück. Damit fand jedes spätere Dokument (AB, Anzahlungs- und
+   * Schlussrechnung, „Ihr Auftrag" im Portal) keine Gruppe zu seinen
+   * Positionen und zeigte jede Zeile einzeln mit ihrem Preis. Genau
+   * das, was der Betrieb im Angebot ausdrücklich versteckt hatte: Wer
+   * ein Paket verkauft, will nicht zwanzig Einzelpreise daneben stehen
+   * haben, über die der Kunde dann verhandelt.
+   */
+  const { data: gruppenRoh } = await supabase
+    .from("vorgang_gruppe")
+    .select("id, name, beschreibung, sort, paket_preis, einzelpreise_verstecken")
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null);
+
+  const gruppenAbbildung = new Map<string, string>();
+  for (const g of (gruppenRoh ?? []) as unknown as Array<{
+    id: string;
+    name: string;
+    beschreibung: string | null;
+    sort: number;
+    paket_preis: string | null;
+    einzelpreise_verstecken: boolean;
+  }>) {
+    const { data: neu } = await supabase
+      .from("vorgang_gruppe")
+      .insert({
+        company_id: companyId,
+        vorgang_id: d.vorgangId,
+        dokument_id: ab.id,
+        name: g.name,
+        beschreibung: g.beschreibung,
+        sort: g.sort,
+        paket_preis: g.paket_preis,
+        einzelpreise_verstecken: g.einzelpreise_verstecken,
+      })
+      .select("id")
+      .single();
+    if (neu) gruppenAbbildung.set(g.id, neu.id as string);
+  }
+
+  /*
    * Die Positionen werden auf die AB kopiert und damit eingefroren. Der
    * Entwurf bleibt daneben stehen — er ist ab jetzt gesperrt, aber er
    * ist auch die Grundlage der Schlussrechnung.
@@ -142,12 +185,15 @@ export async function kaskadeAusloesen(
       vorgang_id: d.vorgangId,
       dokument_id: ab.id,
       sort: p.sort,
+      gruppe_id: p.gruppe_id ? (gruppenAbbildung.get(p.gruppe_id) ?? null) : null,
       article_id: p.article_id,
       bezeichnung: p.bezeichnung,
       menge: p.menge,
       einheit: p.einheit,
       ep_netto: p.ep_netto,
       ust_satz: p.ust_satz,
+      rabatt_prozent: p.rabatt_prozent,
+      optional: p.optional,
       kalk_stunden: p.kalk_stunden,
       kalk_ek: p.kalk_ek,
       ist_material: p.ist_material,
@@ -334,6 +380,9 @@ function fmt(n: number): string {
 type PosRoh = {
   id: string;
   sort: number;
+  gruppe_id: string | null;
+  rabatt_prozent: string | null;
+  optional: boolean;
   article_id: string | null;
   bezeichnung: string;
   menge: string;
