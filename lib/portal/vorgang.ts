@@ -154,6 +154,32 @@ export type PortalDetail = {
     flaechen: Array<{ name: string; neigung: number; azimut: number; module: number }>;
     /** Signierter Link auf das Bild der Planung, 15 Minuten gültig. */
     bildUrl: string | null;
+    /* Wohin der Strom geht, was er bringt — dieselben Bilder wie im PDF. */
+    eigenverbrauchQuote: number;
+    fluss: {
+      direktKwh: number;
+      ueberSpeicherKwh: number;
+      einspeisungKwh: number;
+      netzbezugKwh: number;
+      monate: Array<{
+        produktion: number;
+        verbrauch: number;
+        direkt: number;
+        speicher: number;
+        einspeisung: number;
+        netz: number;
+      }>;
+    };
+    kurve: number[];
+    rendite: number | null;
+    vergleich: {
+      mit: { autarkie: number; netzbezugKwh: number; ersparnisJahr1: number; investition: number; amortisationJahre: number | null };
+      ohne: { autarkie: number; netzbezugKwh: number; ersparnisJahr1: number; investition: number; amortisationJahre: number | null };
+      preis: number;
+      mehrAutarkie: number;
+      mehrErsparnisJahr: number;
+      wenigerNetzbezugKwh: number;
+    };
   } | null;
   schritte: PortalSchritt[];
   dokumente: PortalDokument[];
@@ -846,7 +872,6 @@ async function planungFuerPortal(
     bildUrl = data?.signedUrl ?? null;
   }
 
-  const { bild: _bild, bildPfad: _pfad, verschattungProzent: _v, steigerung: _s, ...zahlen } =
-    geplant;
+  const { bild: _bild, bildPfad: _pfad, verschattungProzent: _v, ...zahlen } = geplant;
   return { ...zahlen, bildUrl };
 }

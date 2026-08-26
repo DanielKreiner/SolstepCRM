@@ -516,7 +516,12 @@ test("8 — Der Monteur sieht seinen Einsatz mit Adresse und Material", async ({
   await expect(page.getByRole("link", { name: /Kirchengasse/ })).toBeVisible();
   // Was der Planer dazugeschrieben hat, muss auf der Baustelle ankommen.
   await expect(page.getByText("Schlüssel beim Nachbarn.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Beladeliste" })).toBeVisible();
+  /*
+   * `.first()`: Der Monteur hat heute mehr als einen Einsatz — im
+   * Demodatensatz steht schon eine Montage. Jede Karte trägt ihre
+   * eigene Beladeliste.
+   */
+  await expect(page.getByRole("link", { name: "Beladeliste" }).first()).toBeVisible();
 
   /*
    * Kein Board und keine Beträge. Beides ist keine Frage der Anzeige:
@@ -1235,6 +1240,16 @@ test("19 — Der Mahnlauf erinnert, stuft hoch und lässt Ausgesetztes in Ruhe",
   };
   await aufraeumen();
 
+  /*
+   * Eine Mahnung geht per Mail — ohne Adresse überspringt der Lauf die
+   * Rechnung mit Begründung, und zwar zu Recht. Der Kunde aus Test 1
+   * hat keine; hier geht es um die Mahnstufen, nicht um die Adresse.
+   */
+  await db
+    .from("customer")
+    .update({ email: "mahnung@example.com" })
+    .eq("id", zustand.kundeId!);
+
   const zaehleMails = async (): Promise<number> => {
     const { count } = await db
       .from("mail_outbox")
@@ -1365,8 +1380,12 @@ test.describe("Vorgang anlegen", () => {
     const fenster = page.getByRole("dialog");
     await expect(fenster).toBeVisible();
 
-    // Das Board bleibt dahinter stehen.
-    await expect(page.getByText(/^Vorgänge$/)).toBeVisible();
+    /*
+     * Das Board bleibt dahinter stehen. Geprüft wird die Überschrift —
+     * „Vorgänge" steht auch in der Seitenleiste, und ein Text-Treffer
+     * ist damit nicht eindeutig.
+     */
+    await expect(page.getByRole("heading", { name: "Vorgänge" })).toBeVisible();
 
     await fenster.getByRole("button", { name: /Kunde ist neu/ }).click();
     await fenster.getByLabel("Name des Kunden").fill("Prüfkunde Fenster");

@@ -150,14 +150,22 @@ async function gruppeHolen(
   vorgangId: string,
   name: string,
 ): Promise<string | null> {
+  /*
+   * `limit(1)` statt `maybeSingle()`: Es kann dieselbe Überschrift
+   * zweimal geben — von Hand angelegt oder aus einem früheren Stand.
+   * `maybeSingle` wäre dann ein Fehler, und die Positionen landeten
+   * ohne Gruppe im Angebot.
+   */
   const { data: da } = await supabase
     .from("vorgang_gruppe")
     .select("id")
     .eq("vorgang_id", vorgangId)
     .is("dokument_id", null)
     .eq("name", name)
-    .maybeSingle();
-  if (da) return da.id as string;
+    .order("sort")
+    .limit(1);
+  const treffer = (da ?? [])[0];
+  if (treffer) return treffer.id as string;
 
   const { data: bestand } = await supabase
     .from("vorgang_gruppe")

@@ -1,3 +1,4 @@
+import { energiefluss, renditeProJahr, speicherVergleich } from "./energiefluss";
 import { planungKennzahlen } from "./kennzahlen";
 import { geraetName } from "./geraetname";
 import { anzahlModule } from "./module";
@@ -55,7 +56,7 @@ export async function planungFuerVorgang(
       ),
     supabase
       .from("vorgang_position")
-      .select("menge, ep_netto, rabatt_prozent")
+      .select("menge, ep_netto, rabatt_prozent, article_id")
       .eq("vorgang_id", vorgangId)
       .is("dokument_id", null),
     supabase.from("planer_modul").select("id, hersteller, bezeichnung"),
@@ -66,6 +67,7 @@ export async function planungFuerVorgang(
     menge: number | string;
     ep_netto: number | string;
     rabatt_prozent: number | string | null;
+    article_id: string | null;
   }>;
   const angebotssumme =
     zeilen.length > 0
@@ -130,6 +132,41 @@ export async function planungFuerVorgang(
   }
 
   /*
+   * Was der Speicher im Angebot kostet — für den Vergleich „mit oder
+   * ohne". Genommen wird, was wirklich dafür in den Positionen steht:
+   * Speichermodule und BMS über ihre Artikel. Steht dort nichts, greift
+   * der Richtwert des Betriebs je kWh; sonst stünde im Vergleich eine
+   * Anlage ohne Speicher zum selben Preis.
+   */
+  const speicherArtikel = new Set(
+    [geraet?.artikel_id, geraet?.bms_artikel_id].filter((x): x is string => !!x),
+  );
+  const speicherAusPositionen = zeilen
+    .filter((x) => x.article_id && speicherArtikel.has(x.article_id))
+    .reduce(
+      (sum, x) =>
+        sum + Number(x.menge) * Number(x.ep_netto) * (1 - Number(x.rabatt_prozent ?? 0) / 100),
+      0,
+    );
+  const speicherPreis =
+    speicherAusPositionen > 0
+      ? speicherAusPositionen
+      : speicherKwh * Number(vorgabe?.speicher_eur_pro_kwh ?? 0);
+
+  const flussEingabe = {
+    ertragKwh: k.jahresertragKwh,
+    verbrauchKwh: plan.wirtschaft.verbrauchKwh ?? 4500,
+    speicherKwh: k.speicherKwh,
+    strompreis: plan.wirtschaft.strompreis ?? Number(vorgabe?.strompreis ?? 0.32),
+    verguetung: plan.wirtschaft.verguetung ?? Number(vorgabe?.verguetung ?? 0.08),
+    anlagenpreis: k.anlagenpreis,
+    foerderung: plan.wirtschaft.foerderung ?? 0,
+    steigerung: Number(vorgabe?.steigerung ?? 0.02),
+  };
+  const fluss = energiefluss({ ...flussEingabe, monateKwh: k.monateKwh });
+  const vergleich = speicherVergleich(flussEingabe, speicherPreis);
+
+  /*
    * Die Geräte beim Namen nennen. „Wechselrichter: vorhanden" hilft
    * niemandem — im Angebot steht, was verbaut wird.
    */
@@ -171,6 +208,20 @@ export async function planungFuerVorgang(
     wechselrichter: name(wrZeilen as never, plan.technik.wechselrichter),
     speicher: geraet ? geraetName(geraet) : null,
     speicherModule: geraet && geraet.modulgroesse_kwh ? modulzahl(geraet, plan.technik.speicherModule) : null,
+    /* ── Energiefluss, Kurve und der Speichervergleich ────────── */
+    eigenverbrauchQuote: fluss.eigenverbrauchQuote,
+    fluss: {
+      direktKwh: fluss.direktKwh,
+      ueberSpeicherKwh: fluss.speicherKwh,
+      einspeisungKwh: fluss.einspeisungKwh,
+      netzbezugKwh: fluss.netzbezugKwh,
+      monate: fluss.monate,
+    },
+    kurve: k.wirtschaft.kurve,
+    breakEvenJahr: k.wirtschaft.breakEvenJahr,
+    rendite: renditeProJahr(k.ersparnis20, k.wirtschaft.investition),
+    speicherPreis,
+    vergleich,
     flaechen: plan.flaechen.map((f) => ({
       name: f.name,
       neigung: f.neigung,
