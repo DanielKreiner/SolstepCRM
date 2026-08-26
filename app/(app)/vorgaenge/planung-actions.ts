@@ -6,6 +6,7 @@ import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { planLesen } from "@/lib/planer/plan";
 import { bedarfAusPlan, type GeraeteStand } from "@/lib/planer/uebergabe";
+import { positionenSchreiben } from "@/lib/vorgang/planungPositionen";
 
 /*
  * Die Brücke zwischen Vorgang und Planer.
@@ -203,79 +204,21 @@ export async function positionenAusPlanung(
     return { error: "Die Planung enthält noch keine Geräte.", ok: null };
   }
 
-  /*
-   * Was schon im Angebot steht, wird nicht doppelt angelegt. Verglichen
-   * wird über den Artikel — die Bezeichnung ändert sich, sobald jemand
-   * eine Zeile umformuliert.
-   */
-  const { data: bestehende } = await supabase
-    .from("vorgang_position")
-    .select("article_id, sort")
-    .eq("vorgang_id", vorgangId)
-    .is("dokument_id", null);
-
-  const schonDa = new Set(
-    (bestehende ?? []).map((p) => p.article_id as string | null).filter((x): x is string => !!x),
-  );
-  let sort = Math.max(0, ...(bestehende ?? []).map((p) => Number(p.sort ?? 0))) + 10;
-
-  const artikelIds = bedarf
-    .map((b) => b.artikel_id)
-    .filter((x): x is string => typeof x === "string");
-  const { data: artikel } = artikelIds.length
-    ? await supabase
-        .from("article")
-        .select(
-          "id, name, unit, purchase_price, sale_price, vat_rate, description, image_url, kalk_stunden_pro_einheit, ist_material",
-        )
-        .in("id", artikelIds)
-    : { data: [] };
-
-  const stamm = new Map((artikel ?? []).map((a) => [a.id as string, a]));
-
-  const zeilen: Record<string, unknown>[] = [];
-  let uebersprungen = 0;
-  let ohnePreis = 0;
-
-  for (const b of bedarf) {
-    if (b.artikel_id && schonDa.has(b.artikel_id)) {
-      uebersprungen++;
-      continue;
-    }
-    const a = b.artikel_id ? stamm.get(b.artikel_id) : undefined;
-    if (!a) ohnePreis++;
-
-    zeilen.push({
-      company_id: z1.me.companyId,
-      vorgang_id: vorgangId,
-      sort: (sort += 10),
-      article_id: a ? (a.id as string) : null,
-      bezeichnung: (a?.name as string | undefined) ?? b.bezeichnung,
-      menge: b.menge,
-      einheit: (a?.unit as string | undefined) ?? b.einheit,
-      ep_netto: a ? Number(a.sale_price ?? 0) : 0,
-      ust_satz: a ? Number(a.vat_rate ?? 20) : Number(vorgang.ust_satz ?? 20),
-      kalk_ek: a ? a.purchase_price : null,
-      kalk_stunden: a ? a.kalk_stunden_pro_einheit : null,
-      ist_material: a ? ((a.ist_material as boolean | null) ?? true) : true,
-      bild_url: (a?.image_url as string | null | undefined) ?? null,
-      beschreibung: a
-        ? ((a.description as string | null | undefined) ?? null)
-        : "Aus der Planung übernommen — im Material zuordnen und Preis nachtragen.",
-    });
-  }
-
-  if (zeilen.length === 0) {
+  const erg = await positionenSchreiben(supabase, {
+    companyId: z1.me.companyId,
+    vorgangId,
+    ustSatz: Number(vorgang.ust_satz ?? 20),
+    bedarf,
+  });
+  if (erg.fehler) return { error: `Übernahme fehlgeschlagen: ${erg.fehler}`, ok: null };
+  if (erg.angelegt === 0) {
     return { error: null, ok: "Alle Geräte der Planung stehen schon im Angebot." };
   }
 
-  const { error } = await supabase.from("vorgang_position").insert(zeilen);
-  if (error) return { error: `Übernahme fehlgeschlagen: ${error.message}`, ok: null };
-
   revalidatePath(`/vorgaenge/${vorgangId}`);
 
-  const teile = [`${zeilen.length} Positionen aus der Planung übernommen`];
-  if (uebersprungen > 0) teile.push(`${uebersprungen} standen schon drin`);
-  if (ohnePreis > 0) teile.push(`${ohnePreis} ohne Artikel — Preis nachtragen`);
+  const teile = [`${erg.angelegt} Positionen aus der Planung übernommen`];
+  if (erg.uebersprungen > 0) teile.push(`${erg.uebersprungen} standen schon drin`);
+  if (erg.ohnePreis > 0) teile.push(`${erg.ohnePreis} ohne Artikel — Preis nachtragen`);
   return { error: null, ok: `${teile.join(", ")}.` };
 }

@@ -24,6 +24,7 @@ async function aufraeumen() {
     .like("adresse", "Übergabeweg%");
   for (const v of vorgaenge ?? []) {
     await db.from("vorgang_bedarf").delete().eq("vorgang_id", v.id);
+    await db.from("vorgang_position").delete().eq("vorgang_id", v.id);
     await db.from("vorgang").delete().eq("id", v.id);
   }
   await db.from("customer").delete().eq("company_id", COMPANY_A).like("name", "Prüfkunde%");
@@ -377,5 +378,117 @@ test.describe("Planer — Übergabe als Vorgang", () => {
         .eq("role", "bauleitung");
       await db.from("planer_projekt").delete().eq("id", projekt!.id);
     }
+  });
+});
+
+/*
+ * Ein Hybridgerät mit modularem Speicher — der Fall, um den es beim
+ * Angebot geht: Fronius Reserva wird nicht als ein Speicher gekauft,
+ * sondern als Stapel aus Modulen plus BMS.
+ */
+async function stapelAnlegen() {
+  const db = admin();
+  const { data: artikel } = await db
+    .from("article")
+    .select("id")
+    .eq("company_id", COMPANY_A)
+    .eq("active", true)
+    .gt("sale_price", 0)
+    .limit(2);
+
+  const { data: wr } = await db
+    .from("planer_wechselrichter")
+    .insert({
+      company_id: COMPANY_A,
+      hersteller: "Übergabetest",
+      bezeichnung: "Hybrid 10",
+      max_dc: 15,
+      ac_nenn: 10,
+      hybrid: true,
+      mppt: [{ uMin: 80, uMax: 800, iMax: 25, maxStrings: 2 }],
+      artikel_id: artikel![0]!.id,
+    })
+    .select("id")
+    .single();
+
+  const { data: speicher } = await db
+    .from("planer_speicher")
+    .insert({
+      company_id: COMPANY_A,
+      hersteller: "Übergabetest",
+      bezeichnung: "Stapel",
+      nutzbar_kwh: 3.15,
+      modulgroesse_kwh: 3.15,
+      min_module: 2,
+      max_module: 5,
+      kompatibel: [wr!.id],
+      artikel_id: artikel![0]!.id,
+      bms_artikel_id: artikel![1]!.id,
+    })
+    .select("id")
+    .single();
+
+  return { wrId: wr!.id as string, speicherId: speicher!.id as string };
+}
+
+test.describe("Planer — Übergabe ins Angebot", () => {
+  test("legt Module, Wechselrichter, Speicherstapel und BMS als Angebotspositionen an", async ({
+    page,
+  }) => {
+    const { modulId } = await geraeteAnlegen();
+    const { wrId, speicherId } = await stapelAnlegen();
+    await login(page, DEMO.gf);
+    const projektId = await projektMitTechnik(page, "Übergabeweg 9", wrId, modulId);
+
+    /*
+     * Vier Module im Stapel, also 12,6 kWh — und der Speicher muss in
+     * der Rechnung auch aktiv sein, sonst gehört er nicht ins Angebot.
+     */
+    await page.getByLabel("Speicher", { exact: true }).selectOption(speicherId);
+    await page.getByLabel("Speichermodule").selectOption("4");
+    await page.getByRole("button", { name: /^4 Ertrag/ }).click();
+    await page.getByRole("button", { name: /^mit Speicher/ }).click();
+
+    await page.getByRole("button", { name: /^5 Übergabe/ }).click();
+    await page.getByRole("button", { name: "Als Vorgang übernehmen" }).click();
+    await page.getByLabel("Kunde").fill("Prüfkunde Stapel");
+    await page.getByRole("button", { name: "Vorgang anlegen" }).click();
+    await expect(page.getByRole("link", { name: "Vorgang öffnen" })).toBeVisible({
+      timeout: 20_000,
+    });
+
+    const db = admin();
+    const { data: projekt } = await db
+      .from("planer_projekt")
+      .select("vorgang_id")
+      .eq("id", projektId)
+      .single();
+
+    /*
+     * Das Angebot, nicht nur die Bedarfsliste: Wer aus einer Planung
+     * einen Vorgang anlegt, soll das Angebot fertig vorfinden.
+     */
+    const { data: pos } = await db
+      .from("vorgang_position")
+      .select("bezeichnung, menge, ep_netto")
+      .eq("vorgang_id", projekt!.vorgang_id!);
+
+    expect(pos!.length).toBeGreaterThanOrEqual(3);
+    const module = pos!.find((p) => Number(p.menge) > 10)!;
+    expect(module).toBeTruthy();
+
+    /* Vier Speichermodule und einmal das BMS. */
+    const stapel = pos!.filter((p) => Number(p.menge) === 4);
+    expect(stapel.length).toBeGreaterThanOrEqual(1);
+
+    /* Und Preise stehen dran — sie kommen aus dem Artikelstamm. */
+    expect(pos!.some((p) => Number(p.ep_netto) > 0)).toBe(true);
+
+    const { data: vorgang } = await db
+      .from("vorgang")
+      .select("speicher_kwh")
+      .eq("id", projekt!.vorgang_id!)
+      .single();
+    expect(Number(vorgang!.speicher_kwh)).toBeCloseTo(12.6, 1);
   });
 });

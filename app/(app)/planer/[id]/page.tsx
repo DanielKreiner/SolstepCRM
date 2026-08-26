@@ -222,7 +222,23 @@ export default async function PlanerProjektPage({
       geraete={{
         module: (geraeteModule ?? []) as unknown as GeraetModul[],
         wechselrichter: (geraeteWr ?? []) as unknown as GeraetWr[],
-        speicher: (geraeteSpeicher ?? []) as unknown as GeraetSpeicher[],
+        /*
+         * Numerische Spalten kommen aus PostgREST als Zeichenkette. Bis
+         * hierher hat das niemand gestört, weil jede Nutzung ein
+         * `Number(...)` davorgesetzt hat — mit der Modulrechnung reicht
+         * das nicht mehr, und ein „3.15" mal vier ergibt an der
+         * falschen Stelle Unsinn.
+         */
+        speicher: ((geraeteSpeicher ?? []) as unknown as Array<
+          Omit<GeraetSpeicher, "nutzbar_kwh" | "modulgroesse_kwh"> & {
+            nutzbar_kwh: string | number;
+            modulgroesse_kwh: string | number | null;
+          }
+        >).map((s) => ({
+          ...s,
+          nutzbar_kwh: Number(s.nutzbar_kwh),
+          modulgroesse_kwh: s.modulgroesse_kwh === null ? null : Number(s.modulgroesse_kwh),
+        })),
       }}
       vorgabe={vorgabe}
       angebotssumme={angebotssumme}

@@ -268,7 +268,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       hersteller: x.hersteller as string,
       bezeichnung: x.bezeichnung as string,
       nutzbar_kwh: Number(x.nutzbar_kwh),
+      modulgroesse_kwh:
+        x.modulgroesse_kwh === null || x.modulgroesse_kwh === undefined
+          ? null
+          : Number(x.modulgroesse_kwh),
+      min_module: (x.min_module as number | null) ?? null,
+      max_module: (x.max_module as number | null) ?? null,
       artikel_id: (x.artikel_id as string | null) ?? null,
+      bms_artikel_id: (x.bms_artikel_id as string | null) ?? null,
     })),
   };
 

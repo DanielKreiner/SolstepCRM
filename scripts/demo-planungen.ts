@@ -291,7 +291,7 @@ async function main(): Promise<void> {
 
     plan = {
       ...plan,
-      technik: {
+      technik: { speicherModule: null,
         modul: modul.id as string,
         wechselrichter: (wr?.id as string) ?? null,
         speicher: null,

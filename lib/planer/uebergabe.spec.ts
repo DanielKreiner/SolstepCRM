@@ -17,7 +17,17 @@ const GERAETE: GeraeteStand = {
     { id: "w1", hersteller: "Fronius", bezeichnung: "Symo GEN24 10.0", artikel_id: "art-wr" },
   ],
   speicher: [
-    { id: "s1", hersteller: "Huawei", bezeichnung: "LUNA2000-10", nutzbar_kwh: 10, artikel_id: null },
+    {
+      id: "s1",
+      hersteller: "Huawei",
+      bezeichnung: "LUNA2000-10",
+      nutzbar_kwh: 10,
+      modulgroesse_kwh: null,
+      min_module: null,
+      max_module: null,
+      artikel_id: null,
+      bms_artikel_id: null,
+    },
   ],
 };
 
@@ -79,7 +89,7 @@ describe("Bedarfsliste aus der Planung", () => {
 
   it("nimmt Wechselrichter und — nur mit Speicher — den Speicher auf", () => {
     const plan = planMit([{ typ: "AIKO Neostar 3P+", wp: 490, reihen: 2, spalten: 5 }]);
-    plan.technik = { modul: "m1", wechselrichter: "w1", speicher: "s1" };
+    plan.technik = { modul: "m1", wechselrichter: "w1", speicher: "s1", speicherModule: null };
 
     const ohne = bedarfAusPlan(plan, GERAETE);
     expect(ohne.map((x) => x.schluessel)).toEqual(["modul:AIKO Neostar 3P+", "wr:w1"]);
@@ -96,7 +106,7 @@ describe("Bedarfsliste aus der Planung", () => {
 
   it("lässt die Artikelreferenz leer, statt einen Artikel zu raten", () => {
     const plan = planMit([{ typ: "Trina Vertex S+", wp: 465, reihen: 2, spalten: 5 }]);
-    plan.technik = { modul: "m2", wechselrichter: null, speicher: null };
+    plan.technik = { modul: "m2", wechselrichter: null, speicher: null, speicherModule: null };
 
     const p = bedarfAusPlan(plan, GERAETE);
     // Das Trina-Modul hat keine Artikelreferenz im Stammsatz.

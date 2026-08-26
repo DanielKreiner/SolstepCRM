@@ -18,6 +18,7 @@
 
 import { anzahlModule } from "./module";
 import type { Plan } from "./plan";
+import { speicherPosten, type SpeicherTyp } from "./speicher";
 
 export interface GeraeteStand {
   module: Array<{ id: string; hersteller: string; bezeichnung: string; artikel_id: string | null }>;
@@ -27,13 +28,7 @@ export interface GeraeteStand {
     bezeichnung: string;
     artikel_id: string | null;
   }>;
-  speicher: Array<{
-    id: string;
-    hersteller: string;
-    bezeichnung: string;
-    nutzbar_kwh: number;
-    artikel_id: string | null;
-  }>;
+  speicher: SpeicherTyp[];
 }
 
 export interface BedarfPosition {
@@ -127,13 +122,20 @@ export function bedarfAusPlan(plan: Plan, geraete: GeraeteStand): BedarfPosition
    * warum.
    */
   if (sp && plan.wirtschaft.mitSpeicher) {
-    positionen.push({
-      bezeichnung: `${sp.hersteller} ${sp.bezeichnung}`,
-      menge: 1,
-      einheit: "Stk",
-      artikel_id: sp.artikel_id,
-      schluessel: `speicher:${sp.id}`,
-    });
+    /*
+     * Beim Stapel zwei Zeilen: die Module und einmal die Steuereinheit.
+     * Vorher stand hier eine Zeile „Fronius Reserva, 1 Stk" — ein Gerät,
+     * das es so nicht gibt, und das BMS fehlte in der Bestellung.
+     */
+    for (const posten of speicherPosten(sp, plan.technik.speicherModule)) {
+      positionen.push({
+        bezeichnung: posten.bezeichnung,
+        menge: posten.menge,
+        einheit: "Stk",
+        artikel_id: posten.artikel_id,
+        schluessel: posten.schluessel,
+      });
+    }
   }
 
   /*

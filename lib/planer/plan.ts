@@ -129,6 +129,16 @@ const strangSchema = z.object({
 const technikSchema = z.object({
   wechselrichter: z.string().uuid().nullable().default(null),
   speicher: z.string().uuid().nullable().default(null),
+  /**
+   * Wie viele Bausteine der Speicherstapel hat.
+   *
+   * Nur bei modularen Speichern — Fronius Reserva, Huawei LUNA und
+   * ähnliche werden nicht als fertige Grösse gekauft, sondern als
+   * Stapel aus gleichen Modulen. Aus der Zahl ergibt sich die
+   * Kapazität, und aus ihr die Stückliste: n Module plus einmal die
+   * Steuereinheit.
+   */
+  speicherModule: z.number().int().positive().nullable().default(null),
   modul: z.string().uuid().nullable().default(null),
 });
 
@@ -212,7 +222,12 @@ export const planSchema = z.object({
   flaechen: z.array(flaecheSchema).default([]),
   gruppen: z.array(gruppeSchema).default([]),
   strings: z.array(strangSchema).default([]),
-  technik: technikSchema.default({ wechselrichter: null, speicher: null, modul: null }),
+  technik: technikSchema.default({
+    wechselrichter: null,
+    speicher: null,
+    speicherModule: null,
+    modul: null,
+  }),
   gebaeude: gebaeudeSchema.default({ typ: "sattel", wandhoehe: 3, ueberstand: 0.3 }),
   objekte: z.array(objektSchema).default([]),
   wirtschaft: wirtschaftSchema.default({
@@ -242,6 +257,8 @@ export interface Strang {
 export interface Technik {
   wechselrichter: string | null;
   speicher: string | null;
+  /** Zahl der Bausteine bei einem modularen Speicher. */
+  speicherModule: number | null;
   modul: string | null;
 }
 
@@ -264,7 +281,7 @@ export function leererPlan(): Plan {
     flaechen: [],
     gruppen: [],
     strings: [],
-    technik: { wechselrichter: null, speicher: null, modul: null },
+    technik: { wechselrichter: null, speicher: null, speicherModule: null, modul: null },
     gebaeude: { typ: "sattel", wandhoehe: 3, ueberstand: 0.3 },
     objekte: [],
     wirtschaft: {

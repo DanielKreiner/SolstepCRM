@@ -15,6 +15,13 @@ import {
 } from "@/lib/planer/elektrik";
 import { anzahlModule, aktiveZellen, type Modulgruppe, nachfuehren } from "@/lib/planer/module";
 import { modulSchluessel, naechsteId, type Plan, strangFarbe } from "@/lib/planer/plan";
+import {
+  grenzen,
+  istModular,
+  kapazitaet,
+  modulzahl,
+  stapelStufen,
+} from "@/lib/planer/speicher";
 import { verlegeStrings } from "@/lib/planer/strings";
 
 /*
@@ -71,6 +78,12 @@ export interface GeraetSpeicher {
   hersteller: string;
   bezeichnung: string;
   nutzbar_kwh: number;
+  /** Gesetzt heisst: Stapel aus Modulen dieser Grösse. */
+  modulgroesse_kwh: number | null;
+  min_module: number | null;
+  max_module: number | null;
+  artikel_id: string | null;
+  bms_artikel_id: string | null;
   kompatibel: string[];
 }
 
@@ -105,6 +118,7 @@ export function TechnikPanel({
   const passendeSpeicher = gewaehlterWr
     ? speicher.filter((s) => s.kompatibel.includes(gewaehlterWr.id))
     : [];
+  const gewaehlterSpeicher = passendeSpeicher.find((s) => s.id === plan.technik.speicher) ?? null;
 
   const alleModule = plan.gruppen.flatMap((g) =>
     aktiveZellen(g).map((z) => modulSchluessel(g.id, z.reihe, z.spalte)),
@@ -284,16 +298,63 @@ export function TechnikPanel({
               aria-label="Speicher"
               value={plan.technik.speicher ?? ""}
               disabled={!schreibrecht}
-              onChange={(e) => setzeTechnik({ speicher: e.target.value || null })}
+              onChange={(e) => {
+                const naechster = passendeSpeicher.find((x) => x.id === e.target.value) ?? null;
+                /*
+                 * Beim Wechsel gleich den kleinsten bestellbaren Stapel
+                 * setzen. Ohne Zahl stünde „Speicher: Reserva" da, und
+                 * niemand wüsste, wie gross er ist.
+                 */
+                setzeTechnik({
+                  speicher: e.target.value || null,
+                  speicherModule:
+                    naechster && istModular(naechster) ? grenzen(naechster).min : null,
+                });
+              }}
               className={FELD}
             >
               <option value="">kein Speicher</option>
               {passendeSpeicher.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.hersteller} {s.bezeichnung} · {num(s.nutzbar_kwh)} kWh
+                  {s.hersteller} {s.bezeichnung} ·{" "}
+                  {istModular(s)
+                    ? `${num(s.modulgroesse_kwh ?? 0)} kWh je Modul`
+                    : `${num(s.nutzbar_kwh)} kWh`}
                 </option>
               ))}
             </select>
+          </Feld>
+        ) : null}
+
+        {/*
+          Der Stapel wird gezählt, nicht geschätzt.
+
+          „15 kWh" gibt es bei Fronius Reserva nicht — es gibt vier
+          Module à 3,15 kWh, also 12,6, oder fünf, also 15,8. Wer die
+          Module zählt, weiss auch, was in die Stückliste kommt: so
+          viele Module und einmal das BMS.
+        */}
+        {gewaehlterSpeicher && istModular(gewaehlterSpeicher) ? (
+          <Feld label="Speichermodule">
+            <div className="flex items-center gap-2">
+              <select
+                aria-label="Speichermodule"
+                value={modulzahl(gewaehlterSpeicher, plan.technik.speicherModule)}
+                disabled={!schreibrecht}
+                onChange={(e) => setzeTechnik({ speicherModule: Number(e.target.value) })}
+                className={FELD}
+              >
+                {stapelStufen(gewaehlterSpeicher).map((n) => (
+                  <option key={n} value={n}>
+                    {n} Module · {num(kapazitaet(gewaehlterSpeicher, n))} kWh
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="mt-1 text-[11.5px] text-muted">
+              {grenzen(gewaehlterSpeicher).min} bis {grenzen(gewaehlterSpeicher).max} Module je
+              Stapel, dazu einmal das BMS mit Sockel.
+            </p>
           </Feld>
         ) : null}
 

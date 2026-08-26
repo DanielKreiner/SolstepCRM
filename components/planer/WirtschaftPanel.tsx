@@ -3,6 +3,7 @@
 import { useId } from "react";
 import type { Plan, Wirtschaft } from "@/lib/planer/plan";
 import { richtpreis, VERBRAUCH_CHIPS, verbrauchAusChips } from "@/lib/planer/wirtschaft";
+import { istModular, modulzahlFuerKwh, type SpeicherTyp } from "@/lib/planer/speicher";
 import { num } from "@/lib/format";
 import { Frage } from "./Bausteine";
 
@@ -44,6 +45,8 @@ interface Props {
   anlageKwp: number;
   /** Nutzbare Kapazität des gewählten Speichers, 0 wenn keiner. */
   speicherKwh: number;
+  /** Die Speicher aus den Stammdaten — für die Umrechnung auf Module. */
+  speicherTypen: SpeicherTyp[];
   /** Nettosumme des offenen Angebots, falls ein Vorgang dranhängt. */
   angebotssumme: number | null;
   schreibrecht: boolean;
@@ -75,6 +78,7 @@ export function WirtschaftPanel({
   regionen,
   anlageKwp,
   speicherKwh,
+  speicherTypen,
   angebotssumme,
   schreibrecht,
 }: Props) {
@@ -84,6 +88,30 @@ export function WirtschaftPanel({
   const setze = (aenderung: Partial<Wirtschaft>) => {
     if (!schreibrecht) return;
     onPlan({ ...plan, wirtschaft: { ...w, ...aenderung } });
+  };
+
+  /*
+   * Eine gewünschte Speichergrösse in Module umrechnen.
+   *
+   * „15 kWh" gibt es bei einem Stapel nicht — bei Fronius Reserva sind
+   * es vier Module (12,6) oder fünf (15,8). Wer die Zahl eintippt, soll
+   * nicht rechnen müssen: Der Planer nimmt die nächste Stapelgrösse,
+   * die den Wunsch deckt, und schreibt sie in die Technik. Von dort
+   * kommt sie in die Stückliste und ins Angebot.
+   */
+  const gewaehlterStapel = speicherTypen.find(
+    (t) => t.id === plan.technik.speicher && istModular(t),
+  );
+  const setzeSpeicher = (kwh: number) => {
+    if (!schreibrecht) return;
+    const technik = gewaehlterStapel
+      ? { ...plan.technik, speicherModule: kwh > 0 ? modulzahlFuerKwh(gewaehlterStapel, kwh) : null }
+      : plan.technik;
+    onPlan({
+      ...plan,
+      technik,
+      wirtschaft: { ...w, speicherKwh: kwh === 0 ? 0 : kwh, mitSpeicher: kwh > 0 },
+    });
   };
 
   const verbrauch = gilt(w.verbrauchKwh, 4500);
@@ -271,9 +299,7 @@ export function WirtschaftPanel({
               key={kwh}
               type="button"
               disabled={!schreibrecht}
-              onClick={() =>
-                setze({ speicherKwh: kwh === 0 ? 0 : kwh, mitSpeicher: kwh > 0 })
-              }
+              onClick={() => setzeSpeicher(kwh)}
               aria-pressed={Math.abs(speicherKwh - kwh) < 0.05}
               className={[
                 "num h-10 rounded-[10px] border px-3 text-[13px] font-semibold tabular-nums transition-colors",
@@ -300,7 +326,7 @@ export function WirtschaftPanel({
           onChange={(e) => {
             const v = Number(e.target.value);
             if (!Number.isFinite(v) || v < 0 || v > 200) return;
-            setze({ speicherKwh: v, mitSpeicher: v > 0 });
+            setzeSpeicher(v);
           }}
           className="num mt-2 h-[52px] w-full rounded-[14px] border border-line bg-surface px-3.5 text-[16px] font-bold tabular-nums outline-none focus:border-accent disabled:opacity-50"
         />

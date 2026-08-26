@@ -8,6 +8,8 @@ import { ANBIETER } from "@/lib/planer/anbieter";
 import { ZOOM_GRENZEN } from "@/lib/planer/geo";
 import { kwp, type Modulgruppe } from "@/lib/planer/module";
 import { planLesen, planSchema } from "@/lib/planer/plan";
+import { speicherKwhVonPlan } from "@/lib/planer/speicher";
+import { positionenSchreiben } from "@/lib/vorgang/planungPositionen";
 import {
   abgleichen,
   type Abgleich,
@@ -491,8 +493,9 @@ export async function uebergabeVorschau(projektId: string): Promise<UebergabeVor
   const geraete = await geraeteLaden(supabase);
   const neu = bedarfAusPlan(plan, geraete);
 
-  const speicher = geraete.speicher.find((s) => s.id === plan.technik.speicher);
-  const speicherKwh = plan.wirtschaft.mitSpeicher && speicher ? Number(speicher.nutzbar_kwh) : 0;
+  const speicherKwh = plan.wirtschaft.mitSpeicher
+    ? speicherKwhVonPlan(plan, geraete.speicher)
+    : 0;
 
   const vorgangId = (projekt.vorgang_id as string | null) ?? null;
   if (!vorgangId) {
@@ -540,7 +543,11 @@ async function geraeteLaden(supabase: Client): Promise<GeraeteStand> {
   const [{ data: modulZeilen }, { data: wr }, { data: speicher }] = await Promise.all([
     supabase.from("planer_modul").select("id, hersteller, bezeichnung, artikel_id"),
     supabase.from("planer_wechselrichter").select("id, hersteller, bezeichnung, artikel_id"),
-    supabase.from("planer_speicher").select("id, hersteller, bezeichnung, nutzbar_kwh, artikel_id"),
+    supabase
+      .from("planer_speicher")
+      .select(
+        "id, hersteller, bezeichnung, nutzbar_kwh, modulgroesse_kwh, min_module, max_module, artikel_id, bms_artikel_id",
+      ),
   ]);
   return {
     module: (modulZeilen ?? []) as GeraeteStand["module"],
@@ -550,8 +557,16 @@ async function geraeteLaden(supabase: Client): Promise<GeraeteStand> {
       hersteller: string;
       bezeichnung: string;
       nutzbar_kwh: string | number;
+      modulgroesse_kwh: string | number | null;
+      min_module: number | null;
+      max_module: number | null;
       artikel_id: string | null;
-    }>).map((s) => ({ ...s, nutzbar_kwh: Number(s.nutzbar_kwh) })),
+      bms_artikel_id: string | null;
+    }>).map((s) => ({
+      ...s,
+      nutzbar_kwh: Number(s.nutzbar_kwh),
+      modulgroesse_kwh: s.modulgroesse_kwh === null ? null : Number(s.modulgroesse_kwh),
+    })),
   };
 }
 
@@ -608,8 +623,9 @@ export async function alsVorgangUebernehmen(
   const plan = planLesen(projekt.plan);
   const geraete = await geraeteLaden(supabase);
   const neu = bedarfAusPlan(plan, geraete);
-  const speicher = geraete.speicher.find((s) => s.id === plan.technik.speicher);
-  const speicherKwh = plan.wirtschaft.mitSpeicher && speicher ? Number(speicher.nutzbar_kwh) : null;
+  const speicherKwh = plan.wirtschaft.mitSpeicher
+    ? speicherKwhVonPlan(plan, geraete.speicher)
+    : null;
 
   let vorgangId = projekt.vorgang_id as string | null;
   let nummer: string | null = null;
@@ -734,6 +750,43 @@ export async function alsVorgangUebernehmen(
     }
   }
 
+  /*
+   * ── Und dieselben Positionen ins Angebot ──────────────────────
+   *
+   * Die Bedarfsliste ist die Sicht des Lagers, das Angebot die des
+   * Kunden. Bisher entstand nur die erste: Wer aus einer fertigen
+   * Planung einen Vorgang anlegte, fand alles unter Material und stand
+   * vor einem leeren Angebot — Wechselrichter, Module und Speicher
+   * wurden von Hand nachgetippt, mit Preisen aus demselben
+   * Artikelstamm, aus dem sie ohnehin kommen.
+   *
+   * Nur was angehakt war, und nur was es noch gibt. Ein Fehler hier
+   * darf die Übergabe nicht scheitern lassen — der Vorgang steht dann
+   * schon, und die Positionen holt der Knopf im Angebot nach.
+   */
+  const fuersAngebot = plan2
+    .filter((a) => gewaehlt.has(a.schluessel) && a.art !== "entfallen")
+    .map((a) => ({
+      bezeichnung: a.bezeichnung,
+      menge: a.menge,
+      einheit: "Stk",
+      artikel_id: a.artikel_id,
+      schluessel: a.schluessel,
+    }));
+
+  const { data: vorgangSatz } = await supabase
+    .from("vorgang")
+    .select("ust_satz")
+    .eq("id", vorgangId)
+    .maybeSingle();
+
+  const angebot = await positionenSchreiben(supabase, {
+    companyId: z1.me.companyId,
+    vorgangId,
+    ustSatz: Number(vorgangSatz?.ust_satz ?? 20),
+    bedarf: fuersAngebot,
+  });
+
   await supabase
     .from("planer_projekt")
     .update({ status: "uebergeben", vorgang_id: vorgangId })
@@ -747,6 +800,7 @@ export async function alsVorgangUebernehmen(
     angelegt > 0 ? `${angelegt} Position${angelegt === 1 ? "" : "en"} angelegt` : null,
     geaendert > 0 ? `${geaendert} geändert` : null,
     entfernt > 0 ? `${entfernt} entfernt` : null,
+    angebot.angelegt > 0 ? `${angebot.angelegt} davon im Angebot` : null,
   ].filter(Boolean);
 
   if (positionsfehler) {

@@ -62,6 +62,7 @@ import { ursprungVersetzen } from "@/lib/planer/ursprung";
 import { strangUmschalten } from "@/lib/planer/strings";
 import { num } from "@/lib/format";
 import { modulSchluessel, type Plan } from "@/lib/planer/plan";
+import { speicherKwhVonPlan } from "@/lib/planer/speicher";
 import {
   kannVor,
   kannZurueck,
@@ -548,15 +549,8 @@ export function Planer({
    */
   const ertrag = useErtrag(plan, ursprung, vorgabe.verlustProzent, plan.gebaeude.wandhoehe);
 
-  const gewaehlterSpeicher = geraete.speicher.find((sp) => sp.id === plan.technik.speicher);
-  /*
-   * Die von Hand eingetragene Grösse hat Vorrang vor dem Gerät: Im
-   * Erstgespräch steht „zehn Kilowattstunden" fest, lange bevor
-   * jemand ein Gerät aussucht. Ohne beides ist es kein Speicher.
-   */
-  const speicherKwh =
-    plan.wirtschaft.speicherKwh ??
-    (gewaehlterSpeicher ? Number(gewaehlterSpeicher.nutzbar_kwh) : 0);
+  /* Eine Stelle für die Speichergrösse — Stapel, Handeingabe, Gerät. */
+  const speicherKwh = speicherKwhVonPlan(plan, geraete.speicher);
 
   const w = plan.wirtschaft;
   /*
@@ -1314,6 +1308,7 @@ export function Planer({
                     regionen={regionen}
                     anlageKwp={leistung}
                     speicherKwh={speicherKwh}
+                    speicherTypen={geraete.speicher}
                     angebotssumme={angebotssumme ?? null}
                     schreibrecht={schreibrecht}
                   />
