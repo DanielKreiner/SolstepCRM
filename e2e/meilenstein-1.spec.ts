@@ -8,7 +8,7 @@ import {
   suchwahl,
   vorgangHours,
   vorgangId,
-  vorgangNummer,
+  vorgangInPhase,
 } from "./helpers";
 
 /*
@@ -74,7 +74,7 @@ async function einsatzWeg(einsatzId: string): Promise<void> {
 test("Zeitbuchung mit Auftragsbezug erhöht die Iststunden des Auftrags", async ({
   page,
 }) => {
-  const AUFTRAG = "A-2026-0042";
+  const AUFTRAG = await vorgangInPhase("montage");
   const vorher = await vorgangHours(AUFTRAG);
   const id = await vorgangId(AUFTRAG);
   const einsatzId = await einsatzHeute(AUFTRAG);
@@ -126,7 +126,7 @@ test("Zeitbuchung mit Auftragsbezug erhöht die Iststunden des Auftrags", async 
 test("Verdrehte Zeiten werden abgewiesen und nicht gespeichert", async ({
   page,
 }) => {
-  const AUFTRAG = "A-2026-0042";
+  const AUFTRAG = await vorgangInPhase("montage");
   const einsatzId = await einsatzHeute(AUFTRAG);
 
   try {
@@ -198,7 +198,7 @@ test("Materialentnahme senkt den Bestand, Rückgabe hebt sie auf", async ({
 test("Materialentnahme auf einen Vorgang erhöht dessen Materialkosten", async ({
   page,
 }) => {
-  const AUFTRAG = "A-2026-0042";
+  const AUFTRAG = await vorgangInPhase("montage");
   const db = admin();
   const id = await vorgangId(AUFTRAG);
   const artSku = "MOD-JAS-440";
@@ -232,7 +232,7 @@ test("Materialentnahme auf einen Vorgang erhöht dessen Materialkosten", async (
   await suchwahl(form, "Artikel", artSku);
   await form.getByLabel("Art", { exact: true }).selectOption("out");
   await form.getByLabel(/^Menge/).fill("10");
-  await suchwahl(form, "Vorgang", await vorgangNummer(AUFTRAG));
+  await suchwahl(form, "Vorgang", AUFTRAG);
   await form.getByLabel("Notiz").fill("E2E Auftragsmaterial");
   await form.getByRole("button", { name: "Buchen" }).click();
   await expect(form.getByRole("status")).toContainText("Entnahme gebucht");

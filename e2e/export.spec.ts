@@ -82,7 +82,18 @@ test("Der Export enthält die tatsächlichen Daten", async ({ page }) => {
   const zeilen = csv.trim().split("\r\n");
   // Kopfzeile plus eine Zeile je Auftrag.
   expect(zeilen.length - 1).toBe(auftraege ?? 0);
-  expect(csv).toContain("A-2026-0041");
+  /*
+   * Geprueft wird mit einer Nummer aus dem Bestand, nicht mit einer fest
+   * verdrahteten: „A-2026-0041" stammt aus dem alten Auftragsmodell und
+   * steht seit dem Umbau auf Vorgaenge nirgends mehr.
+   */
+  const { data: beispiel } = await admin()
+    .from("vorgang")
+    .select("number")
+    .eq("company_id", COMPANY_A)
+    .limit(1)
+    .single();
+  expect(csv).toContain(beispiel!.number as string);
 
   /*
    * BOM an den Rohbytes prüfen, nicht am dekodierten String: TextDecoder

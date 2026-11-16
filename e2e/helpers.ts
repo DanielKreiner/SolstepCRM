@@ -99,6 +99,28 @@ export async function vorgangNummer(altNummer: string): Promise<string> {
 }
 
 /**
+ * Irgendein Vorgang des Mandanten A in dieser Phase — als Nummer.
+ *
+ * Die Tests hingen an festen Nummern aus dem alten Auftragsmodell
+ * („A-2026-0042"). Seit dem Umbau auf Vorgaenge gibt es die nicht mehr,
+ * und `alt_nummern` ist im Demobestand leer — die Tests sind damit an
+ * etwas gescheitert, das kein Fehler der Anwendung ist. Ein Test soll
+ * sich seinen Datensatz suchen, nicht eine Nummerierung festschreiben.
+ */
+export async function vorgangInPhase(phase: string): Promise<string> {
+  const { data, error } = await admin()
+    .from("vorgang")
+    .select("number")
+    .eq("company_id", COMPANY_A)
+    .eq("phase", phase)
+    .order("number")
+    .limit(1)
+    .single();
+  if (error) throw new Error(`Kein Vorgang in Phase ${phase}: ${error.message}`);
+  return data.number as string;
+}
+
+/**
  * Iststunden eines Vorgangs.
  *
  * Direkt aus time_entry und nicht über v_vorgang_kpi: die View filtert
