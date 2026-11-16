@@ -9,6 +9,7 @@
 
 import {
   falllinie,
+  griffRadius,
   kanten,
   laenge,
   schwerpunkt,
@@ -225,10 +226,17 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
      * über die Anlage.
      */
     if (h.id === s.sperrzone) {
-      for (const q of h.punkte) {
-        const b = bild(k, q);
+      /*
+       * Die Griffe schrumpfen mit der Zone — dieselbe Regel wie beim
+       * Greifen. Sonst verdeckten vier Kreise von 5,5 Punkten einen
+       * kleinen Kamin vollstaendig, und man saehe nicht mehr, was man
+       * anfasst.
+       */
+      const ecken = h.punkte.map((q) => bild(k, q));
+      const r = griffRadius(ecken, 5.5);
+      for (const b of ecken) {
         ctx.beginPath();
-        ctx.arc(b.x, b.y, 5.5, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
         ctx.fillStyle = "#ffffff";
         ctx.fill();
         ctx.strokeStyle = FARBEN.sperrstrich;

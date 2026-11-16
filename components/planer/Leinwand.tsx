@@ -30,6 +30,8 @@ import {
   planlaengeFuerDach,
   setzeKantenlaenge,
   kanteParallel,
+  eckeZiehen,
+  griffRadius,
 } from "@/lib/planer/flaeche";
 import {
   modulSchluessel,
@@ -835,9 +837,17 @@ export function Leinwand(p: LeinwandProps) {
       for (const f of s.plan.flaechen) {
         for (const h of f.hindernisse) {
           if (h.id !== s.aktivesHindernis) continue;
-          for (let i = 0; i < h.punkte.length; i++) {
-            const b = meterZuBild(k, h.punkte[i]!);
-            if (Math.hypot(b.x - bp.x, b.y - bp.y) <= GRIFF) {
+          /*
+           * Der Radius richtet sich nach der Zone, nicht nach einer
+           * festen Zahl: Bei zwoelf Punkten je Ecke deckten die vier
+           * Griffe einen Kamin von einem Meter restlos ab, und die Zone
+           * liess sich nicht mehr verschieben.
+           */
+          const ecken = h.punkte.map((q) => meterZuBild(k, q));
+          const r = griffRadius(ecken, GRIFF);
+          for (let i = 0; i < ecken.length; i++) {
+            const b = ecken[i]!;
+            if (Math.hypot(b.x - bp.x, b.y - bp.y) <= r) {
               return { art: "sperrEcke" as const, flaeche: f.id, hindernis: h.id, index: i };
             }
           }
@@ -1733,43 +1743,20 @@ export function Leinwand(p: LeinwandProps) {
 
       if (z.art === "sperrEcke") {
         /*
-         * Eine Ecke ziehen verformt das Rechteck: Die beiden Nachbarn
-         * gehen mit, die gegenüberliegende Ecke bleibt stehen. Bei
-         * einem Vieleck mit mehr als vier Ecken wandert nur die
-         * angefasste — ein aufgezogenes Rechteck hat vier.
+         * Beim achsparallelen Rechteck gehen die Nachbarecken mit, sonst
+         * wandert nur die angefasste. Vorher zaehlte allein, dass die
+         * Form vier Ecken hat — ein frei um einen schraegen Kamin
+         * gezeichnetes Viereck sprang damit beim ersten Zug in ein
+         * Rechteck. Die Regel steht in lib/planer/flaeche.ts.
          */
         const m = bildZuMeter(kamera.current, jetzt);
         aendereFlaeche(
           z.flaeche,
           (f) => ({
             ...f,
-            hindernisse: f.hindernisse.map((h) => {
-              if (h.id !== z.hindernis) return h;
-              if (h.punkte.length !== 4) {
-                return {
-                  ...h,
-                  punkte: h.punkte.map((q, i) => (i === z.index ? m : q)),
-                };
-              }
-              const gegenueber = h.punkte[(z.index + 2) % 4]!;
-              const naechste = (z.index + 1) % 4;
-              const vorige = (z.index + 3) % 4;
-              /*
-               * Welcher Nachbar teilt sich welche Achse, hängt an der
-               * Umlaufrichtung. Statt sie zu erraten: Der Nachbar
-               * übernimmt die Koordinate, in der er der festen Ecke
-               * gleicht.
-               */
-              const punkte = h.punkte.map((q, i) => {
-                if (i === z.index) return m;
-                if (i === naechste || i === vorige) {
-                  const teiltX = Math.abs(q.x - gegenueber.x) < Math.abs(q.y - gegenueber.y);
-                  return teiltX ? { x: gegenueber.x, y: m.y } : { x: m.x, y: gegenueber.y };
-                }
-                return q;
-              });
-              return { ...h, punkte };
-            }),
+            hindernisse: f.hindernisse.map((h) =>
+              h.id === z.hindernis ? { ...h, punkte: eckeZiehen(h.punkte, z.index, m) } : h,
+            ),
           }),
           false,
         );

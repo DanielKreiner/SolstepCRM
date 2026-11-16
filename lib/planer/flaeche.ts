@@ -653,3 +653,93 @@ function normaleInnen(a: Meter, b: Meter, vorzeichen: number): Meter {
 export function verkuerzt(masz: number, neigungGrad: number): number {
   return masz * Math.cos((neigungGrad * Math.PI) / 180);
 }
+
+/*
+ * ── Eckgriffe an Hindernissen ──────────────────────────────────────
+ */
+
+/**
+ * Wie nah an einer Ecke ein Griff noch zählt — in derselben Einheit wie
+ * die übergebenen Punkte.
+ *
+ * Ein fester Radius und eine kleine Form vertragen sich nicht. Bei zwölf
+ * Bildpunkten je Ecke deckten die vier Eckgriffe einen Kamin von einem
+ * Meter restlos ab: Jeder Griff mitten in die Sperrzone landete auf
+ * einer Ecke, zog also an der Form, statt sie zu verschieben. Aus dem
+ * Betrieb kam das als „springt immer auf ein Rechteck um und lässt sich
+ * fast gar nicht mehr verschieben".
+ *
+ * Deshalb hängt der Radius an der Form: höchstens ein Drittel der
+ * kürzesten Kante. So bleibt bei jeder Grösse eine Innenfläche übrig,
+ * die verschiebt. Die Untergrenze von drei Punkten hält die Ecken auch
+ * bei winzigen Formen noch greifbar — wer dort genau arbeiten will,
+ * zoomt ohnehin hinein.
+ */
+export function griffRadius(ecken: ReadonlyArray<Meter>, standard: number): number {
+  if (ecken.length < 2) return standard;
+  let kuerzeste = Infinity;
+  for (let i = 0; i < ecken.length; i++) {
+    const a = ecken[i]!;
+    const b = ecken[(i + 1) % ecken.length]!;
+    kuerzeste = Math.min(kuerzeste, Math.hypot(b.x - a.x, b.y - a.y));
+  }
+  if (!Number.isFinite(kuerzeste)) return standard;
+  return Math.max(3, Math.min(standard, kuerzeste / 3));
+}
+
+/**
+ * Ist das Viereck ein achsparalleles Rechteck?
+ *
+ * Nur dann darf das Ziehen an einer Ecke die Nachbarn mitnehmen. Ein
+ * frei gezeichnetes Viereck — vier Klicks um einen schrägen Kamin — ist
+ * keins, und es in eines zu verwandeln ist Datenverlust, kein Komfort.
+ */
+export function istAchsenRechteck(punkte: ReadonlyArray<Meter>, toleranz = 0.02): boolean {
+  if (punkte.length !== 4) return false;
+  for (let i = 0; i < 4; i++) {
+    const a = punkte[i]!;
+    const b = punkte[(i + 1) % 4]!;
+    const waagrecht = Math.abs(a.y - b.y) <= toleranz;
+    const senkrecht = Math.abs(a.x - b.x) <= toleranz;
+    // Jede Kante muss auf genau einer Achse liegen, nicht auf beiden
+    // (das wäre eine Kante der Länge null).
+    if (waagrecht === senkrecht) return false;
+  }
+  return true;
+}
+
+/**
+ * Eine Ecke eines Hindernisses auf `ziel` ziehen.
+ *
+ * Beim achsparallelen Rechteck gehen die beiden Nachbarn mit und die
+ * gegenüberliegende Ecke bleibt stehen — das ist das gewohnte Aufziehen.
+ * Bei jeder anderen Form wandert nur die angefasste Ecke; die übrigen
+ * bleiben, wo sie gezeichnet wurden.
+ */
+export function eckeZiehen(
+  punkte: ReadonlyArray<Meter>,
+  index: number,
+  ziel: Meter,
+): Meter[] {
+  if (index < 0 || index >= punkte.length) return punkte.map((q) => ({ ...q }));
+  if (!istAchsenRechteck(punkte)) {
+    return punkte.map((q, i) => (i === index ? { ...ziel } : { ...q }));
+  }
+
+  const gegenueber = punkte[(index + 2) % 4]!;
+  const naechste = (index + 1) % 4;
+  const vorige = (index + 3) % 4;
+  /*
+   * Welcher Nachbar sich welche Achse mit der festen Ecke teilt, hängt
+   * an der Umlaufrichtung. Statt sie zu erraten: Der Nachbar übernimmt
+   * die Koordinate, in der er der festen Ecke schon gleicht.
+   */
+  return punkte.map((q, i) => {
+    if (i === index) return { ...ziel };
+    if (i === naechste || i === vorige) {
+      const teiltX = Math.abs(q.x - gegenueber.x) < Math.abs(q.y - gegenueber.y);
+      return teiltX ? { x: gegenueber.x, y: ziel.y } : { x: ziel.x, y: gegenueber.y };
+    }
+    return { ...q };
+  });
+}

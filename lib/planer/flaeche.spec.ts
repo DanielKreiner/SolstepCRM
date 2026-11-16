@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   abstandZumRand,
+  eckeZiehen,
+  griffRadius,
+  istAchsenRechteck,
   azimutAusTraufe,
   azimutVon,
   type Dachflaeche,
@@ -554,5 +557,76 @@ describe("hoeheAufFlaeche", () => {
   it("lässt ein Flachdach flach", () => {
     const flach = { ...dach, neigung: 0, traufe: null };
     expect(hoeheAufFlaeche(flach, { x: 5, y: 6 }, 3)).toBe(3);
+  });
+});
+
+/*
+ * Aus dem Betrieb: „wenn ich ein Hindernis platziere und dann das
+ * Hindernis verschieben möchte, dann springt das immer auf ein Rechteck
+ * um und kann es nicht mehr gut verschieben, bzw fast gar nicht mehr."
+ *
+ * Zwei Ursachen, beide hier festgenagelt: Die Eckgriffe deckten kleine
+ * Formen vollständig ab, und das Ziehen an einer Ecke machte aus jedem
+ * Viereck ein achsparalleles Rechteck.
+ */
+describe("Eckgriffe an Hindernissen", () => {
+  const quadrat = (kante: number) => [
+    { x: 0, y: 0 },
+    { x: kante, y: 0 },
+    { x: kante, y: kante },
+    { x: 0, y: kante },
+  ];
+
+  it("lässt bei einem kleinen Kamin eine Innenfläche zum Verschieben übrig", () => {
+    // Ein Kamin von einem Meter ist bei Zoomstufe 20 rund zehn Bildpunkte
+    // breit. Mit dem früheren festen Radius von zwölf lag die Mitte in
+    // ALLEN vier Eckgriffen — jeder Griff zog an der Form.
+    const ecken = quadrat(10);
+    const r = griffRadius(ecken, 12);
+    const mitte = { x: 5, y: 5 };
+    for (const e of ecken) {
+      expect(Math.hypot(e.x - mitte.x, e.y - mitte.y)).toBeGreaterThan(r);
+    }
+  });
+
+  it("greift bei einer grossen Zone wie gewohnt mit dem vollen Radius", () => {
+    expect(griffRadius(quadrat(200), 12)).toBe(12);
+  });
+
+  it("erkennt nur achsparallele Rechtecke als solche", () => {
+    expect(istAchsenRechteck(quadrat(4))).toBe(true);
+    // Dasselbe Rechteck um 45° gedreht ist keins mehr.
+    expect(
+      istAchsenRechteck([
+        { x: 0, y: 2 },
+        { x: 2, y: 0 },
+        { x: 4, y: 2 },
+        { x: 2, y: 4 },
+      ]),
+    ).toBe(false);
+    expect(istAchsenRechteck([{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 2 }])).toBe(false);
+  });
+
+  it("verformt ein frei gezeichnetes Viereck nicht zum Rechteck", () => {
+    const schief = [
+      { x: 0, y: 0 },
+      { x: 4, y: 0.6 },
+      { x: 3.4, y: 3 },
+      { x: 0.2, y: 2.5 },
+    ];
+    const gezogen = eckeZiehen(schief, 1, { x: 5, y: 1 });
+    expect(gezogen[1]).toEqual({ x: 5, y: 1 });
+    expect(gezogen[0]).toEqual(schief[0]);
+    expect(gezogen[2]).toEqual(schief[2]);
+    expect(gezogen[3]).toEqual(schief[3]);
+  });
+
+  it("zieht ein echtes Rechteck weiter an den Nachbarecken auf", () => {
+    const r = quadrat(4);
+    const gezogen = eckeZiehen(r, 2, { x: 6, y: 5 });
+    // Gegenüberliegende Ecke bleibt stehen, das Rechteck bleibt eines.
+    expect(gezogen[0]).toEqual({ x: 0, y: 0 });
+    expect(gezogen[2]).toEqual({ x: 6, y: 5 });
+    expect(istAchsenRechteck(gezogen)).toBe(true);
   });
 });
