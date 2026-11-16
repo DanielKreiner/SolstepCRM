@@ -393,9 +393,33 @@ export function Leinwand(p: LeinwandProps) {
       bild.dataset.quelle = f.url;
       bild.decoding = "async";
       bild.draggable = false;
+      /*
+       * Muss VOR `src` stehen, sonst wirkt es nicht.
+       *
+       * Ohne CORS-Zustimmung vergiftet das Foto die Zeichenflaeche, und
+       * `toDataURL` in planungAlsBild wirft einen SecurityError. Der
+       * wird dort abgefangen und liefert `null` — es entsteht also still
+       * gar kein Abzug, `vorschau_pfad` bleibt leer, und im Angebots-PDF
+       * wie im Kundenportal fehlt das Dachbild. Die Kacheln setzen es
+       * seit jeher; das Foto hatte die Zeile nie. Der Supabase-Storage
+       * antwortet mit `access-control-allow-origin: *`.
+       */
+      bild.crossOrigin = "anonymous";
       bild.style.position = "absolute";
       bild.style.left = "0";
       bild.style.top = "0";
+      /*
+       * Dieselbe Falle wie bei den Kacheln weiter unten, und hier faellt
+       * sie noch frueher auf: Die CSS-Grundeinstellung gibt jedem Bild
+       * `max-width: 100%`. Ein Drohnenfoto ist dreissig Meter breit —
+       * sobald man so weit hereinzoomt, dass es breiter wird als das
+       * Fenster, wird seine BREITE auf die Fensterbreite gestaucht,
+       * seine Hoehe aber nicht. Das Foto laeuft damit unter der
+       * gezeichneten Geometrie weg, und es sieht aus, als verschoebe
+       * sich beim Zoomen alles.
+       */
+      bild.style.maxWidth = "none";
+      bild.style.maxHeight = "none";
       bild.style.transformOrigin = "0 0";
       bild.addEventListener("error", () => setMeldung("Das Foto konnte nicht geladen werden."));
       bild.src = f.url;
