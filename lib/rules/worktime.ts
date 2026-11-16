@@ -1,6 +1,13 @@
+import { viennaDay } from "@/lib/format";
+import { isoWeek } from "@/lib/time";
+
 /*
  * Arbeitsrechtsregeln als reines Modul — keine Datenbank, keine Uhr, kein
  * Next. Alles kommt als Argument herein.
+ *
+ * Tagesgrenzen laufen über Europe/Vienna, nie über den UTC-Anteil des
+ * gespeicherten Instants (CLAUDE.md Abschnitt 5.3). Ein Dienst, der um
+ * 01:00 Ortszeit beginnt, gehört zu diesem Tag und nicht zum Vortag.
  *
  * Benutzt an genau drei Stellen (CLAUDE.md Abschnitt 10):
  *   1. Dispo-Konfliktprüfung vor der Veröffentlichung
@@ -115,9 +122,19 @@ export function checkRoster(
       }
 
       const pauseH = (startJetzt - endeVor) / H;
-      // Innerhalb desselben Kalendertags ist eine kurze Lücke keine
-      // Ruhezeitfrage, sondern eine Pause. Die Ruhezeit gilt zwischen Diensten.
-      const gleicherTag = vor.end.slice(0, 10) === jetzt.start.slice(0, 10);
+      /*
+       * Innerhalb desselben Kalendertags ist eine kurze Lücke keine
+       * Ruhezeitfrage, sondern eine Pause. Die Ruhezeit gilt zwischen
+       * Diensten.
+       *
+       * Verglichen wird der WIENER Kalendertag. `slice(0, 10)` las den
+       * UTC-Tag: Montag 08:00–16:00 Wien endet 14:00 UTC am Montag, und
+       * Dienstag 01:00–05:00 Wien beginnt Montag 23:00 UTC — beide
+       * "Montag", also "gleicher Tag", also keine Prüfung. Die
+       * Ruhezeitprüfung fiel damit genau in dem Fall aus, für den sie
+       * gebaut ist.
+       */
+      const gleicherTag = viennaDay(vor.end) === viennaDay(jetzt.start);
       if (!gleicherTag && pauseH < rules.restHours) {
         conflicts.push({
           code: "ruhezeit",
@@ -132,7 +149,7 @@ export function checkRoster(
     // --- Tageshöchstarbeitszeit und Pausenpflicht ---
     const proTag = new Map<string, Shift[]>();
     for (const s of sortiert) {
-      const tag = s.start.slice(0, 10);
+      const tag = viennaDay(s.start);
       if (!proTag.has(tag)) proTag.set(tag, []);
       proTag.get(tag)!.push(s);
     }
@@ -190,7 +207,7 @@ export function checkRoster(
     // --- Abwesenheit ---
     const eigene = absences.filter((a) => a.userId === userId);
     for (const s of sortiert) {
-      const tag = s.start.slice(0, 10);
+      const tag = viennaDay(s.start);
       const treffer = eigene.find((a) => tag >= a.from && tag <= a.to);
       if (treffer) {
         conflicts.push({
@@ -236,21 +253,15 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-/** ISO-Woche als "2026-W31". Lokal gerechnet, wie die Anzeige. */
+/**
+ * ISO-Woche eines Zeitpunkts als "2026-W31".
+ *
+ * Gerechnet wird über den Wiener Kalendertag und `isoWeek` aus
+ * lib/time.ts. Vorher stand hier eine zweite ISO-Wochenrechnung auf dem
+ * UTC-Anteil: ein Sonntagabend-Einsatz ab 23:00 Ortszeit landete in der
+ * Vorwoche, und die Wochenhöchstarbeitszeit prüfte zwei halbe Wochen
+ * statt einer ganzen.
+ */
 export function isoWeekKey(iso: string): string {
-  const d = new Date(iso);
-  const target = new Date(
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
-  );
-  const dayNr = (target.getUTCDay() + 6) % 7;
-  target.setUTCDate(target.getUTCDate() - dayNr + 3);
-  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-  const firstDayNr = (firstThursday.getUTCDay() + 6) % 7;
-  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNr + 3);
-  const week =
-    1 +
-    Math.round(
-      (target.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000),
-    );
-  return `${target.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+  return isoWeek(viennaDay(iso));
 }

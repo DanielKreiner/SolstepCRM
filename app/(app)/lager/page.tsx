@@ -107,8 +107,18 @@ export default async function LagerPage({
     reserviertJe.set(id, (reserviertJe.get(id) ?? 0) + Number(r.qty));
   }
 
+  /*
+   * Dieselbe Grenze wie `v_stock_alert` (Migration 0058), Wort für Wort:
+   * `min_stock > 0` und `<`, nicht `<=`.
+   *
+   * Ein Mindestbestand von 0 heisst "keiner festgelegt" — bei 474
+   * Artikeln stehen 468 auf 0, und 0 <= 0 ist wahr. Der rote Banner
+   * meldete damit 468 Artikel, während das Abzeichen daneben aus der
+   * View 1 meldete. Zwei Zahlen für dieselbe Frage, und die laute war
+   * die falsche. Wer genau seinen Mindestbestand im Regal hat, hat ihn.
+   */
   const unterMindest = rows.filter(
-    (a) => Number(a.stock) <= Number(a.min_stock),
+    (a) => Number(a.min_stock) > 0 && Number(a.stock) < Number(a.min_stock),
   );
   const lagerwert = rows.reduce(
     (s, a) => s + Number(a.stock) * Number(a.purchase_price),
@@ -312,10 +322,17 @@ function BestandTabelle({
         const reserviert = reserviertJe.get(a.id) ?? 0;
         const verfuegbar = bestand - reserviert;
         const balken = min > 0 ? Math.min(100, (bestand / (min * 2)) * 100) : 100;
-        const farbe =
-          bestand <= min
+        /*
+         * Ohne gesetzten Mindestbestand gibt es nichts zu unterschreiten
+         * — sonst stünde der ganze Katalog auf rot (siehe oben und
+         * Migration 0058).
+         */
+        const unterMin = min > 0 && bestand < min;
+        const farbe = !(min > 0)
+          ? "var(--s-done)"
+          : unterMin
             ? "var(--s-crit)"
-            : bestand <= min * 1.3
+            : bestand < min * 1.3
               ? "var(--s-warn)"
               : "var(--s-done)";
 
@@ -337,7 +354,7 @@ function BestandTabelle({
             </div>
             <div className="num px-2 py-3 text-[12px] text-muted">{a.sku}</div>
             <div
-              className={`num px-2 py-3 text-right text-[13.5px] font-semibold ${bestand <= min ? "text-s-crit" : ""}`}
+              className={`num px-2 py-3 text-right text-[13.5px] font-semibold ${unterMin ? "text-s-crit" : ""}`}
             >
               {num(bestand)}
             </div>

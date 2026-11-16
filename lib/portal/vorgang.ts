@@ -588,12 +588,68 @@ export async function portalVorgangAnnehmen(
    */
   const { data: optionen } = await admin
     .from("vorgang_position")
-    .select("id, upgrade_article_id, upgrade_kategorie, upgrade_aufpreis, menge, ep_netto")
+    .select(
+      "id, sort, upgrade_article_id, upgrade_kategorie, upgrade_aufpreis, menge, ep_netto",
+    )
     .eq("vorgang_id", vorgangId)
     .is("dokument_id", null);
 
-  const gewaehlt = new Set(auswahl.optionen);
-  const upgradeWunsch = new Set(auswahl.upgrades);
+  /*
+   * Die Haekchen tragen die IDs der eingefrorenen Fassung.
+   *
+   * Angezeigt wird dem Kunden die Fassung, die verschickt wurde
+   * (`dokument_id = <Fassung>`), geschrieben wird dagegen auf den
+   * Entwurf — die Kaskade liest ihn, um die Auftragsbestaetigung zu
+   * bauen. Die Kopie hat eigene UUIDs, also traf der Abgleich vorher
+   * nie etwas: der Kunde kreuzte die Wallbox an, sah den hoeheren
+   * Betrag, nahm an, und bestellt wurde sie nicht. Ohne Fehlermeldung.
+   *
+   * Uebersetzt wird ueber `sort`. Die Spalte wird beim Einfrieren
+   * unveraendert mitkopiert (versand-actions.ts) und ist damit die
+   * einzige Klammer zwischen Kopie und Entwurf.
+   */
+  const { data: kopien } = await admin
+    .from("vorgang_position")
+    .select("id, sort")
+    .eq("vorgang_id", vorgangId)
+    .not("dokument_id", "is", null);
+
+  const entwurfNachSort = new Map<number, string>();
+  for (const p of optionen ?? []) {
+    entwurfNachSort.set(Number(p.sort), p.id as string);
+  }
+  const sortNachKopie = new Map<string, number>();
+  for (const k of kopien ?? []) {
+    sortNachKopie.set(k.id as string, Number(k.sort));
+  }
+
+  /** Eine ID aus dem Formular auf die Entwurfszeile uebersetzen. */
+  const aufEntwurf = (id: string): string | null => {
+    if (entwurfNachSort.has(sortNachKopie.get(id) ?? -1)) {
+      return entwurfNachSort.get(sortNachKopie.get(id)!) ?? null;
+    }
+    /* Altbestand ohne Fassung: dort ist die angezeigte ID der Entwurf. */
+    return (optionen ?? []).some((p) => p.id === id) ? id : null;
+  };
+
+  const uebersetzt = (ids: readonly string[]): Set<string> => {
+    const raus = new Set<string>();
+    for (const id of ids) {
+      const ziel = aufEntwurf(id);
+      if (ziel) raus.add(ziel);
+    }
+    return raus;
+  };
+
+  /*
+   * Schreibfehler duerfen nicht durchrutschen. Vorher wurde das Ergebnis
+   * der Updates gar nicht geprueft — ein abgewiesenes Update sah fuer den
+   * Kunden aus wie eine erfolgreiche Annahme.
+   */
+  const schreibFehler: string[] = [];
+
+  const gewaehlt = uebersetzt(auswahl.optionen);
+  const upgradeWunsch = uebersetzt(auswahl.upgrades);
 
   /*
    * Kategorie-Upgrades: der Kunde hat ein konkretes Produkt gewählt.
@@ -604,7 +660,9 @@ export async function portalVorgangAnnehmen(
   const kategorieWahl = new Map<string, string>();
   for (const eintrag of auswahl.kategorieUpgrades ?? []) {
     const [pid, aid] = eintrag.split(":");
-    if (pid && aid) kategorieWahl.set(pid, aid);
+    if (!pid || !aid) continue;
+    const ziel = aufEntwurf(pid);
+    if (ziel) kategorieWahl.set(ziel, aid);
   }
 
   for (const p of optionen ?? []) {
@@ -653,7 +711,7 @@ export async function portalVorgangAnnehmen(
         ziel.category === p.upgrade_kategorie &&
         Number(ziel.sale_price) > Number(p.ep_netto)
       ) {
-        await admin
+        const { error: upFehler } = await admin
           .from("vorgang_position")
           .update({
             article_id: ziel.id,
@@ -663,10 +721,19 @@ export async function portalVorgangAnnehmen(
             einheit: (ziel.unit as string) ?? "Stk",
             bild_url: ziel.image_url,
             beschreibung: ziel.description,
-            kunden_auswahl: "upgrade",
+            /*
+             * 'upgraded', nicht 'upgrade': der CHECK-Constraint aus
+             * 0041_angebot_gruppen.sql laesst nur 'standard', 'gewaehlt',
+             * 'abgewaehlt' und 'upgraded' zu. Der falsche Wert hat das
+             * Update mit 23514 abgewiesen, und weil der Fehler nicht
+             * geprueft wurde, blieb die Position still auf dem
+             * Standardprodukt stehen.
+             */
+            kunden_auswahl: "upgraded",
           })
           .eq("id", id)
           .eq("vorgang_id", vorgangId);
+        if (upFehler) schreibFehler.push(`Produktwahl: ${upFehler.message}`);
       }
     }
 
@@ -698,6 +765,21 @@ export async function portalVorgangAnnehmen(
           .eq("vorgang_id", vorgangId);
       }
     }
+  }
+
+  if (schreibFehler.length > 0) {
+    /*
+     * Vor der Kaskade abbrechen: bis hierher ist nichts Unumkehrbares
+     * passiert. Haette der Auftrag mit einer nicht uebernommenen Wahl
+     * ausgeloest, bekaeme der Kunde etwas anderes geliefert, als er
+     * bestellt und bestaetigt hat.
+     */
+    return {
+      ok: false,
+      meldung:
+        "Die Auswahl konnte nicht vollständig übernommen werden. " +
+        "Bitte melden Sie sich kurz — wir klären das und bestätigen Ihnen den Auftrag.",
+    };
   }
 
   const ergebnis = await kaskadeAusloesen(admin, {

@@ -149,9 +149,17 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
       .select("id, nummer, betrag_brutto, faellig_am, status")
       .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
       .in("status", ["versendet"]),
+    /*
+     * Ersetzte Buchungen bleiben stehen (CLAUDE.md 5.4), sie zählen aber
+     * nicht: ohne den Filter stand jede Korrektur zweimal in der
+     * Wochenstundenzahl. Und `auto_break_min` muss mit, sonst rechnet
+     * das Cockpit die Automatikpause als Arbeitszeit — /zeiten tut das
+     * nicht, und zwei Zahlen für dieselbe Woche sind eine zu viel.
+     */
     supabase
       .from("time_entry")
-      .select("duration_min, kind, user_id")
+      .select("duration_min, auto_break_min, kind, user_id, status")
+      .neq("status", "replaced")
       .gte("started_at", startOfViennaDay(wochenStart).toISOString())
       .lt("started_at", endOfViennaDay(addDays(wochenStart, 6)).toISOString()),
     supabase
@@ -247,9 +255,15 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
   });
 
   // --- Stunden diese Woche ---
+  /* Dieselbe Rechnung wie lib/zeiten/daten.ts: Dauer minus Automatikpause. */
   const istMin = (wocheZeiten ?? [])
     .filter((e) => e.kind !== "break")
-    .reduce((s, e) => s + Number(e.duration_min ?? 0), 0);
+    .reduce(
+      (s, e) =>
+        s +
+        Math.max(0, Number(e.duration_min ?? 0) - Number(e.auto_break_min ?? 0)),
+      0,
+    );
 
   // --- Rechnungen ---
   type Rechnung = {

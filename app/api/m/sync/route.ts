@@ -190,12 +190,20 @@ export async function POST(request: Request) {
       clientTs,
     );
 
+    /*
+     * Eine einmal gesetzte Markierung bleibt. Wäre der Status hier
+     * unbesehen auf `booked` gesetzt, würde ein saubereres Ausstempeln
+     * die Markierung des Starts stillschweigend wegräumen — und niemand
+     * sähe die Buchung mit der falschen Uhr noch an.
+     */
+    const warGeflaggt = (laufend.status as string) === "flagged";
+
     const query = supabase
       .from("time_entry")
       .update({
         ended_at: geregelt.bis,
         auto_break_min: geregelt.autoBreakMin,
-        status: flagged ? "flagged" : "booked",
+        status: flagged || warGeflaggt ? "flagged" : "booked",
         ...(flagged
           ? {
               flagged_reason: `Client-/Serverzeit weichen um ${Math.round(abweichungMin)} Minuten ab`,
@@ -203,7 +211,7 @@ export async function POST(request: Request) {
           : {}),
       })
       .eq("id", laufend.id as string)
-      .eq("status", "running");
+      .is("ended_at", null);
 
     const { data, error } = await query.select("id");
     if (error) return antwortAufFehler(error);

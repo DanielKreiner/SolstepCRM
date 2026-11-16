@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { viennaClock } from "@/lib/time";
 import {
   DEFAULT_RULES,
   blocksPublication,
@@ -21,6 +22,31 @@ function schicht(id: string, tag: string, von: string, bis: string, pause = 0): 
     userId: U,
     start: `${tag}T${von}:00.000Z`,
     end: `${tag}T${bis}:00.000Z`,
+    breakMin: pause,
+  };
+}
+
+/**
+ * Eine Schicht in Wiener Wanduhrzeit — so, wie sie im Dienstplan steht.
+ *
+ * Gebraucht für die Fälle, in denen Wiener und UTC-Kalendertag
+ * auseinanderfallen. Das war der Fehler: `slice(0, 10)` auf dem
+ * gespeicherten Instant las den UTC-Tag, und ein Dienst um 01:00
+ * Ortszeit gehörte damit zum Vortag.
+ */
+function wien(
+  id: string,
+  tag: string,
+  von: string,
+  bisTag: string,
+  bis: string,
+  pause = 0,
+): Shift {
+  return {
+    id,
+    userId: U,
+    start: viennaClock(tag, von).toISOString(),
+    end: viennaClock(bisTag, bis).toISOString(),
     breakMin: pause,
   };
 }
@@ -54,6 +80,24 @@ describe("Ruhezeit", () => {
     ]);
     expect(konflikte.filter((c) => c.code === "ruhezeit")).toHaveLength(0);
   });
+
+  it("greift auch, wenn beide Dienste am selben UTC-Tag liegen", () => {
+    /*
+     * Der Fehler: Mo 08:00–16:00 Wien endet 14:00 UTC am Montag, Di
+     * 01:00–05:00 Wien beginnt Montag 23:00 UTC. Beide UTC-Tage waren
+     * "2026-08-03", die Prüfung hielt das für denselben Tag und sprang
+     * ab — neun Stunden Ruhezeit blieben unbemerkt. Genau der Fall, für
+     * den die Regel da ist.
+     */
+    const konflikte = checkRoster([
+      wien("mo", "2026-08-03", "08:00", "2026-08-03", "16:00", 30),
+      wien("di", "2026-08-04", "01:00", "2026-08-04", "05:00"),
+    ]);
+    const ruhe = konflikte.filter((c) => c.code === "ruhezeit");
+    expect(ruhe).toHaveLength(1);
+    expect(ruhe[0]!.message).toContain("9 statt 11");
+    expect(blocksPublication(konflikte)).toBe(true);
+  });
 });
 
 describe("Tageshöchstarbeitszeit", () => {
@@ -77,6 +121,22 @@ describe("Tageshöchstarbeitszeit", () => {
     ]);
     // 6 + 5,5 = 11,5 Stunden ohne Pause
     expect(konflikte.some((c) => c.code === "tageshoechst")).toBe(true);
+  });
+
+  it("gruppiert nach Wiener Tag, nicht nach UTC-Tag", () => {
+    /*
+     * Beide Dienste liegen am Dienstag Ortszeit: 01:00–05:00 und
+     * 08:00–18:00, zusammen 14 Stunden. Nach UTC-Tag gerechnet fiel der
+     * Nachtdienst auf den Montag; der Dienstag landete bei genau zehn
+     * Stunden und blieb unauffällig.
+     */
+    const konflikte = checkRoster([
+      wien("nacht", "2026-08-04", "01:00", "2026-08-04", "05:00"),
+      wien("tag", "2026-08-04", "08:00", "2026-08-04", "18:00"),
+    ]);
+    const treffer = konflikte.filter((c) => c.code === "tageshoechst");
+    expect(treffer).toHaveLength(1);
+    expect(treffer[0]!.message).toContain("14 Stunden am 2026-08-04");
   });
 });
 

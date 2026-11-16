@@ -30,6 +30,14 @@ export async function GET(
 
   const url = new URL(request.url);
   const art = (url.searchParams.get("art") ?? "angebot") as BelegArt;
+  /*
+   * Belegart pruefen wie in der Backoffice-Route. Ohne die Pruefung lief
+   * ein unbekannter Wert bis in `TITEL[art]`, und das PDF kam ohne
+   * Ueberschrift beim Kunden an.
+   */
+  if (!["angebot", "ab", "anzahlungsrechnung", "schlussrechnung"].includes(art)) {
+    return NextResponse.json({ fehler: "Unbekannte Belegart." }, { status: 400 });
+  }
 
   const daten = await portalVorgangDetail(session, id);
   if (!daten) {
@@ -72,7 +80,12 @@ export async function GET(
     planung,
     vorgangNummer: daten.vorgang.nummer,
     belegNummer: dok?.nummer ?? null,
-    erstelltAm: new Date().toISOString(),
+    /*
+     * Datum des Belegs, nicht von heute. Eine drei Wochen alte Rechnung
+     * trug bei jedem Oeffnen das aktuelle Datum — CLAUDE.md 6.4 verlangt
+     * fuer Rechnungen ausdruecklich Unveraenderlichkeit.
+     */
+    erstelltAm: dok?.createdAt ?? new Date().toISOString(),
     gueltigBis: null,
     faelligAm: dok?.faelligAm ?? null,
     marke: { logoUrl: daten.firma?.logoUrl ?? null, akzent: marke.akzent },

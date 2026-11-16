@@ -58,6 +58,18 @@ export async function vorgangAnnehmen(
       ? wert.split(",").map((x) => x.trim()).filter((x) => UUID.test(x))
       : [];
 
+  /** Paare „positionId:artikelId", beide Seiten als echte UUID. */
+  const paare = (wert: FormDataEntryValue | null): string[] =>
+    typeof wert === "string"
+      ? wert
+          .split(",")
+          .map((x) => x.trim())
+          .filter((x) => {
+            const [a, b] = x.split(":");
+            return !!a && !!b && UUID.test(a) && UUID.test(b);
+          })
+      : [];
+
   const ergebnis = await portalVorgangAnnehmen(
     session,
     parsed.data.vorgangId,
@@ -66,8 +78,13 @@ export async function vorgangAnnehmen(
     {
       optionen: ids(formData.get("gewaehlteOptionen")),
       upgrades: ids(formData.get("gewaehlteUpgrades")),
-      /* „positionId:artikelId" — welches Produkt der Kunde gewählt hat. */
-      kategorieUpgrades: ids(formData.get("kategorieUpgrades")),
+      /*
+       * „positionId:artikelId" — welches Produkt der Kunde gewählt hat.
+       * Nicht durch `ids()` schicken: dessen verankerte UUID-Regex passt
+       * auf ein Paar mit Doppelpunkt niemals, die Liste war deshalb immer
+       * leer und jede Kategoriewahl ging verloren.
+       */
+      kategorieUpgrades: paare(formData.get("kategorieUpgrades")),
     },
   );
 
