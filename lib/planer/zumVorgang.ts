@@ -1,5 +1,6 @@
 import { energiefluss, renditeProJahr, speicherVergleich } from "./energiefluss";
 import { berechne } from "@/lib/vorgang/preis";
+import { rahmenLaden } from "@/lib/vorgang/belegpreis";
 import { planungKennzahlen } from "./kennzahlen";
 import { geraetName } from "./geraetname";
 import { anzahlModule } from "./module";
@@ -45,7 +46,6 @@ export async function planungFuerVorgang(
     { data: positionen },
     { data: modulZeilen },
     { data: wrZeilen },
-    { data: rahmenZeile },
     { data: gruppenZeilen },
   ] = await Promise.all([
     supabase
@@ -66,11 +66,6 @@ export async function planungFuerVorgang(
       .is("dokument_id", null),
     supabase.from("planer_modul").select("id, hersteller, bezeichnung"),
     supabase.from("planer_wechselrichter").select("id, hersteller, bezeichnung"),
-    supabase
-      .from("vorgang")
-      .select("ust_satz, rabatt_prozent, lieferung_netto")
-      .eq("id", vorgangId)
-      .maybeSingle(),
     supabase
       .from("vorgang_gruppe")
       .select("id, paket_preis")
@@ -103,6 +98,15 @@ export async function planungFuerVorgang(
    * und im PDF — zwei Preisrechnungen in einem Dokument gäbe es sonst
    * wieder.
    */
+  /*
+   * Rabatt und Lieferkosten haben kein Spaltenrecht fuer `authenticated`
+   * (0025/0041). Ein Select darauf mit dem RLS-Client liefert gar keine
+   * Zeile — hier fiel das bisher still auf 0 zurueck, und die
+   * Wirtschaftlichkeitsrechnung stand mit einer anderen Investition da
+   * als das Angebot daneben. `rahmenLaden` bedient beide Clients.
+   */
+  const rahmen = await rahmenLaden(supabase, vorgangId);
+
   const preisAus = (auswahl: typeof zeilen) =>
     berechne(
     auswahl.map((x, i) => ({
@@ -119,11 +123,7 @@ export async function planungFuerVorgang(
       id: g.id,
       paketPreis: g.paket_preis === null ? null : Number(g.paket_preis),
     })),
-    {
-      ustSatz: Number(rahmenZeile?.ust_satz ?? 20),
-      rabattProzent: Number(rahmenZeile?.rabatt_prozent ?? 0),
-      lieferungNetto: Number(rahmenZeile?.lieferung_netto ?? 0),
-    },
+    rahmen,
     );
 
   const preis = preisAus(zeilen);

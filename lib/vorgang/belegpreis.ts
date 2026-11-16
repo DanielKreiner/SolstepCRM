@@ -115,3 +115,79 @@ export function nettoAus(brutto: number, ustSatz: number): number {
   if (teiler <= 0) return Math.round(brutto * 100) / 100;
   return Math.round((brutto / teiler) * 100) / 100;
 }
+
+/*
+ * ── Rahmen laden ───────────────────────────────────────────────────
+ */
+
+/*
+ * Nur so viel vom Client, wie hier gebraucht wird: Dieses Modul soll ohne
+ * Supabase-Abhängigkeit bleiben, damit es unter vitest ladbar ist. Die
+ * Abfragekette von postgrest-js ist generisch zu tief, um sie hier
+ * nachzubilden — deshalb `any`, wie es kaskade.ts für denselben Zweck
+ * schon tut.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Leser = { from: (tabelle: string) => any };
+
+/**
+ * Der kaufmännische Rahmen eines Vorgangs.
+ *
+ * Es braucht zwei Wege, weil es zwei Clients gibt.
+ *
+ * `vorgang.rabatt_prozent` und `vorgang.lieferung_netto` haben KEIN
+ * Spaltenrecht für `authenticated` (0025/0041) — ein Select darauf mit
+ * dem RLS-Client liefert gar keine Zeile, nicht etwa eine mit Nullen.
+ * Genau daran ist die Annahme im Backoffice gescheitert: die Kaskade
+ * hielt den Vorgang für nicht vorhanden und brach mit „Vorgang nicht
+ * gefunden" ab. Für diesen Weg gibt es `v_vorgang_wert`.
+ *
+ * Umgekehrt ist `v_vorgang_wert` für den Service-Role-Client leer: die
+ * View filtert auf `current_company_id()`, und ohne JWT ist das null.
+ * Dafür unterliegt dieser Client keinen Spaltenrechten. Das Portal
+ * braucht deshalb den direkten Weg.
+ *
+ * Erst direkt, dann über die View — der erste Weg, der etwas liefert,
+ * gewinnt.
+ */
+export async function rahmenLaden(
+  supabase: Leser,
+  vorgangId: string,
+): Promise<{ ustSatz: number; rabattProzent: number; lieferungNetto: number }> {
+  const zahlOder = (x: unknown, ersatz: number): number => {
+    const n = typeof x === "string" ? Number(x) : x;
+    return typeof n === "number" && Number.isFinite(n) ? n : ersatz;
+  };
+
+  const { data: direkt } = (await supabase
+    .from("vorgang")
+    .select("ust_satz, rabatt_prozent, lieferung_netto")
+    .eq("id", vorgangId)
+    .maybeSingle()) as { data: Record<string, unknown> | null };
+
+  if (direkt) {
+    return {
+      ustSatz: zahlOder(direkt.ust_satz, 20),
+      rabattProzent: zahlOder(direkt.rabatt_prozent, 0),
+      lieferungNetto: zahlOder(direkt.lieferung_netto, 0),
+    };
+  }
+
+  const [{ data: satz }, { data: wert }] = (await Promise.all([
+    supabase.from("vorgang").select("ust_satz").eq("id", vorgangId).maybeSingle(),
+    supabase
+      .from("v_vorgang_wert")
+      .select("rabatt_prozent, lieferung_netto")
+      .eq("vorgang_id", vorgangId)
+      .maybeSingle(),
+  ])) as [
+    { data: Record<string, unknown> | null },
+    { data: Record<string, unknown> | null },
+  ];
+
+  return {
+    ustSatz: zahlOder(satz?.ust_satz, 20),
+    rabattProzent: zahlOder(wert?.rabatt_prozent, 0),
+    lieferungNetto: zahlOder(wert?.lieferung_netto, 0),
+  };
+}

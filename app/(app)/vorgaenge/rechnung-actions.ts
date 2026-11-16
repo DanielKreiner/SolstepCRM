@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { anzahlung } from "@/lib/vorgang/modell";
-import { belegPreis, nettoAus } from "@/lib/vorgang/belegpreis";
+import { belegPreis, nettoAus, rahmenLaden } from "@/lib/vorgang/belegpreis";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -67,7 +67,7 @@ export async function schlussrechnungErstellen(
 
   const { data: v } = await supabase
     .from("vorgang")
-    .select("id, number, phase, anzahlung_prozent, ust_satz, rabatt_prozent, lieferung_netto")
+    .select("id, number, phase, anzahlung_prozent")
     .eq("id", vorgangId)
     .maybeSingle();
 
@@ -125,15 +125,12 @@ export async function schlussrechnungErstellen(
       .eq("dokument_id", ab.id),
   ]);
 
-  const ustSatz = v.ust_satz === null ? 20 : Number(v.ust_satz);
+  const rahmen = await rahmenLaden(supabase, vorgangId);
+  const ustSatz = rahmen.ustSatz;
   const preis = belegPreis(
     (posRoh ?? []) as unknown as Parameters<typeof belegPreis>[0],
     (gruppenRoh ?? []) as unknown as Parameters<typeof belegPreis>[1],
-    {
-      ustSatz,
-      rabattProzent: v.rabatt_prozent === null ? 0 : Number(v.rabatt_prozent),
-      lieferungNetto: v.lieferung_netto === null ? 0 : Number(v.lieferung_netto),
-    },
+    rahmen,
   );
 
   /*

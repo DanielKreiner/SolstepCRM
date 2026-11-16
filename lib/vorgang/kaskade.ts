@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { anzahlung, summen } from "@/lib/vorgang/modell";
-import { belegPreis, nettoAus } from "@/lib/vorgang/belegpreis";
+import { belegPreis, nettoAus, rahmenLaden } from "@/lib/vorgang/belegpreis";
 import { bedarfVorbefuellen } from "@/lib/material/bedarf";
 
 /**
@@ -50,7 +50,7 @@ export async function kaskadeAusloesen(
 
   const { data: v } = await supabase
     .from("vorgang")
-    .select("id, number, phase, ust_satz, rabatt_prozent, lieferung_netto")
+    .select("id, number, phase")
     .eq("id", d.vorgangId)
     .maybeSingle();
 
@@ -127,12 +127,9 @@ export async function kaskadeAusloesen(
     .eq("vorgang_id", d.vorgangId)
     .is("dokument_id", null);
 
-  const ustSatz = v.ust_satz === null ? 20 : Number(v.ust_satz);
-  const preis = belegPreis(positionen, (gruppenRoh ?? []) as { id: string }[], {
-    ustSatz,
-    rabattProzent: v.rabatt_prozent === null ? 0 : Number(v.rabatt_prozent),
-    lieferungNetto: v.lieferung_netto === null ? 0 : Number(v.lieferung_netto),
-  });
+  const rahmen = await rahmenLaden(supabase, d.vorgangId);
+  const ustSatz = rahmen.ustSatz;
+  const preis = belegPreis(positionen, (gruppenRoh ?? []) as { id: string }[], rahmen);
 
   /* Netto, das der Kunde schuldet: Positionen nach Rabatt plus Lieferung. */
   const auftragNetto = Math.round((preis.netto + preis.lieferungNetto) * 100) / 100;
