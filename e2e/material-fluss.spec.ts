@@ -353,12 +353,12 @@ test.fixme("6/6b/6c — Beladeliste: abhaken bucht, morgen zeigt den Folgetag", 
   const ende = new Date(heute);
   ende.setHours(16, 0, 0, 0);
 
+  /* Genau der Monteur, als der sich der Test anmeldet — siehe oben. */
   const { data: monteur } = await db
     .from("app_user")
     .select("id")
     .eq("company_id", COMPANY_A)
-    .eq("role", "monteur")
-    .limit(1)
+    .eq("email", DEMO.monteur)
     .single();
 
   const { data: e, error } = await db
@@ -470,13 +470,20 @@ test("8 — Rückläufer entlasten den Vorgang und füllen das Lager", async ({
    * dessen Vorbedingung ein anderer, übersprungener Test herstellt,
    * scheitert ohne eigenen Fehler.
    */
+  /*
+   * Genau der Monteur, als der sich der Test anmeldet.
+   *
+   * Vorher stand hier „irgendein aktiver Monteur mit limit(1)". Im
+   * Bestand liefert das Lukas Berger, angemeldet wird aber Dominik
+   * Poeschl — der Einsatz gehoerte damit einem anderen, und auf
+   * /m/material stand nichts, woran der Test dann im Zeitlimit haengen
+   * blieb. Der Fehler lag nicht an der Anwendung.
+   */
   const { data: monteur } = await db
     .from("app_user")
     .select("id")
     .eq("company_id", COMPANY_A)
-    .eq("role", "monteur")
-    .eq("active", true)
-    .limit(1)
+    .eq("email", DEMO.monteur)
     .single();
 
   const heute = new Date().toISOString().slice(0, 10);
@@ -596,12 +603,12 @@ test("9/10 — Van-Stock: Umbuchung, Verbrauch, Nachfüll-Liste", async ({ page 
    * Buchungslogik genügt die Meldung selbst — sie ist derselbe
    * Serverpfad, den die Uhr nach dem Ausstempeln aufruft.
    */
+  /* Genau der Monteur, als der sich der Test anmeldet — siehe oben. */
   const { data: monteur } = await db
     .from("app_user")
     .select("id")
     .eq("company_id", COMPANY_A)
-    .eq("role", "monteur")
-    .limit(1)
+    .eq("email", DEMO.monteur)
     .single();
 
   await db.from("lagerbewegung").insert({
@@ -837,12 +844,12 @@ test("7 — Kommissionierung bucht, die Übernahme nicht noch einmal", async ({
   const ende = new Date(heute);
   ende.setHours(15, 0, 0, 0);
 
+  /* Genau der Monteur, als der sich der Test anmeldet — siehe oben. */
   const { data: monteur } = await db
     .from("app_user")
     .select("id")
     .eq("company_id", COMPANY_A)
-    .eq("role", "monteur")
-    .limit(1)
+    .eq("email", DEMO.monteur)
     .single();
 
   const { data: e } = await db

@@ -148,12 +148,35 @@ test.describe("Planer — räumliche Ansicht", () => {
     expect(await imStrang()).toBe(0);
 
     /*
-     * Auf ein Modul tippen. Wo eines liegt, hängt am Kamerawinkel —
-     * deshalb ein paar Stellen probieren, bis der String wächst.
+     * Auf ein Modul tippen. Wo eines liegt, haengt am Kamerawinkel, an
+     * der Dachform und an der Fenstergroesse — ein festes Pixelraster um
+     * die Bildmitte traf je nach Lauf kein einziges.
+     *
+     * Abgesucht wird deshalb die Flaeche in Anteilen ihrer eigenen
+     * Groesse: sieben mal sieben Punkte ueber die mittleren sechzig
+     * Prozent. Das Dach liegt dort immer, und sobald der String waechst,
+     * bricht die Schleife ab.
      */
-    for (let i = 0; i < 25 && (await imStrang()) === 0; i++) {
-      await page.mouse.click(mitte.x + ((i % 5) - 2) * 40, mitte.y + (Math.floor(i / 5) - 2) * 26);
-      await page.waitForTimeout(350);
+    const felder = 7;
+    const punkte: Array<{ x: number; y: number }> = [];
+    for (let zeile = 0; zeile < felder; zeile++) {
+      for (let spalte = 0; spalte < felder; spalte++) {
+        punkte.push({
+          x: k.x + k.width * (0.2 + (0.6 * spalte) / (felder - 1)),
+          y: k.y + k.height * (0.2 + (0.6 * zeile) / (felder - 1)),
+        });
+      }
+    }
+    /* Von der Mitte nach aussen: dort stehen die Module am dichtesten. */
+    punkte.sort(
+      (a, b) =>
+        Math.hypot(a.x - mitte.x, a.y - mitte.y) - Math.hypot(b.x - mitte.x, b.y - mitte.y),
+    );
+
+    for (const punkt of punkte) {
+      if ((await imStrang()) > 0) break;
+      await page.mouse.click(punkt.x, punkt.y);
+      await page.waitForTimeout(250);
     }
     expect(await imStrang(), "ein Tipp legt das Modul in den String").toBeGreaterThan(0);
   });

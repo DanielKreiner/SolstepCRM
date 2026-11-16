@@ -920,6 +920,22 @@ export function Planer({
                     onClick={() => {
                       setRaumModus(w.id);
                       setRaumMeldung(null);
+                      /*
+                       * Beim Umschalten auf „Strings" gleich den ersten
+                       * waehlen, wenn noch keiner gewaehlt ist.
+                       *
+                       * Vorher stand man davor: Modus „Strings" aktiv,
+                       * zwei Strings in der Liste — und jeder Tipp auf
+                       * ein Modul antwortete „Zuerst rechts einen String
+                       * anlegen oder auswaehlen". Der Hinweis stimmte,
+                       * aber er verlangte einen Schritt, den die
+                       * Oberflaeche selbst tun kann; in der Draufsicht
+                       * faellt es weniger auf, weil dort die Stringliste
+                       * daneben steht.
+                       */
+                      if (w.id === "strings" && !aktiverStrang) {
+                        setAktiverStrang(plan.strings[0]?.id ?? null);
+                      }
                     }}
                     aria-pressed={raumModus === w.id}
                     className={[
