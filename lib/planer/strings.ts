@@ -242,9 +242,11 @@ export function stringsNachfuehren(plan: Plan): Plan {
 
   let geaendert = false;
   const strings = plan.strings.map((s) => {
-    const module = s.module.filter((m) => vorhanden.has(m));
-    if (module.length !== s.module.length) geaendert = true;
-    return module.length === s.module.length ? s : { ...s, module };
+    /* Nicht `module` nennen — Next verbietet den Bezeichner im Modulkopf. */
+    const bleiben = s.module.filter((m) => vorhanden.has(m));
+    if (bleiben.length === s.module.length) return s;
+    geaendert = true;
+    return { ...s, module: bleiben };
   });
 
   return geaendert ? { ...plan, strings } : plan;
