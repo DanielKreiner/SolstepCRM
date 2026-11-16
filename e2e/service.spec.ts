@@ -195,17 +195,30 @@ test("5 — Der Kunde fragt nach, das Ticket wartet wieder", async ({ page }) =>
 
 test("6 — Ein fremder Kunde sieht das Anliegen nicht", async ({ page }) => {
   const db = admin();
-  const { data: fremd } = await db
-    .from("customer")
-    .select("id")
+  /*
+   * Ein fremder Kunde, der auch einen Vorgang hat.
+   *
+   * Vorher wurde „irgendein anderer Kunde" mit limit(1) genommen. Der
+   * Portalzugang haengt aber am Vorgang, und ein Kunde ohne Vorgang
+   * laesst `portalToken` mit „Kein Vorgang fuer …" scheitern — ein
+   * Fehler des Tests, nicht der Anwendung. Deshalb ueber den Vorgang
+   * suchen statt ueber den Kunden.
+   */
+  const { data: fremdeVorgaenge } = await db
+    .from("vorgang")
+    .select("customer_id, customer:customer_id ( id, deleted_at )")
     .eq("company_id", COMPANY_A)
-    .neq("id", zustand.kundeId!)
-    .is("deleted_at", null)
-    .limit(1)
-    .single();
+    .neq("customer_id", zustand.kundeId!)
+    .not("customer_id", "is", null)
+    .limit(25);
+
+  const fremd = (fremdeVorgaenge ?? [])
+    .map((v) => v.customer as unknown as { id: string; deleted_at: string | null } | null)
+    .find((k) => k && k.deleted_at === null);
+  if (!fremd) throw new Error("Kein fremder Kunde mit Vorgang im Bestand.");
 
   await login(page, DEMO.gf);
-  const fremdToken = await portalToken(page, fremd!.id as string);
+  const fremdToken = await portalToken(page, fremd.id);
 
   await page.context().clearCookies();
   await page.goto(`/portal/${fremdToken}`);
@@ -214,5 +227,5 @@ test("6 — Ein fremder Kunde sieht das Anliegen nicht", async ({ page }) => {
     page.getByText(`${MARKE} Wann kommt der Zählertausch?`),
   ).toHaveCount(0);
 
-  await db.from("portal_access").delete().eq("customer_id", fremd!.id);
+  await db.from("portal_access").delete().eq("customer_id", fremd.id);
 });

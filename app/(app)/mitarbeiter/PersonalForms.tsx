@@ -215,13 +215,21 @@ export function MitarbeiterAnlegen({ standorte }: { standorte: Standort[] }) {
         Mitarbeiter anlegen
       </button>
 
+      {/*
+        * Das Fenster bleibt nach dem Speichern offen.
+        *
+        * Die Erfolgsmeldung steht im Formular. Schliesst sich das
+        * Fenster beim Speichern, verschwindet sie im selben Augenblick
+        * und niemand erfaehrt, ob es geklappt hat — vorher, als das
+        * Formular inline stand, blieb sie stehen. Das Formular leert
+        * sich, man kann den naechsten anlegen oder zumachen.
+        */}
       <Dialog offen={offen} titel="Mitarbeiter anlegen" schliessen={() => setOffen(false)}>
       <Formular
         aktion={mitarbeiterEinladen}
         hinweis="Der Zugang wird per Mail eingeladen — kein Passwort geht durch das Büro."
         knopf="Anlegen und einladen"
         leerenNachErfolg
-        onErfolg={() => setOffen(false)}
       >
         <Eingabe id="m-name" name="name" label="Name" pflicht />
         <Eingabe id="m-mail" name="email" label="E-Mail" typ="email" pflicht />

@@ -942,7 +942,10 @@ async function planungFuerPortal(
   admin: ReturnType<typeof createAdminClient>,
   vorgangId: string,
 ): Promise<PortalDetail["planung"]> {
-  const geplant = await planungFuerVorgang(admin, vorgangId);
+  /* Ohne Bild: das Portal laedt es gleich darunter ueber einen
+     signierten Link, die data-URL waere Ballast — und hat den
+     Seitenstrom zum Abbrechen gebracht. */
+  const geplant = await planungFuerVorgang(admin, vorgangId, false);
   if (!geplant) return null;
 
   /*

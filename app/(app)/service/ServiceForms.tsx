@@ -66,13 +66,21 @@ export function TicketAnlegen({ kunden }: { kunden: Wahl[] }) {
         Anliegen erfassen
       </button>
 
+      {/*
+        * Das Fenster bleibt nach dem Speichern offen.
+        *
+        * Die Erfolgsmeldung steht im Formular. Schliesst sich das
+        * Fenster beim Speichern, verschwindet sie im selben Augenblick
+        * und niemand erfaehrt, ob es geklappt hat — vorher, als das
+        * Formular inline stand, blieb sie stehen. Das Formular leert
+        * sich, man kann den naechsten anlegen oder zumachen.
+        */}
       <Dialog offen={offen} titel="Anliegen erfassen" schliessen={() => setOffen(false)}>
       <Formular
         aktion={ticketAnlegen}
         hinweis="Für Meldungen, die nicht über das Portal kommen — Telefon oder Mail."
         knopf="Anlegen"
         leerenNachErfolg
-        onErfolg={() => setOffen(false)}
       >
         <Suchauswahl
           name="customerId"

@@ -29,6 +29,23 @@ type Client = SupabaseClient<any, any, any>;
 export async function planungFuerVorgang(
   supabase: Client,
   vorgangId: string,
+  /*
+   * Soll das Dachbild als data-URL mitkommen?
+   *
+   * Nur das PDF braucht es eingebettet. Das Kundenportal verwirft es
+   * und laedt das Bild ueber einen signierten Link — es wurde bisher
+   * trotzdem heruntergeladen und kodiert: 137 KB laden, 183 KB Base64
+   * bauen, wegwerfen, bei jedem Seitenaufruf.
+   *
+   * Schlimmer als die Verschwendung war die Wirkung. Der Download laeuft
+   * im Server-Render durch das von Next instrumentierte `fetch`, und
+   * dort ist die Antwort an dieser Groesse mit „Maximum call stack size
+   * exceeded" gestorben. Nach aussen sah das so aus: Die Portalseite
+   * lieferte HTTP 200, brach aber mitten im Strom ab — die
+   * Angebotsseite blieb beim Kunden auf halbem Weg stehen. Aufgefallen
+   * ist es erst, als die Projekte ueberhaupt ein Vorschaubild bekamen.
+   */
+  mitBild = true,
 ): Promise<NonNullable<VorgangPdfData["planung"]> | null> {
   const { data: projekt } = await supabase
     .from("planer_projekt")
@@ -185,7 +202,7 @@ export async function planungFuerVorgang(
    */
   let bild: string | null = null;
   const pfad = (projekt as { vorschau_pfad: string | null }).vorschau_pfad;
-  if (pfad) {
+  if (pfad && mitBild) {
     const { data: datei } = await supabase.storage.from("planer-fotos").download(pfad);
     if (datei) {
       bild = `data:image/jpeg;base64,${Buffer.from(await datei.arrayBuffer()).toString("base64")}`;
