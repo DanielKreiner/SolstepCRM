@@ -212,10 +212,24 @@ test("Der Kundenzeitstrahl zeigt die Aktivitäten im Backoffice", async ({
 });
 
 test("Die Serviceliste zeigt die Tickets", async ({ page }) => {
+  /*
+   * Die Nummer kommt aus dem Bestand, nicht aus dem Test. "S-2026-0031"
+   * stammte aus einem frueheren Seed; sobald der Nummernkreis
+   * weitergezaehlt hat, prueft eine feste Nummer nur noch das Alter des
+   * Datenbestands.
+   */
+  const { data: ticket } = await admin()
+    .from("service_ticket")
+    .select("number")
+    .eq("company_id", COMPANY_A)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
   await login(page, DEMO.gf);
   await page.goto("/service");
 
-  await expect(page.getByText("S-2026-0031").first()).toBeVisible();
+  await expect(page.getByText(ticket!.number as string).first()).toBeVisible();
 });
 
 test("Aktivitäten bleiben im eigenen Mandanten", async () => {

@@ -39,17 +39,38 @@ export function minuten(von: string, bis: string): number {
  * Gleiche Uhrzeit bleibt eine Nullspanne und damit ungültig. 20:00 bis
  * 20:00 ist keine 24-Stunden-Schicht, sondern ein Tippfehler.
  */
+/**
+ * Wie lange eine Nachtschicht hoechstens dauern darf, damit „Ende vor
+ * Beginn" als Mitternachtswechsel durchgeht — in Stunden.
+ *
+ * Ohne diese Grenze wird jeder Zahlendreher zur Schicht: 10:00 bis 09:00
+ * ist ein Tippfehler, wurde aber als dreiundzwanzig Stunden gelesen und
+ * klaglos gespeichert. Zwoelf Stunden decken jede echte Nachtschicht ab
+ * und liegen unter dem Punkt, an dem eine Eingabe nur noch verdreht sein
+ * kann.
+ */
+export const NACHT_MAX_H = 12;
+
 export function spanneAusWanduhr(
   tag: string,
   von: string,
   bis: string,
 ): { von: string; bis: string; ueberNacht: boolean } {
-  const ueberNacht = bis < von;
+  const ueberNacht = bis < von && stundenBis(von, bis) <= NACHT_MAX_H;
   return {
     von: viennaClock(tag, von).toISOString(),
     bis: viennaClock(ueberNacht ? addDays(tag, 1) : tag, bis).toISOString(),
     ueberNacht,
   };
+}
+
+/** Stunden von einer Wanduhrzeit zur naechsten ueber Mitternacht. */
+function stundenBis(von: string, bis: string): number {
+  const min = (x: string): number => {
+    const [h, m] = x.split(":");
+    return Number(h) * 60 + Number(m ?? 0);
+  };
+  return (24 * 60 - min(von) + min(bis)) / 60;
 }
 
 /**

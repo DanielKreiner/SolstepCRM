@@ -135,20 +135,6 @@ const wrSchema = z.object({
   hybrid: z.boolean(),
   mppt: z.array(mpptSchema).min(1, "Mindestens ein MPP-Tracker."),
   datenblatt: z.string().trim().max(500),
-}).superRefine((w, ctx) => {
-  /*
-   * Die Spannungsgrenze muss oberhalb des MPP-Fensters liegen. Steht sie
-   * darunter, passt rechnerisch kein einziges Modul in einen String, und
-   * die Pruefung meldet still „maximal 0 Module" statt eines Fehlers.
-   */
-  const hoechstesFenster = Math.max(...w.mppt.map((m) => m.uMax));
-  if (w.maxDc < hoechstesFenster) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["maxDc"],
-      message: `Die DC-Spannung (${w.maxDc} V) liegt unter dem MPP-Fenster (${hoechstesFenster} V).`,
-    });
-  }
 });
 
 export async function wechselrichterSpeichern(

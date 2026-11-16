@@ -388,13 +388,34 @@ test.describe("Planer — Übergabe als Vorgang", () => {
  */
 async function stapelAnlegen() {
   const db = admin();
-  const { data: artikel } = await db
-    .from("article")
-    .select("id")
-    .eq("company_id", COMPANY_A)
-    .eq("active", true)
-    .gt("sale_price", 0)
-    .limit(2);
+  /*
+   * Zwei Artikel, die noch an KEINEN Planer-Stammdatensatz gebunden
+   * sind. Auf planer_wechselrichter und planer_speicher liegt je ein
+   * Unique-Index auf (company_id, artikel_id) — griff sich der Test die
+   * ersten beiden aktiven Artikel, konnte darunter einer sein, der
+   * schon verknuepft ist. Der Insert lieferte dann null, und der Test
+   * scheiterte mit "Cannot read properties of null" an einer Stelle,
+   * die mit seinem Gegenstand nichts zu tun hat.
+   */
+  const [{ data: kandidaten }, { data: belegtWr }, { data: belegtSp }] = await Promise.all([
+    db
+      .from("article")
+      .select("id")
+      .eq("company_id", COMPANY_A)
+      .eq("active", true)
+      .gt("sale_price", 0)
+      .limit(50),
+    db.from("planer_wechselrichter").select("artikel_id").eq("company_id", COMPANY_A),
+    db.from("planer_speicher").select("artikel_id").eq("company_id", COMPANY_A),
+  ]);
+
+  const belegt = new Set(
+    [...(belegtWr ?? []), ...(belegtSp ?? [])]
+      .map((x) => x.artikel_id as string | null)
+      .filter((x): x is string => !!x),
+  );
+  const artikel = (kandidaten ?? []).filter((a) => !belegt.has(a.id as string)).slice(0, 2);
+  if (artikel.length < 2) throw new Error("Zu wenige freie Artikel fuer den Stapeltest.");
 
   const { data: wr } = await db
     .from("planer_wechselrichter")
@@ -406,7 +427,7 @@ async function stapelAnlegen() {
       ac_nenn: 10,
       hybrid: true,
       mppt: [{ uMin: 80, uMax: 800, iMax: 25, maxStrings: 2 }],
-      artikel_id: artikel![0]!.id,
+      artikel_id: artikel[0]!.id,
     })
     .select("id")
     .single();
@@ -422,8 +443,8 @@ async function stapelAnlegen() {
       min_module: 2,
       max_module: 5,
       kompatibel: [wr!.id],
-      artikel_id: artikel![0]!.id,
-      bms_artikel_id: artikel![1]!.id,
+      artikel_id: artikel[0]!.id,
+      bms_artikel_id: artikel[1]!.id,
     })
     .select("id")
     .single();

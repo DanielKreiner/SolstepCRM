@@ -136,3 +136,27 @@ describe("pruefeSpanne", () => {
     expect(p.ok === false && p.grund).toMatch(/Überschneidet/);
   });
 });
+
+/*
+ * Aus dem Abnahmetest: „Verdrehte Zeiten werden abgewiesen und nicht
+ * gespeichert." Die Unterstuetzung fuer Nachtschichten hatte das
+ * aufgehoben — 10:00 bis 09:00 wurde als dreiundzwanzig Stunden gelesen
+ * statt als Tippfehler.
+ */
+describe("Nachtschicht hat eine Obergrenze", () => {
+  it("liest 20:00 bis 02:00 als Nachtschicht", () => {
+    const s = spanneAusWanduhr("2026-11-16", "20:00", "02:00");
+    expect(s.ueberNacht).toBe(true);
+  });
+
+  it("liest 10:00 bis 09:00 nicht als Schicht, sondern als Dreher", () => {
+    const s = spanneAusWanduhr("2026-11-16", "10:00", "09:00");
+    expect(s.ueberNacht).toBe(false);
+    expect(new Date(s.bis).getTime()).toBeLessThan(new Date(s.von).getTime());
+  });
+
+  it("zieht die Grenze bei zwölf Stunden", () => {
+    expect(spanneAusWanduhr("2026-11-16", "18:00", "06:00").ueberNacht).toBe(true);
+    expect(spanneAusWanduhr("2026-11-16", "17:00", "06:00").ueberNacht).toBe(false);
+  });
+});

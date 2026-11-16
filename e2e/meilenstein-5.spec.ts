@@ -386,7 +386,15 @@ test("Eine verstellte Uhr wird markiert, aber nicht verworfen", async ({
 
   await login(page, DEMO.monteur);
 
-  // Zwei Stunden in der Vergangenheit — weit über den 15 Minuten Toleranz.
+  /*
+   * Zwei Stunden in der Vergangenheit — weit über den 15 Minuten
+   * Toleranz. Eine verstellte Uhr verstellt BEIDE Zeitangaben: den
+   * Erfassungszeitpunkt und die Sendezeit. Genau daran unterscheidet
+   * sich der Fall von einer Buchung, die lange in der Warteschlange lag
+   * (siehe nächster Test) — vorher wurde beides verwechselt, und wer
+   * morgens ohne Netz einstempelte, bekam eine markierte Buchung, die
+   * sich nie mehr schliessen liess.
+   */
   const schief = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
   const clientUuid = "22222222-3333-4444-8555-666666666666";
 
@@ -394,6 +402,7 @@ test("Eine verstellte Uhr wird markiert, aber nicht verworfen", async ({
     data: {
       clientUuid,
       clientTs: schief,
+      sentAt: schief,
       kind: "time_start",
       payload: { jobId: null, kind: "work", note: "E2E-M5 Uhr" },
     },
@@ -412,6 +421,58 @@ test("Eine verstellte Uhr wird markiert, aber nicht verworfen", async ({
   expect(data!.status).toBe("flagged");
   expect(String(data!.flagged_reason)).toContain("weichen um");
   expect(new Date(data!.started_at as string).toISOString()).toBe(schief);
+
+  await db.from("time_entry").delete().eq("client_uuid", clientUuid);
+  await aufraeumen();
+});
+
+test("Eine lange Wartezeit in der Queue ist keine verstellte Uhr", async ({
+  page,
+}) => {
+  await aufraeumen();
+  const db = admin();
+  await login(page, DEMO.monteur);
+
+  /*
+   * Der Monteur stempelt um sechs Uhr auf einem Dach ohne Netz ein und
+   * sendet erst Stunden später. Der Erfassungszeitpunkt ist dann alt,
+   * die Uhr aber richtig — die Buchung muss normal laufen, sonst findet
+   * das Ausstempeln sie nicht und der ganze Arbeitstag steht mit 0:00
+   * im Saldo.
+   */
+  const clientUuid = "44444444-5555-4666-8777-888888888888";
+  const erfasst = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+
+  const antwort = await page.request.post("/api/m/sync", {
+    data: {
+      clientUuid,
+      clientTs: erfasst,
+      sentAt: new Date().toISOString(),
+      kind: "time_start",
+      payload: { jobId: null, kind: "work", note: "E2E-M5 Queue" },
+    },
+  });
+  expect(antwort.status()).toBe(200);
+  expect((await antwort.json()).flagged).toBe(false);
+
+  const { data } = await db
+    .from("time_entry")
+    .select("status")
+    .eq("client_uuid", clientUuid)
+    .single();
+  expect(data!.status).toBe("running");
+
+  /* Und sie laesst sich auch wieder schliessen. */
+  const stop = await page.request.post("/api/m/sync", {
+    data: {
+      clientUuid: "55555555-6666-4777-8888-999999999999",
+      clientTs: new Date().toISOString(),
+      sentAt: new Date().toISOString(),
+      kind: "time_stop",
+      payload: {},
+    },
+  });
+  expect(stop.status()).toBe(200);
 
   await db.from("time_entry").delete().eq("client_uuid", clientUuid);
   await aufraeumen();
