@@ -578,35 +578,22 @@ create policy job_document_del on job_document for delete to authenticated
 
 -- -------------------------------------------------------------- invoice
 /*
- * CLAUDE.md 6.4: "Rechnungs-PDF nach Erzeugung unveränderlich; Korrektur
- * nur über Storno + Neuausstellung." Für die Datei galt das (0001 gibt
- * invoice-pdf kein Schreibrecht), für die Zeile nicht: `update invoice
- * set paid_amount = ...` stand jedem offen, auch der Montage.
+ * Hier stand eine Haertung der Tabelle `invoice`. Die gibt es nicht
+ * mehr: 0039_altbestand_entfernen.sql hat sie zusammen mit dem uebrigen
+ * ersten Datenmodell geloescht (job, quote, invoice_item und so fort).
+ * Das revoke scheiterte beim Einspielen entsprechend mit "relation does
+ * not exist" und hat die ganze Migration zurueckgerollt.
  *
- * Geschrieben wird die Tabelle in der Anwendung nirgends — der laufende
- * Belegweg läuft über vorgang_dokument (0025). Deshalb fällt das Recht
- * zu ändern und zu löschen ganz; das Anlegen bleibt möglich, aber nur
- * mit Schreibrecht auf 'rechnungen'. Dieselbe Logik wie beim Lagerjournal
- * (0005): ein Beleg, der sich nachträglich still ändern lässt, ist kein
- * Beleg.
+ * Der laufende Belegweg liegt in `vorgang_dokument` (0025). Die Tabelle
+ * haengt bis heute allein an der generischen Policy-Schleife aus 0001,
+ * prueft also nur die Firma — eine Rechnung laesst sich damit
+ * nachtraeglich aendern, was CLAUDE.md 6.4 ausschliesst.
+ *
+ * Das gehoert geschlossen, aber nicht hier und nicht nebenbei: Kaskade,
+ * Rechnungslauf und Portal schreiben alle auf diese Tabelle, und eine
+ * zu enge Policy legt die Auftragsannahme still. Eigene Migration mit
+ * eigenem Test.
  */
-revoke update, delete on invoice from authenticated, anon;
-
-drop policy if exists invoice_ins on invoice;
-drop policy if exists invoice_upd on invoice;
-drop policy if exists invoice_del on invoice;
-
-create policy invoice_ins on invoice for insert to authenticated
-  with check (
-    company_id = public.current_company_id()
-    and public.can('rechnungen', 'write')
-    and public.tenant_writable()
-  );
-
-comment on table invoice is
-  'Rechnungen aus dem ersten Datenmodell. Revisionssicher: kein UPDATE '
-  'und kein DELETE für authenticated (0072), Korrektur nur über Storno '
-  'und Neuausstellung.';
 
 -- -------------------------------------------------------- pipeline_phase
 /*
