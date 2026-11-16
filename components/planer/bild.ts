@@ -56,6 +56,12 @@ export async function planungAlsBild(o: BildOptionen): Promise<string | null> {
    * parsen, wird die tatsächliche Lage im Dokument abgefragt — sie
    * stimmt immer, auch wenn sich die Umsetzung der Schicht ändert.
    */
+  /* Wie weit der Untergrund reicht — fuer den Zuschnitt weiter unten. */
+  let links = breite;
+  let oben = hoehe;
+  let rechts = 0;
+  let unten = 0;
+
   if (o.kacheln) {
     const rahmen = o.kacheln.getBoundingClientRect();
     const skala = breite / rahmen.width;
@@ -63,14 +69,16 @@ export async function planungAlsBild(o: BildOptionen): Promise<string | null> {
     for (const bild of Array.from(o.kacheln.querySelectorAll("img"))) {
       if (!bild.complete || bild.naturalWidth === 0) continue;
       const r = bild.getBoundingClientRect();
+      const x = (r.left - rahmen.left) * skala;
+      const y = (r.top - rahmen.top) * skala;
+      const w = r.width * skala;
+      const h = r.height * skala;
       try {
-        ctx.drawImage(
-          bild,
-          (r.left - rahmen.left) * skala,
-          (r.top - rahmen.top) * skala,
-          r.width * skala,
-          r.height * skala,
-        );
+        ctx.drawImage(bild, x, y, w, h);
+        links = Math.min(links, x);
+        oben = Math.min(oben, y);
+        rechts = Math.max(rechts, x + w);
+        unten = Math.max(unten, y + h);
       } catch {
         // Eine einzelne Kachel, die sich sperrt, darf das Bild nicht
         // verhindern — der Rest wird trotzdem gezeichnet.
@@ -80,8 +88,45 @@ export async function planungAlsBild(o: BildOptionen): Promise<string | null> {
 
   ctx.drawImage(quelle, 0, 0, breite, hoehe);
 
+  /*
+   * Auf den bedeckten Teil zuschneiden.
+   *
+   * Bei Kacheln aendert das nichts — die fuellen die Flaeche. Bei einem
+   * Drohnenfoto schon: das Foto deckt nur seinen eigenen Ausschnitt,
+   * ringsum bleibt der dunkle Hintergrund der Zeichenflaeche stehen.
+   * Wer beim Umschalten zufaellig herausgezoomt hatte, schickte dem
+   * Kunden bisher ein Blatt, das zu neun Zehnteln schwarz war und das
+   * Haus als Briefmarke in der Mitte zeigte.
+   *
+   * Zugeschnitten wird nur, wenn dabei etwas Nennenswertes wegfaellt
+   * und genug uebrig bleibt — ein Zuschnitt auf wenige Pixel waere
+   * schlimmer als der Rand.
+   */
+  const zuschnitt =
+    rechts > links && unten > oben && (rechts - links) * (unten - oben) < breite * hoehe * 0.92
+      ? {
+          x: Math.max(0, Math.floor(links)),
+          y: Math.max(0, Math.floor(oben)),
+          w: Math.min(breite, Math.ceil(rechts)) - Math.max(0, Math.floor(links)),
+          h: Math.min(hoehe, Math.ceil(unten)) - Math.max(0, Math.floor(oben)),
+        }
+      : null;
+
+  const ausgabe =
+    zuschnitt && zuschnitt.w >= 200 && zuschnitt.h >= 150
+      ? (() => {
+          const k = document.createElement("canvas");
+          k.width = zuschnitt.w;
+          k.height = zuschnitt.h;
+          const c = k.getContext("2d");
+          if (!c) return ziel;
+          c.drawImage(ziel, zuschnitt.x, zuschnitt.y, zuschnitt.w, zuschnitt.h, 0, 0, zuschnitt.w, zuschnitt.h);
+          return k;
+        })()
+      : ziel;
+
   try {
-    return ziel.toDataURL("image/jpeg", 0.82);
+    return ausgabe.toDataURL("image/jpeg", 0.82);
   } catch {
     /*
      * SecurityError: irgendeine Kachel kam ohne CORS-Zustimmung. Dann
