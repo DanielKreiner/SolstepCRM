@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { Dialog } from "@/components/ui/Dialog";
 import {
   addQualification,
   markSigned,
@@ -197,26 +198,30 @@ export type Standort = { wert: string; text: string; zusatz?: string };
 export function MitarbeiterAnlegen({ standorte }: { standorte: Standort[] }) {
   const [offen, setOffen] = useState(false);
 
-  if (!offen) {
-    return (
+  /*
+   * Als Fenster, nicht inline — wie beim Vorgang und im Planer.
+   *
+   * Vorher ersetzte das Formular den Knopf, und neun Felder schoben die
+   * Mitarbeiterliste nach unten aus dem Bild. Wer jemanden anlegt, will
+   * dabei sehen, wer schon da ist.
+   */
+  return (
+    <>
       <button
         type="button"
         onClick={() => setOffen(true)}
-        className="rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-5 py-[13px] text-sm font-semibold text-white"
+        className="min-h-[44px] cursor-pointer rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-[22px] text-[13.5px] font-semibold text-white shadow-[0_6px_18px_rgba(201,121,24,0.28)]"
       >
         Mitarbeiter anlegen
       </button>
-    );
-  }
 
-  return (
-    <div className="w-full">
+      <Dialog offen={offen} titel="Mitarbeiter anlegen" schliessen={() => setOffen(false)}>
       <Formular
         aktion={mitarbeiterEinladen}
-        titel="Mitarbeiter anlegen"
         hinweis="Der Zugang wird per Mail eingeladen — kein Passwort geht durch das Büro."
         knopf="Anlegen und einladen"
         leerenNachErfolg
+        onErfolg={() => setOffen(false)}
       >
         <Eingabe id="m-name" name="name" label="Name" pflicht />
         <Eingabe id="m-mail" name="email" label="E-Mail" typ="email" pflicht />
@@ -260,7 +265,8 @@ export function MitarbeiterAnlegen({ standorte }: { standorte: Standort[] }) {
           schritt="0.01"
         />
       </Formular>
-    </div>
+      </Dialog>
+    </>
   );
 }
 

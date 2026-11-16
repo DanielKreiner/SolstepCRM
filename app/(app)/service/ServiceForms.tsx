@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Dialog } from "@/components/ui/Dialog";
 import type { AktionsStatus } from "@/components/ui/Formular";
 import {
   Auswahl,
@@ -47,26 +48,31 @@ const STATUS = [
 export function TicketAnlegen({ kunden }: { kunden: Wahl[] }) {
   const [offen, setOffen] = useState(false);
 
-  if (!offen) {
-    return (
+  /*
+   * Als Fenster, nicht inline — wie beim Vorgang und im Planer.
+   *
+   * Vorher ersetzte das Formular den Knopf und schob die Ticketliste
+   * nach unten aus dem Bild: Wer ein Anliegen erfasst, sieht dann die
+   * Liste nicht mehr, in die er es erfasst, und muss nach dem Speichern
+   * erst wieder hochscrollen.
+   */
+  return (
+    <>
       <button
         type="button"
         onClick={() => setOffen(true)}
-        className="rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-5 py-[13px] text-sm font-semibold text-white"
+        className="min-h-[44px] cursor-pointer rounded-pill border-0 bg-[linear-gradient(150deg,var(--accent-from),var(--accent-to))] px-[22px] text-[13.5px] font-semibold text-white shadow-[0_6px_18px_rgba(201,121,24,0.28)]"
       >
         Anliegen erfassen
       </button>
-    );
-  }
 
-  return (
-    <div className="w-full">
+      <Dialog offen={offen} titel="Anliegen erfassen" schliessen={() => setOffen(false)}>
       <Formular
         aktion={ticketAnlegen}
-        titel="Anliegen erfassen"
         hinweis="Für Meldungen, die nicht über das Portal kommen — Telefon oder Mail."
         knopf="Anlegen"
         leerenNachErfolg
+        onErfolg={() => setOffen(false)}
       >
         <Suchauswahl
           name="customerId"
@@ -105,7 +111,8 @@ export function TicketAnlegen({ kunden }: { kunden: Wahl[] }) {
           platzhalter="Was hat der Kunde gemeldet?"
         />
       </Formular>
-    </div>
+      </Dialog>
+    </>
   );
 }
 
