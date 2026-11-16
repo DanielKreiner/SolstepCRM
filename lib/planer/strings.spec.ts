@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { aufteilung, bogenfolge, strangWeg, verlegeStrings } from "./strings";
+import {
+  aufteilung,
+  bogenfolge,
+  strangWeg,
+  stringsNachfuehren,
+  verlegeStrings,
+} from "./strings";
 import { leererPlan, type Plan } from "./plan";
 import type { Modulgruppe } from "./module";
 import type { Dachflaeche } from "./flaeche";
@@ -159,5 +165,49 @@ describe("strangWeg", () => {
       module: ["g1/0:0", "weg/0:0", "g1/0:1", "g1/9:9"],
     });
     expect(weg.punkte).toHaveLength(2);
+  });
+});
+
+/*
+ * `stringsNachfuehren` laeuft bei JEDER Flaechenaenderung. Passte das
+ * Schluesselformat nicht zu dem, das beim Verlegen entsteht, raeumte es
+ * bei der ersten Randverschiebung saemtliche Strings leer — ein Fehler,
+ * den man erst im Pruefbericht merkt. Dieser Test haelt beide Formate
+ * aneinander.
+ */
+describe("stringsNachfuehren", () => {
+  const plan = (aus: string[]): Plan =>
+    ({
+      ...leererPlan(),
+      gruppen: [
+        {
+          id: "g1",
+          flaeche: "f1",
+          reihen: 2,
+          spalten: 2,
+          aus,
+        } as unknown as Modulgruppe,
+      ],
+      strings: [
+        {
+          id: "s1",
+          name: "String 1",
+          mppt: 0,
+          module: ["g1/0:0", "g1/0:1", "g1/1:0", "g1/1:1"],
+        },
+      ],
+    }) as unknown as Plan;
+
+  it("lässt einen vollständig belegten String unangetastet", () => {
+    const vorher = plan([]);
+    const nachher = stringsNachfuehren(vorher);
+    expect(nachher.strings[0]!.module).toHaveLength(4);
+    // Unverändert heisst: dasselbe Objekt, kein neuer Plan.
+    expect(nachher).toBe(vorher);
+  });
+
+  it("entfernt genau die Module, die abgeschaltet wurden", () => {
+    const nachher = stringsNachfuehren(plan(["0:1", "1:1"]));
+    expect(nachher.strings[0]!.module).toEqual(["g1/0:0", "g1/1:0"]);
   });
 });
