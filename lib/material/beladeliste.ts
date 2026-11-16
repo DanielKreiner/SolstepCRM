@@ -251,7 +251,9 @@ export async function beladeliste(
   const [bewegungen, bestand, bestellt] = await Promise.all([
     supabase
       .from("lagerbewegung")
-      .select("artikel_id, vorgang_id, menge, ist_rueckgabe")
+      .select(
+        "artikel_id, vorgang_id, menge, ist_rueckgabe, artikel:artikel_id ( sku, name, unit )",
+      )
       .in("vorgang_id", vorgangIds),
     artikelIds.length > 0
       ? supabase
@@ -269,14 +271,24 @@ export async function beladeliste(
   ]);
 
   const gebucht = new Map<string, number>();
+  /* Artikelangaben fuer Gebuchtes, zu dem es keine Bedarfszeile gibt. */
+  const artikelInfo = new Map<string, { sku: string | null; name: string; einheit: string }>();
   for (const b of (bewegungen.data ?? []) as unknown as {
     artikel_id: string;
     vorgang_id: string;
     menge: string;
     ist_rueckgabe: boolean;
+    artikel: { sku: string | null; name: string; unit: string | null } | null;
   }[]) {
     const k = `${b.vorgang_id}|${b.artikel_id}`;
     gebucht.set(k, (gebucht.get(k) ?? 0) + (b.ist_rueckgabe ? -1 : 1) * Number(b.menge));
+    if (b.artikel && !artikelInfo.has(b.artikel_id)) {
+      artikelInfo.set(b.artikel_id, {
+        sku: b.artikel.sku,
+        name: b.artikel.name,
+        einheit: b.artikel.unit ?? "Stk",
+      });
+    }
   }
 
   const imLager = new Map<string, number>();
@@ -375,6 +387,42 @@ export async function beladeliste(
         fehlt.push(zeile);
         if (schonDa > 0) aufBaustelle.push({ ...zeile, menge: schonDa });
       }
+    }
+
+    /*
+     * Gebuchtes ohne Bedarfszeile.
+     *
+     * Die Liste lief bisher ausschliesslich ueber vorgang_bedarf. Was
+     * ein Monteur zusaetzlich mitgenommen hat oder was direkt auf die
+     * Baustelle geliefert wurde, ohne dass jemand eine Bedarfszeile
+     * angelegt hat, tauchte deshalb nirgends auf — und liess sich auch
+     * nicht zurueckbuchen. Es stand auf dem Vorgang, belastete ihn und
+     * blieb dort, bis jemand es von Hand aus der Datenbank nahm.
+     *
+     * Die Rueckgabe braucht ohnehin nur Vorgang und Artikel, keine
+     * Bedarfszeile — der Schluessel hier dient allein React.
+     */
+    const abgedeckt = new Set(zeilen.map((b) => `${e.vorgang_id}|${b.artikel_id as string}`));
+    for (const [k, menge] of gebucht) {
+      if (menge <= 0) continue;
+      const trenner = k.indexOf("|");
+      if (k.slice(0, trenner) !== e.vorgang_id) continue;
+      if (abgedeckt.has(k)) continue;
+      const artikelId = k.slice(trenner + 1);
+      const info = artikelInfo.get(artikelId);
+      aufBaustelle.push({
+        bedarfId: `ohne-bedarf:${artikelId}`,
+        artikelId,
+        sku: info?.sku ?? null,
+        bezeichnung: info?.name ?? "Ohne Bedarfszeile",
+        menge,
+        einheit: info?.einheit ?? "Stk",
+        seriennummernpflichtig: false,
+        bereitgestellt: false,
+        uebernommen: false,
+        gebucht: menge,
+        liefertermin: null,
+      });
     }
 
     bloecke.push({

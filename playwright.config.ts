@@ -29,7 +29,18 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  /*
+   * Auch lokal ein Wiederholungsversuch.
+   *
+   * Der Dev-Server startet sich im Lauf mehrfach selbst neu, sobald er
+   * an die Speichergrenze kommt (siehe die Begruendung bei webServer
+   * weiter unten). Anfragen, die genau dann unterwegs sind, laufen ins
+   * Zeitlimit — in einem Durchlauf waren das vier von sieben roten
+   * Tests, die einzeln sofort gruen waren. Ein zweiter Versuch faengt
+   * das ab, ohne einen echten Fehler zu verdecken: der faellt auch beim
+   * zweiten Mal um.
+   */
+  retries: 1,
   reporter: process.env.CI ? "line" : "list",
   timeout: 45_000,
   expect: { timeout: 10_000 },

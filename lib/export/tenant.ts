@@ -110,10 +110,22 @@ export async function exportiereMandant(
 
   for (const tabelle of TABELLEN) {
     const spalte = tabelle === "company" ? "id" : "company_id";
+    /*
+     * Sortiert nach id, nicht unsortiert.
+     *
+     * Postgres gibt Zeilen ohne `order by` in der Reihenfolge zurueck,
+     * in der es sie findet — bei einer wachsenden Tabelle wie audit_log
+     * ist das zwischen zwei Abfragen nicht dieselbe. Zwei Exporte
+     * desselben Standes unterschieden sich dadurch, ohne dass sich ein
+     * Datum geaendert haette. Ein Export, den man nicht mit dem vorigen
+     * vergleichen kann, taugt weder zur Uebergabe an den Steuerberater
+     * noch als Nachweis beim Wechsel des Anbieters.
+     */
     const { data, error } = await admin
       .from(tabelle)
       .select("*")
-      .eq(spalte, companyId);
+      .eq(spalte, companyId)
+      .order("id");
 
     if (error) {
       uebersprungen.push(`${tabelle}: ${error.message}`);
