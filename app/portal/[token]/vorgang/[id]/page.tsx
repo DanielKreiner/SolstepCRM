@@ -4,6 +4,7 @@ import { date, dateTime, eur, num, time } from "@/lib/format";
 import { resolvePortal } from "@/lib/portal/data";
 import { portalVorgangDetail } from "@/lib/portal/vorgang";
 import { PHASEN, phaseIndex } from "@/lib/vorgang/modell";
+import { offenerBetrag } from "@/lib/vorgang/zahlung";
 import {
   PortalShell,
   type PortalBereich,
@@ -356,41 +357,79 @@ export default async function PortalVorgangPage({
               Ihre Rechnungen
             </h2>
             <ul className="flex flex-col gap-2">
-              {rechnungen.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex flex-wrap items-baseline gap-2 rounded-card bg-panel px-4 py-3"
-                >
-                  <a
-                    href={`/api/portal/${token}/pdf/${v.id}?art=${r.typ}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="num text-[13px] font-semibold text-accent-ink underline"
+              {rechnungen.map((r) => {
+                const storniert = r.status === "storniert";
+                const offen = offenerBetrag({
+                  betragBrutto: r.betragBrutto,
+                  bezahltBetrag: r.bezahltBetrag,
+                  status: r.status,
+                });
+                const teilbezahlt = r.bezahltBetrag > 0 && offen > 0;
+
+                return (
+                  <li
+                    key={r.id}
+                    className="flex flex-wrap items-baseline gap-2 rounded-card bg-panel px-4 py-3"
                   >
-                    {r.nummer ?? r.dateiname}
-                  </a>
-                  <span className="text-[12px] text-muted">
-                    {r.typ === "anzahlungsrechnung" ? "Anzahlung" : "Schlussrechnung"}
-                  </span>
-                  <span
-                    className={[
-                      "rounded-pill px-[9px] py-[2px] text-[11px] font-semibold",
-                      r.bezahltAm
-                        ? "bg-s-done/14 text-s-done"
-                        : "bg-s-warn/14 text-accent-ink",
-                    ].join(" ")}
-                  >
-                    {r.bezahltAm
-                      ? `bezahlt ${date(r.bezahltAm)}`
-                      : r.faelligAm
-                        ? `fällig ${date(r.faelligAm)}`
-                        : "offen"}
-                  </span>
-                  <span className="num ml-auto text-[14px] font-semibold">
-                    {r.betragBrutto !== null ? eur(r.betragBrutto) : "—"}
-                  </span>
-                </li>
-              ))}
+                    {/*
+                      Eine stornierte Rechnung behält ihre Zeile — der
+                      Kunde hat sie bekommen und soll sehen, dass sie
+                      nicht mehr gilt. Aber keinen Link: die PDF-Route
+                      spricht den Beleg über die Belegart an und würde
+                      unter der stornierten Nummer die neue Rechnung
+                      ausliefern.
+                    */}
+                    {storniert ? (
+                      <span className="num text-[13px] font-semibold text-faint line-through">
+                        {r.nummer ?? r.dateiname}
+                      </span>
+                    ) : (
+                      <a
+                        href={`/api/portal/${token}/pdf/${v.id}?art=${r.typ}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="num text-[13px] font-semibold text-accent-ink underline"
+                      >
+                        {r.nummer ?? r.dateiname}
+                      </a>
+                    )}
+                    <span className="text-[12px] text-muted">
+                      {r.typ === "anzahlungsrechnung" ? "Anzahlung" : "Schlussrechnung"}
+                    </span>
+                    <span
+                      className={[
+                        "rounded-pill px-[9px] py-[2px] text-[11px] font-semibold",
+                        storniert
+                          ? "bg-sunk text-muted"
+                          : r.bezahltAm
+                            ? "bg-s-done/14 text-s-done"
+                            : "bg-s-warn/14 text-accent-ink",
+                      ].join(" ")}
+                    >
+                      {storniert
+                        ? "storniert"
+                        : r.bezahltAm
+                          ? `bezahlt ${date(r.bezahltAm)}`
+                          : r.faelligAm
+                            ? `fällig ${date(r.faelligAm)}`
+                            : "offen"}
+                    </span>
+                    {teilbezahlt ? (
+                      <span className="num text-[11.5px] text-muted">
+                        {eur(r.bezahltBetrag)} erhalten · {eur(offen)} offen
+                      </span>
+                    ) : null}
+                    <span
+                      className={[
+                        "num ml-auto text-[14px] font-semibold",
+                        storniert ? "text-faint line-through" : "",
+                      ].join(" ")}
+                    >
+                      {r.betragBrutto !== null ? eur(r.betragBrutto) : "—"}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
             {firma?.iban ? (
               <p className="num mt-3 text-[11.5px] text-faint">

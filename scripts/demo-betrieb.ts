@@ -944,6 +944,13 @@ export async function rechnungen(c: Ctx, liste: VorgangDemo[]): Promise<void> {
       status: v.phase === "abschluss" ? "bezahlt" : "versendet",
       faellig_am: v.phase === "montage" ? c.tag(-9) : c.tag(12),
       bezahlt_am: v.phase === "abschluss" ? c.tag(-55) : null,
+      /*
+       * Der bezahlte Betrag gehört zum Status: ohne ihn stünde die
+       * Rechnung als bezahlt da und der Umsatzbericht wiese "davon
+       * bezahlt" mit null aus (Migration 0073).
+       */
+      bezahlt_betrag:
+        v.phase === "abschluss" ? Math.round(anzahlung * 1.2 * 100) / 100 : 0,
       kunde_sichtbar: true,
       created_by: buero.id,
       created_at: c.uhr(c.tag(v.phase === "abschluss" ? -70 : -20), "10:00"),
@@ -961,6 +968,13 @@ export async function rechnungen(c: Ctx, liste: VorgangDemo[]): Promise<void> {
         betrag_netto: rest,
         betrag_brutto: Math.round(rest * 1.2 * 100) / 100,
         status: "versendet",
+        /*
+         * Eine Teilzahlung in der Demo: der Kunde hat die Hälfte
+         * überwiesen. Die Postenliste zeigt dann den Restbetrag und
+         * nicht den Rechnungsbetrag — die Funktion braucht einen Fall,
+         * sonst ist sie im Verkaufsgespräch nicht zu zeigen.
+         */
+        bezahlt_betrag: Math.round(rest * 1.2 * 50) / 100,
         faellig_am: c.tag(-3),
         kunde_sichtbar: true,
         created_by: buero.id,

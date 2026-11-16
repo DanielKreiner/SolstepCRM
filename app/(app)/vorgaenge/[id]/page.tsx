@@ -345,6 +345,7 @@ export default async function VorgangPage({
         <BelegeReiter
           id={id}
           phase={kopf.phase}
+          anzahlungProzent={kopf.anzahlungProzent}
           darfBetraege={kopf.darfBetraege}
           darfSchreiben={me.perms.rechnungen === "write"}
           dokumente={dokumente}
@@ -1033,12 +1034,14 @@ async function KommunikationReiter({
 function BelegeReiter({
   id,
   phase,
+  anzahlungProzent,
   darfBetraege,
   darfSchreiben,
   dokumente,
 }: {
   id: string;
   phase: string;
+  anzahlungProzent: number;
   darfBetraege: boolean;
   darfSchreiben: boolean;
   dokumente: NonNullable<Detail>["dokumente"];
@@ -1048,6 +1051,7 @@ function BelegeReiter({
       <Rechnungen
         vorgangId={id}
         phase={phase}
+        anzahlungProzent={anzahlungProzent}
         darfSchreiben={darfSchreiben}
         belege={dokumente
           .filter((d) => d.typ === "anzahlungsrechnung" || d.typ === "schlussrechnung")
@@ -1056,9 +1060,12 @@ function BelegeReiter({
             typ: d.typ,
             nummer: d.nummer,
             betragBrutto: d.betragBrutto,
+            bezahltBetrag: d.bezahltBetrag,
             status: d.status,
             faelligAm: d.faelligAm,
             bezahltAm: d.bezahltAm,
+            storniertAm: d.storniertAm,
+            stornoGrund: d.stornoGrund,
           }))}
       />
 
@@ -1075,8 +1082,15 @@ function BelegeReiter({
                     Nur die Arten, für die es eine Vorlage gibt. Eine
                     Materialliste als PDF wäre eine leere Seite mit
                     Briefkopf.
+
+                    Stornierte Rechnungen bekommen keinen Link: die PDF-
+                    Route spricht einen Beleg über Vorgang und Belegart an
+                    (`?art=`), nicht über seine ID, und liefert nach einer
+                    Neuausstellung die gültige Rechnung. Hinter der
+                    stornierten Nummer stünde dann ein fremder Betrag.
                   */}
-                  {["ab", "anzahlungsrechnung", "schlussrechnung"].includes(d.typ) ? (
+                  {["ab", "anzahlungsrechnung", "schlussrechnung"].includes(d.typ) &&
+                  d.status !== "storniert" ? (
                     <a
                       href={`/api/pdf/vorgang/${id}?art=${d.typ}`}
                       target="_blank"

@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { eur } from "@/lib/format";
 import { naechsteMahnung, type Mahnstufe } from "@/lib/rules/dunning";
+import { offenerBetrag } from "@/lib/vorgang/zahlung";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /*
@@ -26,14 +27,20 @@ type Beleg = {
   nummer: string | null;
   typ: string;
   betrag_brutto: string | null;
+  bezahlt_betrag: string | null;
   faellig_am: string | null;
   status: string | null;
   mahnstufe: number;
   mahnung_aktiv: boolean;
 };
 
+/*
+ * Eine Zeichenkette, nicht zusammengesetzt: postgrest-js leitet den
+ * Ergebnistyp aus dem Literal ab. Ein `+` macht daraus `string`, und
+ * jede Abfrage damit liefert `GenericStringError` statt Zeilen.
+ */
 export const BELEG_FELDER =
-  "id, company_id, vorgang_id, nummer, typ, betrag_brutto, faellig_am, status, mahnstufe, mahnung_aktiv";
+  "id, company_id, vorgang_id, nummer, typ, betrag_brutto, bezahlt_betrag, faellig_am, status, mahnstufe, mahnung_aktiv";
 
 export async function mahnen(
   admin: SupabaseClient,
@@ -98,18 +105,44 @@ export async function mahnen(
     .maybeSingle();
 
   const nummer = beleg.nummer ?? "ohne Nummer";
-  const brutto = eur(Number(beleg.betrag_brutto ?? 0));
   const faellig = beleg.faellig_am ?? "—";
+
+  /*
+   * Gemahnt wird der OFFENE Betrag, nicht der Rechnungsbetrag.
+   *
+   * Vorher stand in jeder Stufe `betrag_brutto`: ein Kunde, der auf
+   * 12.427,20 schon 10.000 gezahlt hatte, bekam eine Zahlungserinnerung
+   * über die vollen 12.427,20. Das ist die Art Brief, nach dem der
+   * Betrieb anruft und sich entschuldigt.
+   */
+  const gefordert = offenerBetrag({
+    betragBrutto: Number(beleg.betrag_brutto ?? 0),
+    bezahltBetrag: Number(beleg.bezahlt_betrag ?? 0),
+    status: beleg.status,
+  });
+
+  if (gefordert <= 0) {
+    return { ok: false, grund: "An dieser Rechnung ist nichts mehr offen." };
+  }
+
+  const brutto = eur(gefordert);
+  /* Was schon da ist, gehört in den Brief — sonst wirkt er wie ein Irrtum. */
+  const bezahlt = Number(beleg.bezahlt_betrag ?? 0);
+  const teilzahlung =
+    bezahlt > 0
+      ? `Von ${eur(Number(beleg.betrag_brutto ?? 0))} sind ${eur(bezahlt)} bereits eingegangen, offen sind noch ${brutto}.`
+      : null;
 
   const { error: mailErr } = await admin.from("mail_outbox").insert({
     company_id: beleg.company_id,
     mail_account_id: postfach?.id ?? null,
     to_addrs: [kunde.email],
     subject: `${gewaehlt.label} zu Rechnung ${nummer}`,
-    body_html: html(gewaehlt, nummer, brutto, faellig),
+    body_html: html(gewaehlt, nummer, brutto, faellig, teilzahlung),
     body_text:
-      `${gewaehlt.label} zu Rechnung ${nummer} über ${brutto}, ` +
-      `fällig war sie am ${faellig}.`,
+      (teilzahlung
+        ? `${gewaehlt.label} zu Rechnung ${nummer}: offen sind ${brutto}, fällig war sie am ${faellig}. ${teilzahlung}`
+        : `${gewaehlt.label} zu Rechnung ${nummer} über ${brutto}, fällig war sie am ${faellig}.`),
     vorgang_id: beleg.vorgang_id,
     vorgang_dokument_id: beleg.id,
   });
@@ -137,7 +170,9 @@ export async function mahnen(
     vorgang_id: beleg.vorgang_id,
     typ: "rechnung",
     titel: `${gewaehlt.label} versendet`,
-    body: `${nummer} über ${brutto}, fällig war sie am ${faellig}.`,
+    body:
+      `${nummer} über ${brutto} offen, fällig war sie am ${faellig}.` +
+      (teilzahlung ? ` ${teilzahlung}` : ""),
     payload: { dokument_id: beleg.id, mahnstufe: gewaehlt.stufe },
     kunde_sichtbar: false,
   });
@@ -163,18 +198,27 @@ function html(
   nummer: string,
   brutto: string,
   faellig: string,
+  teilzahlung: string | null,
 ): string {
+  /*
+   * Bei einer Teilzahlung ein eigener Satz: "über 2.427,20 keinen
+   * Zahlungseingang festgestellt" wäre nach 10.000 Euro Eingang eine
+   * Unterstellung — und der Betrag ist auch nicht der Rechnungsbetrag.
+   */
   const kopf =
-    stufe.ton === "erinnerung"
-      ? `<p>Guten Tag,</p><p>zur Rechnung ${nummer} über ${brutto} konnten wir bis heute keinen Zahlungseingang feststellen. Fällig war sie am ${faellig}.</p>`
-      : `<p>Guten Tag,</p><p>trotz unserer Erinnerung ist die Rechnung ${nummer} über ${brutto} weiter offen. Fällig war sie am ${faellig}.</p>`;
+    teilzahlung !== null
+      ? `<p>Guten Tag,</p><p>zur Rechnung ${nummer} sind nach Ihrer Teilzahlung noch ${brutto} offen. Fällig war sie am ${faellig}.</p>`
+      : stufe.ton === "erinnerung"
+        ? `<p>Guten Tag,</p><p>zur Rechnung ${nummer} über ${brutto} konnten wir bis heute keinen Zahlungseingang feststellen. Fällig war sie am ${faellig}.</p>`
+        : `<p>Guten Tag,</p><p>trotz unserer Erinnerung ist die Rechnung ${nummer} über ${brutto} weiter offen. Fällig war sie am ${faellig}.</p>`;
 
   const schluss =
     stufe.stufe >= 3
       ? `<p>Bitte melden Sie sich bei uns, damit wir das gemeinsam klären — auch wenn es gerade nicht passt. Eine Ratenzahlung ist meist möglich.</p>`
       : `<p>Sollte sich die Zahlung mit diesem Schreiben überschnitten haben, betrachten Sie es bitte als gegenstandslos.</p>`;
 
-  return `${kopf}${schluss}`;
+  const hinweis = teilzahlung ? `<p>${teilzahlung}</p>` : "";
+  return `${kopf}${hinweis}${schluss}`;
 }
 
 

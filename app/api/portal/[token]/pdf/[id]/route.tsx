@@ -49,7 +49,15 @@ export async function GET(
    * vorliegt. Damit kann niemand über den Parameter einen Beleg abrufen,
    * den der Betrieb nicht freigegeben hat.
    */
-  const dok = daten.dokumente.find((d) => d.typ === art);
+  /*
+   * Storniertes bleibt draussen. Die Route spricht einen Beleg ueber die
+   * Belegart an und nicht ueber seine ID — ohne diesen Filter haette der
+   * Kunde unter einer stornierten Nummer die Zahlen der Neuausstellung
+   * bekommen (Migration 0073).
+   */
+  const dok = daten.dokumente.find(
+    (d) => d.typ === art && d.status !== "storniert",
+  );
   if (art !== "angebot" && !dok) {
     return NextResponse.json({ fehler: "Nicht gefunden." }, { status: 404 });
   }
@@ -66,7 +74,11 @@ export async function GET(
     firma?.city as string | null,
   ]);
 
-  const anz = daten.dokumente.find((d) => d.typ === "anzahlungsrechnung");
+  /* Eine stornierte Anzahlung ist keine gestellte Anzahlung und darf von
+     der Schlussrechnung nicht abgezogen werden. */
+  const anz = daten.dokumente.find(
+    (d) => d.typ === "anzahlungsrechnung" && d.status !== "storniert",
+  );
 
   /*
    * Auch im Portal trägt das Angebot die Planungszahlen — dieselbe

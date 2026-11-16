@@ -6,6 +6,7 @@ import { Stat } from "@/components/ui/Stat";
 import { date, eur } from "@/lib/format";
 import { requireMe } from "@/lib/session";
 import { stufenLabel } from "@/lib/rules/dunning";
+import { offenerBetrag } from "@/lib/vorgang/zahlung";
 import { MahnAktionen } from "./MahnAktionen";
 import { createClient } from "@/lib/supabase/server";
 
@@ -29,7 +30,7 @@ export default async function OffenePostenPage() {
   const { data: belege } = await supabase
     .from("vorgang_dokument")
     .select(
-      `id, typ, nummer, betrag_brutto, status, faellig_am, created_at,
+      `id, typ, nummer, betrag_brutto, bezahlt_betrag, status, faellig_am, created_at,
        mahnstufe, gemahnt_am, mahnung_aktiv,
        vorgang:vorgang_id ( id, number, phase, customer:customer_id ( name ) )`,
     )
@@ -43,6 +44,7 @@ export default async function OffenePostenPage() {
     typ: string;
     nummer: string | null;
     betrag_brutto: string | null;
+    bezahlt_betrag: string | null;
     status: string | null;
     faellig_am: string | null;
     created_at: string;
@@ -63,11 +65,24 @@ export default async function OffenePostenPage() {
   const ueberfaellig = alle.filter(
     (b) => b.faellig_am !== null && new Date(b.faellig_am) < heute,
   );
-  const summe = alle.reduce((a, b) => a + Number(b.betrag_brutto ?? 0), 0);
-  const summeUeberfaellig = ueberfaellig.reduce(
-    (a, b) => a + Number(b.betrag_brutto ?? 0),
-    0,
-  );
+  /*
+   * Summiert wird der RESTBETRAG, nicht der Rechnungsbetrag.
+   *
+   * Vorher stand hier `betrag_brutto`: eine Schlussrechnung über
+   * 12.427,20, auf die der Kunde 10.000 gezahlt hatte, stand mit dem
+   * vollen Betrag in "Offen gesamt" — und wurde in derselben Höhe
+   * gemahnt. Gerechnet wird in lib/vorgang/zahlung.ts, damit Liste,
+   * Mahnlauf und Cockpit dieselbe Zahl nennen.
+   */
+  const offenAus = (b: Zeile): number =>
+    offenerBetrag({
+      betragBrutto: Number(b.betrag_brutto ?? 0),
+      bezahltBetrag: Number(b.bezahlt_betrag ?? 0),
+      status: b.status,
+    });
+
+  const summe = alle.reduce((a, b) => a + offenAus(b), 0);
+  const summeUeberfaellig = ueberfaellig.reduce((a, b) => a + offenAus(b), 0);
   const entwuerfe = alle.filter((b) => b.status === "entwurf");
   const darfMahnen = me.perms.rechnungen === "write";
 
@@ -120,6 +135,9 @@ export default async function OffenePostenPage() {
                   ? Math.floor((heute.getTime() - faellig.getTime()) / 86_400_000)
                   : null;
                 const spaet = tage !== null && tage > 0;
+                const offen = offenAus(b);
+                const bezahlt = Number(b.bezahlt_betrag ?? 0);
+                const teilbezahlt = bezahlt > 0 && offen > 0;
 
                 return (
                   <li key={b.id}>
@@ -157,8 +175,9 @@ export default async function OffenePostenPage() {
                         {!b.mahnung_aktiv ? (
                           <Pill tone="neutral">Mahnlauf ausgesetzt</Pill>
                         ) : null}
+                        {teilbezahlt ? <Pill tone="warn">teilbezahlt</Pill> : null}
                         <span className="num ml-auto text-[15px] font-semibold">
-                          {eur(Number(b.betrag_brutto ?? 0))}
+                          {eur(offen)}
                         </span>
                       </div>
 
@@ -166,6 +185,14 @@ export default async function OffenePostenPage() {
                         {b.vorgang!.customer?.name ?? "—"}
                       </p>
                       <p className="num text-[12px] text-muted">
+                        {/*
+                          Bei einer Teilzahlung zeigt die Zeile den Rest.
+                          Der Rechnungsbetrag steht daneben, sonst wirkt
+                          die Zahl wie ein falscher Beleg.
+                        */}
+                        {teilbezahlt
+                          ? `${eur(bezahlt)} von ${eur(Number(b.betrag_brutto ?? 0))} bezahlt · `
+                          : ""}
                         {b.vorgang!.number}
                         {b.faellig_am ? ` · fällig ${date(b.faellig_am)}` : ""}
                         {b.gemahnt_am ? ` · gemahnt ${date(b.gemahnt_am)}` : ""}

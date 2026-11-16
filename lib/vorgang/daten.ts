@@ -85,6 +85,10 @@ export type DokumentZeile = {
   status: string | null;
   faelligAm: string | null;
   bezahltAm: string | null;
+  /** Summe der erfassten Zahlungen, brutto (Migration 0073). */
+  bezahltBetrag: number;
+  storniertAm: string | null;
+  stornoGrund: string | null;
   createdAt: string;
 };
 
@@ -197,7 +201,8 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
       supabase
         .from("vorgang_dokument")
         .select(
-          "id, typ, version, nummer, dateiname, storage_path, betrag_netto, betrag_brutto, status, faellig_am, bezahlt_am, created_at",
+          "id, typ, version, nummer, dateiname, storage_path, betrag_netto, betrag_brutto, "
+          + "status, faellig_am, bezahlt_am, bezahlt_betrag, storniert_am, storno_grund, created_at",
         )
         .eq("vorgang_id", id)
         .order("created_at", { ascending: false }),
@@ -307,6 +312,9 @@ export async function vorgangDetail(id: string): Promise<VorgangDetail | null> {
       status: d.status,
       faelligAm: d.faellig_am,
       bezahltAm: d.bezahlt_am,
+      bezahltBetrag: zahl(d.bezahlt_betrag) ?? 0,
+      storniertAm: d.storniert_am,
+      stornoGrund: d.storno_grund,
       createdAt: d.created_at,
     })),
     positionen: ((positionen ?? []) as unknown as PositionRoh[]).map((p) => ({
@@ -393,6 +401,9 @@ type DokumentRoh = {
   status: string | null;
   faellig_am: string | null;
   bezahlt_am: string | null;
+  bezahlt_betrag: string | null;
+  storniert_am: string | null;
+  storno_grund: string | null;
   created_at: string;
 };
 

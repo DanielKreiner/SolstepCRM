@@ -2,6 +2,7 @@ import "server-only";
 import { viennaDay } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { endOfViennaDay, startOfViennaDay } from "@/lib/time";
+import { zahlungsanteil } from "@/lib/vorgang/zahlung";
 
 /*
  * Berichte.
@@ -151,7 +152,7 @@ async function umsatzbericht(z: Zeitraum): Promise<Bericht> {
 
   const { data: rechnungen } = await supabase
     .from("vorgang_dokument")
-    .select("created_at, betrag_netto, betrag_brutto, status, typ")
+    .select("created_at, betrag_netto, betrag_brutto, bezahlt_betrag, status, typ")
     .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
     .in("status", ["versendet", "bezahlt"])
     .gte("created_at", g.von)
@@ -171,7 +172,19 @@ async function umsatzbericht(z: Zeitraum): Promise<Bericht> {
     e.netto += netto;
     e.ust += Number(r.betrag_brutto ?? 0) - netto;
     e.anzahl += 1;
-    if (r.status === "bezahlt") e.bezahlt += netto;
+    /*
+     * "Davon bezahlt" zählt auch Teilzahlungen, anteilig.
+     *
+     * Vorher zählte nur der Status: eine Rechnung über 12.427,20, auf
+     * die 10.000 eingegangen waren, stand mit null in der Spalte. Der
+     * Anteil wird auf den NETTObetrag gerechnet, weil die Spalte netto
+     * ausweist — bezahlt wird brutto (CLAUDE.md 5.2).
+     */
+    e.bezahlt += netto * zahlungsanteil({
+      betragBrutto: Number(r.betrag_brutto ?? 0),
+      bezahltBetrag: Number(r.bezahlt_betrag ?? 0),
+      status: String(r.status ?? ""),
+    });
     proMonat.set(monat, e);
   }
 
@@ -180,7 +193,8 @@ async function umsatzbericht(z: Zeitraum): Promise<Bericht> {
     titel: "Umsatz je Monat",
     hinweis:
       "Entwürfe und stornierte Rechnungen sind nicht enthalten. Beträge " +
-      "netto, USt. gesondert ausgewiesen.",
+      "netto, USt. gesondert ausgewiesen. „Davon bezahlt“ zählt " +
+      "Teilzahlungen anteilig.",
     spalten: [
       { key: "monat", label: "Monat" },
       { key: "anzahl", label: "Rechnungen", numerisch: true },

@@ -95,14 +95,28 @@ export async function belegPdf(
   let dokument: DokRoh | null = null;
 
   if (art !== "angebot") {
+    /*
+     * Mehrere Zeilen derselben Belegart sind seit dem Storno möglich:
+     * eine stornierte Rechnung bleibt stehen, die Neuausstellung kommt
+     * daneben (Migration 0073). `maybeSingle()` hätte bei zwei Zeilen
+     * einen Fehler geliefert und das PDF wäre mit "Beleg nicht
+     * gefunden" ausgefallen — auch das der gültigen Rechnung.
+     *
+     * Gefiltert wird in JS und nicht mit `.neq("status", ...)`:
+     * PostgREST wirft bei einem Vergleich auch die Zeilen mit status
+     * NULL hinaus, und die gibt es (Angebotsfassungen aus 0050).
+     */
     const { data } = await supabase
       .from("vorgang_dokument")
-      .select("id, nummer, faellig_am, betrag_brutto")
+      .select("id, nummer, faellig_am, betrag_brutto, status")
       .eq("vorgang_id", id)
       .eq("typ", art)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
 
-    dokument = (data as unknown as DokRoh | null) ?? null;
+    dokument =
+      ((data ?? []) as unknown as (DokRoh & { status: string | null })[]).find(
+        (d) => d.status !== "storniert",
+      ) ?? null;
     if (!dokument) {
       /*
        * Auch der Fall, dass die Rolle den Beleg nicht sehen darf — die
@@ -220,12 +234,19 @@ export async function belegPdf(
   /* Anzahlung nur bei der Schlussrechnung abziehen. */
   let abzug: number | null = null;
   if (art === "schlussrechnung") {
-    const { data: anz } = await supabase
+    /* Eine stornierte Anzahlung ist keine gestellte Anzahlung — sonst
+       fordert die Schlussrechnung zu wenig. */
+    const { data: anzRows } = await supabase
       .from("vorgang_dokument")
-      .select("betrag_brutto")
+      .select("betrag_brutto, status")
       .eq("vorgang_id", id)
       .eq("typ", "anzahlungsrechnung")
-      .maybeSingle();
+      .order("created_at", { ascending: false });
+
+    const anz = ((anzRows ?? []) as unknown as
+      { betrag_brutto: string | null; status: string | null }[]).find(
+      (a) => a.status !== "storniert",
+    );
 
     abzug = anz?.betrag_brutto
       ? Number(anz.betrag_brutto)

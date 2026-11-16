@@ -45,6 +45,8 @@ export type PortalDokument = {
   nummer: string | null;
   dateiname: string;
   betragBrutto: number | null;
+  /* Was der Kunde schon bezahlt hat — seine Zahlung, seine Information. */
+  bezahltBetrag: number;
   status: string | null;
   faelligAm: string | null;
   bezahltAm: string | null;
@@ -257,7 +259,7 @@ export async function portalVorgangDetail(
       admin
         .from("vorgang_dokument")
         .select(
-          "id, typ, nummer, version, dateiname, betrag_brutto, status, faellig_am, bezahlt_am, created_at",
+          "id, typ, nummer, version, dateiname, betrag_brutto, bezahlt_betrag, status, faellig_am, bezahlt_am, created_at",
         )
         .eq("vorgang_id", vorgangId)
         .eq("kunde_sichtbar", true)
@@ -438,6 +440,7 @@ export async function portalVorgangDetail(
       nummer: d.nummer,
       dateiname: d.dateiname,
       betragBrutto: d.betrag_brutto === null ? null : Number(d.betrag_brutto),
+      bezahltBetrag: Number(d.bezahlt_betrag ?? 0),
       status: d.status,
       faelligAm: d.faellig_am,
       bezahltAm: d.bezahlt_am,
@@ -874,6 +877,7 @@ type DokRoh = {
   nummer: string | null;
   dateiname: string;
   betrag_brutto: string | null;
+  bezahlt_betrag: string | null;
   status: string | null;
   faellig_am: string | null;
   bezahlt_am: string | null;

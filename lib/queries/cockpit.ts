@@ -3,6 +3,7 @@ import { auslastungJeWoche, mittlereAuslastung } from "@/lib/rules/auslastung";
 import type { Wochenlast } from "@/lib/rules/auslastung";
 import { viennaDay } from "@/lib/format";
 import { VORWARNUNG_TAGE } from "@/lib/rules/qualifikation";
+import { offenerBetrag } from "@/lib/vorgang/zahlung";
 import { createClient } from "@/lib/supabase/server";
 import {
   addDays,
@@ -146,7 +147,7 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
       .order("name"),
     supabase
       .from("vorgang_dokument")
-      .select("id, nummer, betrag_brutto, faellig_am, status")
+      .select("id, nummer, betrag_brutto, bezahlt_betrag, faellig_am, status")
       .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
       .in("status", ["versendet"]),
     /*
@@ -270,12 +271,25 @@ export async function ladeCockpit(meineId: string): Promise<Cockpit> {
     id: string;
     nummer: string | null;
     betrag_brutto: string | null;
+    bezahlt_betrag: string | null;
     faellig_am: string | null;
     status: string | null;
   };
   const offeneRechnungen = (rechnungen ?? []) as unknown as Rechnung[];
+  /*
+   * Offen ist der Restbetrag, nicht der Rechnungsbetrag: eine
+   * Teilzahlung senkt die Kachel sofort. Vorher zeigte das Cockpit
+   * dieselbe Summe wie vor der Zahlung — und wer sie mit dem Konto
+   * verglich, fand den Fehler nicht.
+   */
   const rechnungOffen = offeneRechnungen.reduce(
-    (s, r) => s + Number(r.betrag_brutto ?? 0),
+    (s, r) =>
+      s +
+      offenerBetrag({
+        betragBrutto: Number(r.betrag_brutto ?? 0),
+        bezahltBetrag: Number(r.bezahlt_betrag ?? 0),
+        status: r.status,
+      }),
     0,
   );
   const ueberfaellige = offeneRechnungen.filter(

@@ -749,9 +749,15 @@ test("11 — Eine Teilzahlung lässt den Posten offen", async ({ page }) => {
     .eq("typ", "schlussrechnung")
     .single();
 
+  /*
+   * Auch den bezahlten Betrag zurücksetzen: der Beleg wurde im Test
+   * davor vollständig bezahlt, und `bezahlt_betrag` ist ab Migration
+   * 0073 der Zahlungsstand. Ohne das Zurücksetzen wäre die Teilzahlung
+   * eine Überzahlung und würde abgewiesen.
+   */
   await db
     .from("vorgang_dokument")
-    .update({ status: "versendet", bezahlt_am: null })
+    .update({ status: "versendet", bezahlt_am: null, bezahlt_betrag: 0 })
     .eq("id", schluss!.id);
 
   await login(page, DEMO.gf);
@@ -769,7 +775,7 @@ test("11 — Eine Teilzahlung lässt den Posten offen", async ({ page }) => {
 
   const { data: nachher } = await db
     .from("vorgang_dokument")
-    .select("status, bezahlt_am")
+    .select("status, bezahlt_am, bezahlt_betrag")
     .eq("id", schluss!.id)
     .single();
 
@@ -779,6 +785,8 @@ test("11 — Eine Teilzahlung lässt den Posten offen", async ({ page }) => {
    */
   expect(nachher!.status).toBe("versendet");
   expect(nachher!.bezahlt_am).toBeNull();
+  /* Und der Teilbetrag steht am Beleg, nicht nur im Ereignistext. */
+  expect(Number(nachher!.bezahlt_betrag)).toBeCloseTo(100, 2);
 
   await page.goto("/offene-posten");
   await expect(page.getByText(zustand.nummer!).first()).toBeVisible();
