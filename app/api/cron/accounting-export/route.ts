@@ -27,13 +27,26 @@ export async function GET(request: Request) {
     const exportiert: string[] = [];
 
     for (const mandant of await aktiveMandanten(admin)) {
-      // Was lief beim letzten Export mit?
+      /*
+       * Was schon exportiert wurde — ueber ALLE Laeufe, nicht ueber die
+       * letzten zwanzig.
+       *
+       * `runCron` legt bei jedem Lauf eine Zeile an und der Cron laeuft
+       * taeglich. Mit `limit(20)` rutschte der Lauf, in dem eine Rechnung
+       * exportiert wurde, nach zwanzig Tagen aus dem Fenster; die
+       * Rechnung galt wieder als neu und erschien ein zweites Mal in
+       * einer CSV — doppelte Buchungssaetze beim Steuerberater, unter
+       * derselben Belegnummer.
+       *
+       * Gelesen werden nur Laeufe, die tatsaechlich etwas exportiert
+       * haben; die taeglichen Leerlaeufe tragen nichts bei.
+       */
       const { data: letzter } = await admin
         .from("job_run")
         .select("result")
         .eq("kind", "accounting-export")
-        .order("created_at", { ascending: false })
-        .limit(20);
+        .not("result", "is", null)
+        .order("created_at", { ascending: false });
 
       const schonExportiert = new Set<string>();
       for (const l of letzter ?? []) {
