@@ -1,4 +1,6 @@
 import { aktiveMandanten, runCron } from "@/lib/cron";
+import { viennaDay } from "@/lib/format";
+import { startOfViennaDay } from "@/lib/time";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,14 +17,24 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   return runCron(request, "monthly-timesheet", async (admin) => {
-    const jetzt = new Date();
-    const vormonatEnde = new Date(
-      Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), 1),
-    );
-    const vormonatStart = new Date(
-      Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth() - 1, 1),
-    );
-    const periode = vormonatStart.toISOString().slice(0, 10);
+    /*
+     * Die Monatsgrenzen laufen über Europe/Vienna, nicht über UTC.
+     *
+     * `Date.UTC(...)` setzte den Monatsersten auf 00:00 UTC, also 01:00
+     * Ortszeit (02:00 im Sommer). Die erste Stunde des Monats fiel damit
+     * aus dem Abschluss und die letzte Stunde des Vormonats hinein: eine
+     * Frühschicht ab 06:00 bleibt unberührt, aber jede Nachtbuchung
+     * wanderte in den falschen Monat. Dasselbe Fenster bestimmt
+     * `usage_snapshot` — das ist die Abrechnungsgrundlage.
+     */
+    const heute = viennaDay();
+    const [jahr, monat] = heute.split("-").map(Number);
+    const vorJahr = monat === 1 ? jahr! - 1 : jahr!;
+    const vorMonat = monat === 1 ? 12 : monat! - 1;
+
+    const periode = `${vorJahr}-${String(vorMonat).padStart(2, "0")}-01`;
+    const vormonatStart = startOfViennaDay(periode);
+    const vormonatEnde = startOfViennaDay(`${heute.slice(0, 7)}-01`);
 
     const ergebnis: { mandant: string; genehmigt: number; offen: number }[] = [];
 

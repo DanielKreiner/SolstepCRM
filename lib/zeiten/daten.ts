@@ -127,9 +127,17 @@ function abbilden(e: Roh): ZeitZeile {
      * Auffällig ist, was jemand ansehen sollte: markierte Buchungen und
      * Zeiten ohne Einsatz. Letztere darf es nicht mehr geben — solange
      * Altdaten da sind, fallen sie hier auf.
+     *
+     * `flagged_reason` zählt mit, auch ohne Status „flagged": die
+     * Plausibilitätsprüfung der Arbeitszeitregeln schreibt ihren Grund
+     * dorthin und lässt den Status in Ruhe — eine Zeit, die gegen die
+     * Höchstarbeitszeit läuft, soll auffallen und trotzdem im Saldo
+     * stehen.
      */
     zuPruefen:
-      e.status === "flagged" || (e.kind !== "break" && e.einsatz_id === null),
+      e.status === "flagged" ||
+      e.flagged_reason !== null ||
+      (e.kind !== "break" && e.einsatz_id === null),
   };
 }
 

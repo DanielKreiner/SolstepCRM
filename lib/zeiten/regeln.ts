@@ -1,3 +1,5 @@
+import { addDays, viennaClock } from "@/lib/time";
+
 /**
  * Die Regeln der Zeiterfassung — als reine Funktionen.
  *
@@ -22,6 +24,32 @@ export function minuten(von: string, bis: string): number {
   return Math.round(
     (new Date(bis).getTime() - new Date(von).getTime()) / 60_000,
   );
+}
+
+/**
+ * Zwei Wanduhrzeiten eines Tages zu einer Spanne in UTC.
+ *
+ * Liegt „bis" vor „von", endet die Schicht am Folgetag. Ohne diese
+ * Zeile liess sich eine Nachtschicht von 20:00 bis 02:00 nicht erfassen
+ * und nicht korrigieren: das Ende landete sechs Stunden VOR dem Beginn,
+ * und `pruefeSpanne` wies sie mit „Das Ende muss nach dem Beginn liegen"
+ * ab — eine Meldung, die den Monteur ratlos zurücklässt, weil er die
+ * Zeiten ja richtig eingetippt hat.
+ *
+ * Gleiche Uhrzeit bleibt eine Nullspanne und damit ungültig. 20:00 bis
+ * 20:00 ist keine 24-Stunden-Schicht, sondern ein Tippfehler.
+ */
+export function spanneAusWanduhr(
+  tag: string,
+  von: string,
+  bis: string,
+): { von: string; bis: string; ueberNacht: boolean } {
+  const ueberNacht = bis < von;
+  return {
+    von: viennaClock(tag, von).toISOString(),
+    bis: viennaClock(ueberNacht ? addDays(tag, 1) : tag, bis).toISOString(),
+    ueberNacht,
+  };
 }
 
 /**

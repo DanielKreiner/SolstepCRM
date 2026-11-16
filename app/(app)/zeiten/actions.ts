@@ -3,11 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { AktionsStatus } from "@/components/ui/Formular";
-import { pruefeSpanne } from "@/lib/zeiten/regeln";
+import { pruefeSpanne, spanneAusWanduhr } from "@/lib/zeiten/regeln";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { regelnAnwenden } from "@/lib/zeiten/anwenden";
-import { addDays, endOfViennaDay, startOfViennaDay, viennaClock } from "@/lib/time";
+import { viennaDay } from "@/lib/format";
+import { checkBooking, DEFAULT_RULES, type Shift } from "@/lib/rules/worktime";
+import { addDays, endOfViennaDay, startOfViennaDay } from "@/lib/time";
 
 /*
  * Das Zeiten-Modul des Büros.
@@ -56,6 +58,91 @@ async function spannenAmTag(
 }
 
 /**
+ * Plausibilitätsprüfung der Zeiterfassung — die zweite der drei
+ * Einsatzstellen von `lib/rules/worktime.ts` (CLAUDE.md Abschnitt 10).
+ *
+ * Sie fehlte: `checkBooking` war geschrieben, getestet und nirgends
+ * aufgerufen. Damit galten Ruhezeit und Höchstarbeitszeit im
+ * Dienstplan, aber nicht für die Zeit, die tatsächlich erfasst wurde —
+ * und genau die ist es, die der Arbeitsinspektor liest.
+ *
+ * Abgelehnt wird hier nichts. Die Arbeit ist geleistet; eine Buchung
+ * wegzuweisen hiesse, Arbeitszeit zu verschlucken. Sie wird markiert
+ * und landet auf /zeiten unter „zu prüfen".
+ */
+async function plausibilitaet(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  userId: string,
+  neu: Shift,
+  ausser?: string,
+): Promise<string | null> {
+  const tag = viennaDay(neu.start);
+
+  const [{ data: person }, { data: zeiten }] = await Promise.all([
+    supabase
+      .from("app_user")
+      .select("location:location_id ( worktime_rules )")
+      .eq("id", userId)
+      .maybeSingle(),
+    /*
+     * Zwei Tage zurück, einen vor: Ruhezeit und Wochenhöchstarbeitszeit
+     * brauchen die Nachbartage. Die ganze Historie zu laden wäre bei
+     * jeder Nacherfassung eine Abfrage über Jahre.
+     */
+    supabase
+      .from("time_entry")
+      .select("id, started_at, ended_at, auto_break_min, kind")
+      .eq("user_id", userId)
+      .neq("status", "replaced")
+      .not("ended_at", "is", null)
+      .gte("started_at", startOfViennaDay(addDays(tag, -2)).toISOString())
+      .lte("started_at", endOfViennaDay(addDays(tag, 1)).toISOString()),
+  ]);
+
+  const roh = (person?.location?.worktime_rules ?? {}) as Record<string, number>;
+  const regeln = {
+    restHours: Number(roh.rest_hours ?? DEFAULT_RULES.restHours),
+    maxDaily: Number(roh.max_daily ?? DEFAULT_RULES.maxDaily),
+    maxWeekly: Number(roh.max_weekly ?? DEFAULT_RULES.maxWeekly),
+    breakAfterMin: Number(roh.break_after_min ?? DEFAULT_RULES.breakAfterMin),
+    breakMin: Number(roh.break_min ?? DEFAULT_RULES.breakMin),
+  };
+
+  const vorherige: Shift[] = (
+    (zeiten ?? []) as {
+      id: string;
+      started_at: string;
+      ended_at: string;
+      auto_break_min: number | null;
+      kind: string;
+    }[]
+  )
+    .filter((z) => z.id !== ausser && z.id !== neu.id && z.kind !== "break")
+    .map((z) => ({
+      id: z.id,
+      userId,
+      start: z.started_at,
+      end: z.ended_at,
+      breakMin: Number(z.auto_break_min ?? 0),
+    }));
+
+  /*
+   * Überschneidungen hat `pruefeSpanne` schon abgewiesen — hier zählen
+   * nur die Arbeitszeitgrenzen, und nur die blockierenden. Die
+   * Pausenwarnung gehört in die Planung, nicht auf eine Buchung, die
+   * längst gestempelt ist.
+   */
+  const konflikte = checkBooking(neu, vorherige, regeln).filter(
+    (c) => c.severity === "block" && c.code !== "ueberschneidung",
+  );
+
+  return konflikte.length === 0
+    ? null
+    : konflikte.map((c) => c.message).join(" ");
+}
+
+/**
  * Nacherfassung für vergessenes Stempeln.
  *
  * Der Einsatz ist Pflicht. Gibt es keinen, legt die Mitarbeiter-App
@@ -83,8 +170,8 @@ export async function nacherfassen(
   }
   const d = parsed.data;
 
-  const von = viennaClock(d.tag, d.von).toISOString();
-  const bis = viennaClock(d.tag, d.bis).toISOString();
+  /* Eine Nachtschicht endet am Folgetag — siehe spanneAusWanduhr. */
+  const { von, bis } = spanneAusWanduhr(d.tag, d.von, d.bis);
 
   const supabase = await createClient();
   const bestehend = await spannenAmTag(supabase, d.userId, d.tag);
@@ -104,6 +191,14 @@ export async function nacherfassen(
 
   const geregelt = await regelnAnwenden(supabase, z1.me.companyId, von, bis);
 
+  const hinweis = await plausibilitaet(supabase, d.userId, {
+    id: "neu",
+    userId: d.userId,
+    start: von,
+    end: geregelt.bis,
+    breakMin: geregelt.autoBreakMin,
+  });
+
   const { error } = await supabase.from("time_entry").insert({
     company_id: z1.me.companyId,
     user_id: d.userId,
@@ -112,16 +207,30 @@ export async function nacherfassen(
     kind: "work",
     started_at: von,
     ended_at: geregelt.bis,
+    /*
+     * Der Status bleibt „gebucht", auch wenn die Arbeitszeitregeln
+     * anschlagen. Auf `flagged` gesetzt, fiele die Zeit aus dem
+     * Wochenabschluss und damit aus dem Saldo — eine zwölfte Stunde,
+     * die jemand tatsächlich gearbeitet hat, verschwände als Strafe
+     * dafür, dass sie die zehnte überschreitet. Der Grund steht am
+     * Datensatz und bringt die Zeile auf /zeiten unter „zu prüfen".
+     */
     status: "booked",
     quelle: "manuell",
     auto_break_min: geregelt.autoBreakMin,
+    flagged_reason: hinweis,
     created_by: z1.me.id,
   });
 
   if (error) return { error: `Nacherfassen fehlgeschlagen: ${error.message}`, ok: null };
 
   frisch();
-  return { error: null, ok: "Zeit nachgetragen." };
+  return {
+    error: null,
+    ok: hinweis
+      ? `Zeit nachgetragen, aber zu prüfen: ${hinweis}`
+      : "Zeit nachgetragen.",
+  };
 }
 
 /**
@@ -210,9 +319,14 @@ export async function korrigieren(
 
   if (!alt) return { error: "Zeit nicht gefunden.", ok: null };
 
-  const tag = (alt.started_at as string).slice(0, 10);
-  const von = viennaClock(tag, d.von).toISOString();
-  const bis = viennaClock(tag, d.bis).toISOString();
+  /*
+   * Der Tag der Buchung ist ihr WIENER Kalendertag. `slice(0, 10)` las
+   * den UTC-Tag: eine Zeit vom Montag 00:30 Wien wurde auf den Sonntag
+   * korrigiert und wanderte damit still in den Vortag.
+   */
+  const tag = viennaDay(alt.started_at as string);
+  /* 20:00–02:00 endet am Folgetag, sonst wäre die Spanne negativ. */
+  const { von, bis } = spanneAusWanduhr(tag, d.von, d.bis);
 
   const bestehend = await spannenAmTag(
     supabase,
@@ -229,6 +343,24 @@ export async function korrigieren(
 
   const geregelt = await regelnAnwenden(supabase, z1.me.companyId, von, bis);
 
+  /*
+   * Die ersetzte Zeile bleibt bis zum Schluss auf ihrem Status, zählt
+   * für die Prüfung aber nicht mit — sonst stünde die Korrektur gegen
+   * das Original, das sie ablöst.
+   */
+  const hinweis = await plausibilitaet(
+    supabase,
+    alt.user_id as string,
+    {
+      id: "neu",
+      userId: alt.user_id as string,
+      start: von,
+      end: geregelt.bis,
+      breakMin: geregelt.autoBreakMin,
+    },
+    alt.id as string,
+  );
+
   const { error: neuFehler } = await supabase.from("time_entry").insert({
     company_id: z1.me.companyId,
     user_id: alt.user_id,
@@ -237,11 +369,17 @@ export async function korrigieren(
     kind: alt.kind,
     started_at: von,
     ended_at: geregelt.bis,
+    /*
+     * Wie bei der Nacherfassung: der Hinweis markiert, er entzieht die
+     * Zeit nicht dem Saldo. Eine eben erteilte Freigabe bleibt ebenso
+     * stehen — wer genehmigt, hat die Zeiten gerade angesehen.
+     */
     status: d.genehmigt === "ja" ? "approved" : "booked",
     quelle: "korrektur",
     auto_break_min: geregelt.autoBreakMin,
     replaces_id: alt.id,
     note: d.grund,
+    flagged_reason: hinweis,
     created_by: z1.me.id,
   });
 
@@ -255,7 +393,12 @@ export async function korrigieren(
     .eq("id", alt.id);
 
   frisch();
-  return { error: null, ok: "Korrigiert. Die alte Zeit bleibt sichtbar." };
+  return {
+    error: null,
+    ok: hinweis
+      ? `Korrigiert, aber zu prüfen: ${hinweis}`
+      : "Korrigiert. Die alte Zeit bleibt sichtbar.",
+  };
 }
 
 /** Über einen Korrekturantrag entscheiden. */

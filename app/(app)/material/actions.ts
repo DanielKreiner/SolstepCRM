@@ -63,6 +63,13 @@ export async function ladenAbhaken(
       artikelId: z.string().uuid(),
       menge: z.coerce.number().gt(0, "Menge muss größer als null sein."),
       bedarfId: z.string().uuid().optional().or(z.literal("")),
+      /**
+       * Je Bedarfszeile eine feste Kennung. Der Unique-Index auf
+       * lagerbewegung.client_uuid macht den zweiten Klick zu einer
+       * Wiederholung statt zu einer zweiten Entnahme — dieselbe
+       * Klammer, die die Offline-Warteschlange schützt.
+       */
+      clientUuid: z.string().uuid().optional().or(z.literal("")),
       /** Gesetzt, wenn das Lager vorkommissioniert. */
       bereitstellen: z.enum(["ja", "nein"]).optional().default("nein"),
     })
@@ -74,12 +81,32 @@ export async function ladenAbhaken(
   const d = parsed.data;
   const supabase = await createClient();
 
+  /*
+   * Zweite Klammer, serverseitig und unabhängig vom Browser: eine
+   * Zeile, die schon bereitsteht, wird nicht noch einmal entnommen.
+   * Ohne sie buchte ein zweiter Klick auf „Bereitgestellt" die Ware ein
+   * zweites Mal aus dem Lager und trieb den Bestand ins Minus — zwei
+   * Abgänge für dieselbe Palette.
+   */
+  if (d.bedarfId) {
+    const { data: bedarf } = await supabase
+      .from("vorgang_bedarf")
+      .select("id, bereitgestellt_am")
+      .eq("id", d.bedarfId)
+      .maybeSingle();
+
+    if (bedarf?.bereitgestellt_am) {
+      return { error: null, ok: "Steht schon bereit — nicht doppelt gebucht." };
+    }
+  }
+
   const ergebnis = await entnahmeBuchen(supabase, {
     companyId: z1.me.companyId,
     userId: z1.me.id,
     vorgangId: d.vorgangId,
     artikelId: d.artikelId,
     menge: d.menge,
+    clientUuid: d.clientUuid || null,
   });
 
   if (!ergebnis.ok) return { error: ergebnis.grund, ok: null };

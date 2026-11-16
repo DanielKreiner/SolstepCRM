@@ -306,7 +306,7 @@ export async function offenerBedarf(supabase: Client): Promise<OffeneZeile[]> {
     ...new Set(laufend.map((z) => z.artikel_id).filter((a): a is string => Boolean(a))),
   ];
 
-  const [bewegungen, bestand, bestellt, einsaetze] = await Promise.all([
+  const [bewegungen, bestand, bestellt, einsaetze, artikel] = await Promise.all([
     supabase
       .from("lagerbewegung")
       .select("artikel_id, vorgang_id, menge, ist_rueckgabe")
@@ -330,6 +330,10 @@ export async function offenerBedarf(supabase: Client): Promise<OffeneZeile[]> {
       .eq("art", "auftrag")
       .in("vorgang_id", vorgangIds)
       .order("von"),
+    /* Der Mindestbestand gehört zum Vorschlag (CLAUDE.md Meilenstein 4). */
+    artikelIds.length > 0
+      ? supabase.from("article").select("id, min_stock").in("id", artikelIds)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const aufVorgang = new Map<string, number>();
@@ -348,7 +352,16 @@ export async function offenerBedarf(supabase: Client): Promise<OffeneZeile[]> {
     artikel_id: string;
     menge: string;
   }[]) {
-    imLager.set(b.artikel_id, Number(b.menge));
+    /* Aufsummieren: v_bestand liefert eine Zeile je Lagerort. */
+    imLager.set(b.artikel_id, (imLager.get(b.artikel_id) ?? 0) + Number(b.menge));
+  }
+
+  const mindest = new Map<string, number>();
+  for (const a of (artikel.data ?? []) as unknown as {
+    id: string;
+    min_stock: string | null;
+  }[]) {
+    mindest.set(a.id, Number(a.min_stock ?? 0));
   }
 
   const offeneBestellung = new Map<
@@ -409,7 +422,26 @@ export async function offenerBedarf(supabase: Client): Promise<OffeneZeile[]> {
     return ma < mb ? -1 : ma > mb ? 1 : 0;
   });
 
-  const rest = new Map(imLager);
+  /*
+   * Der Mindestbestand ist nicht disponibel.
+   *
+   * CLAUDE.md Meilenstein 4 verlangt den Vorschlag aus „Bedarf
+   * terminierter Aufträge + Mindestbestand". Vorher vergab diese
+   * Rechnung das ganze Regal an die Vorgänge: fünfzig Dachhaken bei
+   * einem Mindestbestand von vierzig deckten einen Bedarf von zwanzig,
+   * und der Betrieb stand danach mit dreissig da, ohne dass irgendwo
+   * eine Bestellung vorgeschlagen wurde. Was den Mindestbestand
+   * angreift, gehört nachbestellt.
+   *
+   * Für die Beladeliste gilt das NICHT — was im Regal liegt, lässt sich
+   * laden. Dort ist die Frage „kann ich heute mitnehmen", hier „muss
+   * etwas raus".
+   */
+  const rest = new Map<string, number>();
+  for (const id of new Set([...imLager.keys(), ...mindest.keys()])) {
+    rest.set(id, Math.max(0, (imLager.get(id) ?? 0) - (mindest.get(id) ?? 0)));
+  }
+
   const ergebnis: OffeneZeile[] = [];
 
   for (const z of sortiert) {

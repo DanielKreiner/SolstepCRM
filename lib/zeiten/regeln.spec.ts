@@ -3,6 +3,7 @@ import {
   darfStarten,
   darfStoppen,
   pruefeSpanne,
+  spanneAusWanduhr,
   ueberlappt,
 } from "@/lib/zeiten/regeln";
 
@@ -56,6 +57,46 @@ describe("ueberlappt", () => {
   it("behandelt eine offene Zeit als bis auf Weiteres", () => {
     const offen = [{ von: T("08:00"), bis: null }];
     expect(ueberlappt({ von: T("20:00"), bis: T("21:00") }, offen)).toBeTruthy();
+  });
+});
+
+describe("spanneAusWanduhr", () => {
+  it("rechnet Wiener Wanduhrzeit in UTC", () => {
+    // Sommerzeit: 07:30 Ortszeit sind 05:30 UTC.
+    const s = spanneAusWanduhr("2026-07-30", "07:30", "16:00");
+    expect(s.von).toBe("2026-07-30T05:30:00.000Z");
+    expect(s.bis).toBe("2026-07-30T14:00:00.000Z");
+    expect(s.ueberNacht).toBe(false);
+  });
+
+  it("legt das Ende einer Nachtschicht auf den Folgetag", () => {
+    /*
+     * Der Fehler: 20:00–02:00 wurde auf denselben Tag gerechnet, das
+     * Ende lag damit sechs Stunden vor dem Beginn, und die
+     * Nacherfassung wie die Korrektur wiesen die Schicht ab. Eine
+     * Nachtschicht war damit gar nicht korrigierbar.
+     */
+    const s = spanneAusWanduhr("2026-07-30", "20:00", "02:00");
+    expect(s.von).toBe("2026-07-30T18:00:00.000Z");
+    expect(s.bis).toBe("2026-07-31T00:00:00.000Z");
+    expect(s.ueberNacht).toBe(true);
+    expect(
+      pruefeSpanne({ ...s, jetzt: "2026-08-01T06:00:00.000Z", inZukunftErlaubt: true }).ok,
+    ).toBe(true);
+  });
+
+  it("macht aus gleicher Uhrzeit keine 24-Stunden-Schicht", () => {
+    const s = spanneAusWanduhr("2026-07-30", "20:00", "20:00");
+    expect(s.ueberNacht).toBe(false);
+    expect(s.von).toBe(s.bis);
+  });
+
+  it("überspringt die Zeitumstellung nicht", () => {
+    // In der Nacht zum 25.10.2026 wird zurückgestellt: 00:00 Ortszeit
+    // ist 22:00 UTC am Vortag, 06:00 Ortszeit ist 05:00 UTC.
+    const s = spanneAusWanduhr("2026-10-25", "00:00", "06:00");
+    expect(s.von).toBe("2026-10-24T22:00:00.000Z");
+    expect(s.bis).toBe("2026-10-25T05:00:00.000Z");
   });
 });
 

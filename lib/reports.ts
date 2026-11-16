@@ -1,5 +1,7 @@
 import "server-only";
+import { viennaDay } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { endOfViennaDay, startOfViennaDay } from "@/lib/time";
 
 /*
  * Berichte.
@@ -10,6 +12,22 @@ import { createClient } from "@/lib/supabase/server";
  */
 
 export type Zeitraum = { von: string; bis: string };
+
+/**
+ * Die Grenzen eines Zeitraums als UTC-Instants.
+ *
+ * Vorher stand in jeder Abfrage `z.von` und `` `${z.bis}T23:59:59` ``
+ * ohne Zonenbezug — Postgres liest das als UTC. Damit begann ein
+ * Jahresbericht am 1. Jänner um 01:00 Ortszeit und endete am 31.
+ * Dezember um 00:59: die erste und die letzte Stunde des Zeitraums
+ * fehlten, und die Stundenauswertung wich von /zeiten ab.
+ */
+function grenzen(z: Zeitraum): { von: string; bis: string } {
+  return {
+    von: startOfViennaDay(z.von).toISOString(),
+    bis: endOfViennaDay(z.bis).toISOString(),
+  };
+}
 
 export function jahresZeitraum(jahr: number): Zeitraum {
   return { von: `${jahr}-01-01`, bis: `${jahr}-12-31` };
@@ -56,13 +74,14 @@ export async function baueBericht(
 
 async function auftragsbericht(z: Zeitraum): Promise<Bericht> {
   const supabase = await createClient();
+  const g = grenzen(z);
 
   const [{ data: vorgaenge }, { data: kpis }] = await Promise.all([
     supabase
       .from("vorgang")
       .select("id, number, phase, customer:customer_id ( name )")
-      .gte("created_at", z.von)
-      .lte("created_at", `${z.bis}T23:59:59`)
+      .gte("created_at", g.von)
+      .lt("created_at", g.bis)
       .order("number"),
     supabase
       .from("v_vorgang_kpi")
@@ -128,14 +147,15 @@ async function auftragsbericht(z: Zeitraum): Promise<Bericht> {
 
 async function umsatzbericht(z: Zeitraum): Promise<Bericht> {
   const supabase = await createClient();
+  const g = grenzen(z);
 
   const { data: rechnungen } = await supabase
     .from("vorgang_dokument")
     .select("created_at, betrag_netto, betrag_brutto, status, typ")
     .in("typ", ["anzahlungsrechnung", "schlussrechnung"])
     .in("status", ["versendet", "bezahlt"])
-    .gte("created_at", z.von)
-    .lte("created_at", `${z.bis}T23:59:59`);
+    .gte("created_at", g.von)
+    .lt("created_at", g.bis);
 
   const proMonat = new Map<
     string,
@@ -143,7 +163,9 @@ async function umsatzbericht(z: Zeitraum): Promise<Bericht> {
   >();
 
   for (const r of rechnungen ?? []) {
-    const monat = String(r.created_at).slice(0, 7);
+    /* Monat nach Wiener Kalendertag — sonst rutscht eine Rechnung vom
+       Ersten kurz nach Mitternacht in den Vormonat. */
+    const monat = viennaDay(String(r.created_at)).slice(0, 7);
     const e = proMonat.get(monat) ?? { netto: 0, ust: 0, anzahl: 0, bezahlt: 0 };
     const netto = Number(r.betrag_netto ?? 0);
     e.netto += netto;
@@ -182,13 +204,14 @@ async function umsatzbericht(z: Zeitraum): Promise<Bericht> {
 
 async function zeitenbericht(z: Zeitraum): Promise<Bericht> {
   const supabase = await createClient();
+  const g = grenzen(z);
 
   const [{ data: zeiten }, { data: users }] = await Promise.all([
     supabase
       .from("time_entry")
-      .select("user_id, kind, duration_min, status")
-      .gte("started_at", z.von)
-      .lte("started_at", `${z.bis}T23:59:59`)
+      .select("user_id, kind, duration_min, auto_break_min, status")
+      .gte("started_at", g.von)
+      .lt("started_at", g.bis)
       .neq("status", "replaced"),
     supabase.from("app_user").select("id, name, weekly_hours"),
   ]);
@@ -210,11 +233,24 @@ async function zeitenbericht(z: Zeitraum): Promise<Bericht> {
       pause: 0,
       sonstiges: 0,
     };
-    const min = Number(e.duration_min ?? 0);
-    if (e.kind === "work") p.arbeit += min;
-    else if (e.kind === "travel") p.fahrt += min;
-    else if (e.kind === "break") p.pause += min;
-    else p.sonstiges += min;
+    /*
+     * Die Automatikpause gehört abgezogen — genauso wie in
+     * lib/zeiten/daten.ts. Ohne das zeigte „Stunden je Person" eine
+     * halbe Stunde je Tag mehr als /zeiten und das Stundenkonto, und
+     * niemand wusste, welche der drei Zahlen stimmt.
+     */
+    const roh = Number(e.duration_min ?? 0);
+    const auto = Number(e.auto_break_min ?? 0);
+    const netto = Math.max(0, roh - auto);
+
+    if (e.kind === "break") {
+      p.pause += roh;
+    } else {
+      p.pause += auto;
+      if (e.kind === "work") p.arbeit += netto;
+      else if (e.kind === "travel") p.fahrt += netto;
+      else p.sonstiges += netto;
+    }
     proPerson.set(key, p);
   }
 
@@ -223,7 +259,8 @@ async function zeitenbericht(z: Zeitraum): Promise<Bericht> {
     titel: "Stunden je Person",
     hinweis:
       "Nur Personen, deren Zeiten deine Rolle sehen darf. Ersetzte Buchungen " +
-      "sind nicht enthalten.",
+      "sind nicht enthalten. Automatikpausen sind abgezogen und unter Pause " +
+      "ausgewiesen.",
     spalten: [
       { key: "person", label: "Person" },
       { key: "arbeit", label: "Arbeit", numerisch: true },
@@ -247,12 +284,13 @@ async function zeitenbericht(z: Zeitraum): Promise<Bericht> {
 
 async function materialbericht(z: Zeitraum): Promise<Bericht> {
   const supabase = await createClient();
+  const g = grenzen(z);
 
   const { data: bewegungen } = await supabase
     .from("stock_move")
     .select("qty, kind, article:article_id ( sku, name, unit, purchase_price )")
-    .gte("created_at", z.von)
-    .lte("created_at", `${z.bis}T23:59:59`);
+    .gte("created_at", g.von)
+    .lt("created_at", g.bis);
 
   const proArtikel = new Map<
     string,

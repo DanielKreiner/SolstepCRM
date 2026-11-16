@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { enqueue, flush } from "@/lib/offline/queue";
 import { LEER, Meldung, type AktionsStatus } from "@/components/ui/Formular";
 import { Pill } from "@/components/ui/Pill";
@@ -78,6 +78,33 @@ export function Beladeblock({
   const [gebucht, setGebucht] = useState<Set<string>>(new Set());
   const [warteschlange, setWarteschlange] = useState<string | null>(null);
 
+  /*
+   * Je Bedarfszeile eine feste Kennung, solange dieser Block steht.
+   *
+   * Der Knopf ist während des Absendens nicht gesperrt; ein zweiter
+   * Klick schickte dasselbe Formular ein zweites Mal und buchte die
+   * Entnahme doppelt. Mit derselben Kennung wird daraus auf dem Server
+   * eine Wiederholung — dieselbe Klammer wie in der Offline-
+   * Warteschlange.
+   *
+   * Erzeugt wird sie erst nach dem Mounten: eine Zufallszahl beim
+   * Serverrendern stünde im HTML anders als im Browser, und React
+   * meldete einen Hydration-Fehler. Ohne Javascript bleibt das Feld
+   * leer — dann greift die Prüfung auf `bereitgestellt_am` im Server.
+   */
+  const [montiert, setMontiert] = useState(false);
+  useEffect(() => setMontiert(true), []);
+
+  const kennungen = useRef(new Map<string, string>());
+  function kennung(bedarfId: string): string {
+    if (!montiert) return "";
+    const da = kennungen.current.get(bedarfId);
+    if (da) return da;
+    const neu = crypto.randomUUID();
+    kennungen.current.set(bedarfId, neu);
+    return neu;
+  }
+
   async function offlineBuchen(
     art: "entnahme" | "rueckgabe",
     d: { artikelId: string; menge: number; bedarfId: string },
@@ -140,7 +167,16 @@ export function Beladeblock({
                   </span>
                 </span>
 
-                {z.bereitgestellt && !kommissionieren ? (
+                {/*
+                  Ist die Zeile kommissioniert, ist sie gebucht. In der
+                  Lageransicht steht deshalb kein Knopf mehr, sondern der
+                  Zustand: vorher bot sie weiter „Bereitgestellt" an, und
+                  der zweite Klick buchte dieselbe Palette ein zweites
+                  Mal aus dem Lager.
+                */}
+                {z.bereitgestellt && kommissionieren ? (
+                  <Pill tone="done">bereitgestellt</Pill>
+                ) : z.bereitgestellt ? (
                   <form action={uebernehmen}>
                     <input type="hidden" name="bedarfId" value={z.bedarfId} />
                     <input type="hidden" name="vorgangId" value={block.vorgangId} />
@@ -178,6 +214,11 @@ export function Beladeblock({
                     <input type="hidden" name="artikelId" value={z.artikelId} />
                     <input type="hidden" name="bedarfId" value={z.bedarfId} />
                     <input type="hidden" name="menge" value={z.menge} />
+                    <input
+                      type="hidden"
+                      name="clientUuid"
+                      value={kennung(z.bedarfId)}
+                    />
                     {kommissionieren ? (
                       <input type="hidden" name="bereitstellen" value="ja" />
                     ) : null}

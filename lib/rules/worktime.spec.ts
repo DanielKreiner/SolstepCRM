@@ -162,6 +162,24 @@ describe("Wochenhöchstarbeitszeit", () => {
     expect(woche[0]!.message).toContain("2026-W32");
   });
 
+  it("rechnet einen Dienst ab Mitternacht Ortszeit in die neue Woche", () => {
+    /*
+     * Montag 00:30 Wien ist Sonntag 22:30 UTC. Nach UTC-Tag gerechnet
+     * landete der Dienst in der Vorwoche und addierte sich dort zur
+     * Sonntagsschicht — 14,5 Stunden in einer Woche, in der nur 10
+     * geplant waren. Bei maxWeekly 12 schlug die Prüfung grundlos an.
+     */
+    const regeln = { ...DEFAULT_RULES, maxWeekly: 12 };
+    const konflikte = checkRoster(
+      [
+        wien("so", "2026-08-09", "08:00", "2026-08-09", "18:00"),
+        wien("mo", "2026-08-10", "00:30", "2026-08-10", "05:00"),
+      ],
+      regeln,
+    );
+    expect(konflikte.filter((c) => c.code === "wochenhoechst")).toHaveLength(0);
+  });
+
   it("trennt Kalenderwochen sauber", () => {
     // Freitag und der folgende Montag gehören in verschiedene Wochen.
     const konflikte = checkRoster([
@@ -210,6 +228,20 @@ describe("Überschneidung und Abwesenheit", () => {
     expect(blocksPublication(konflikte)).toBe(true);
   });
 
+  it("erkennt Abwesenheit auch bei einem Dienst ab Mitternacht Ortszeit", () => {
+    /*
+     * Urlaub ab Montag, Dienst Montag 00:30 Wien. Der UTC-Tag war
+     * Sonntag — der Dienst galt damit als vor dem Urlaub und wurde
+     * durchgelassen.
+     */
+    const konflikte = checkRoster(
+      [wien("mo", "2026-08-10", "00:30", "2026-08-10", "05:00")],
+      DEFAULT_RULES,
+      [{ userId: U, from: "2026-08-10", to: "2026-08-14", kind: "vacation" }],
+    );
+    expect(konflikte.filter((c) => c.code === "abwesenheit")).toHaveLength(1);
+  });
+
   it("beachtet nur die Abwesenheit der betroffenen Person", () => {
     const konflikte = checkRoster(
       [schicht("a", "2026-08-05", "07:00", "12:00")],
@@ -248,5 +280,12 @@ describe("isoWeekKey", () => {
     // Der 1.1.2027 ist ein Freitag und gehört zur KW 53 von 2026.
     expect(isoWeekKey("2027-01-01T08:00:00.000Z")).toBe("2026-W53");
     expect(isoWeekKey("2026-08-03T08:00:00.000Z")).toBe("2026-W32");
+  });
+
+  it("nimmt den Wiener Kalendertag, nicht den UTC-Tag", () => {
+    // Sonntag 22:30 UTC ist Montag 00:30 Wien — und damit KW 33.
+    expect(isoWeekKey("2026-08-09T22:30:00.000Z")).toBe("2026-W33");
+    // Montag 23:30 Wien bleibt Montag, auch wenn UTC schon Montag 21:30 zeigt.
+    expect(isoWeekKey("2026-08-10T21:30:00.000Z")).toBe("2026-W33");
   });
 });

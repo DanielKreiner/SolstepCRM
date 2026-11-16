@@ -1,5 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { viennaDay } from "@/lib/format";
+import { isoWeek, startOfViennaDay, startOfViennaWeek } from "@/lib/time";
 import type { PlanAbwesenheit, PlanEinsatz, PlanPerson } from "./konflikte";
 
 /*
@@ -61,33 +63,29 @@ export type Tafel = {
   abwesenheiten: TafelAbwesenheit[];
 };
 
-/** Montag der Woche, in der das Datum liegt. Lokale Tagesgrenze. */
+/**
+ * Montag der Woche, in der das Datum liegt — Tagesgrenze in Wiener Zeit.
+ *
+ * Vorher über `getDay/setDate/setHours`, also über die Zone des
+ * Prozesses: auf Vercel (UTC) lieferte ein Montag kurz nach Mitternacht
+ * Ortszeit den Montag der Vorwoche.
+ */
 export function wochenStart(d: Date): Date {
-  const m = new Date(d);
-  const tag = (m.getDay() + 6) % 7; /* Montag = 0 */
-  m.setDate(m.getDate() - tag);
-  m.setHours(0, 0, 0, 0);
-  return m;
+  return startOfViennaDay(startOfViennaWeek(viennaDay(d)));
 }
 
+/**
+ * Die Kalenderwoche eines Zeitpunkts, gerechnet in Wiener Zeit.
+ *
+ * Hier stand eine eigene ISO-Rechnung über `getFullYear/getMonth/
+ * getDate` — also über die Zone des laufenden Prozesses. Übergeben wird
+ * aber der Wochenbeginn als Instant, und der liegt um 22:00 oder 23:00
+ * UTC des Vortags: lokal in Wien stimmte die Zahl, auf Vercel (UTC) war
+ * sie um eins zu klein. Die Plantafel zeigte dort jede Woche die
+ * falsche KW — die Zahl, nach der im Betrieb Termine durchgesagt werden.
+ */
 export function kalenderwoche(d: Date): number {
-  /*
-   * ISO-8601: die Woche mit dem ersten Donnerstag des Jahres ist KW 1.
-   * Die naive Rechnung „Tage seit 1.1. durch 7" liegt Anfang Januar
-   * regelmässig um eine Woche daneben.
-   */
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  t.setUTCDate(t.getUTCDate() + 4 - ((t.getUTCDay() + 6) % 7) - 3);
-  const jahresbeginn = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
-  return (
-    1 +
-    Math.round(
-      ((t.getTime() - jahresbeginn.getTime()) / 86400000 -
-        3 +
-        ((jahresbeginn.getUTCDay() + 6) % 7)) /
-        7,
-    )
-  );
+  return Number(isoWeek(viennaDay(d)).slice(-2));
 }
 
 export async function tafelLaden(
