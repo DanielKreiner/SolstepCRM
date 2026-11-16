@@ -29,6 +29,16 @@ export type PreisPosition = {
   optional: boolean;
   /** Vom Kunden angekreuzt? Nur bei optionalen Positionen von Belang. */
   gewaehlt?: boolean;
+  /**
+   * Steuersatz dieser Zeile. Fehlt er, gilt der Satz des Rahmens.
+   *
+   * Jede Position traegt im Datenmodell ihren eigenen Satz (CLAUDE.md
+   * Abschnitt 5, Punkt 2), und das Formular laesst ihn auch aendern.
+   * Gerechnet wurde hier trotzdem nur mit dem Satz des Vorgangs — bei
+   * einem Angebot mit 20 % und 10 % nebeneinander wies das PDF deshalb
+   * einen anderen Steuerbetrag aus als die Auftragsbestaetigung.
+   */
+  ustSatz?: number;
   kalkEk?: number | null;
 };
 
@@ -125,7 +135,7 @@ export function berechne(
     (positionenNetto * rahmen.rabattProzent) / 100,
   );
   const netto = runde2(positionenNetto - gesamtRabatt);
-  const ust = runde2((netto * rahmen.ustSatz) / 100);
+  const ust = umsatzsteuer(positionen, gruppen, rahmen, netto);
   const brutto = runde2(netto + ust);
 
   const lieferungBrutto = runde2(
@@ -174,4 +184,66 @@ function runde2(n: number): number {
    * der Fliesskommadarstellung sonst auf 1,00 statt 1,01.
    */
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Umsatzsteuer über alle zählenden Positionen.
+ *
+ * Tragen alle denselben Satz — der Normalfall —, wird einmal auf das
+ * rabattierte Netto gerechnet. Das ist Absicht: jede andere Reihenfolge
+ * verschöbe bestehende Beträge um Cent, und ein Angebot, dessen Summe
+ * sich durch ein Update ändert, ist schlimmer als die Lücke, die hier
+ * geschlossen wird.
+ *
+ * Erst bei gemischten Sätzen wird je Position gerechnet. Der Paketpreis
+ * einer Gruppe wird dafür im Verhältnis der Zeilenbeträge auf ihre
+ * festen Positionen verteilt: er überschreibt den Verkaufspreis, nicht
+ * die Steuerpflicht der Teile.
+ */
+function umsatzsteuer(
+  positionen: readonly PreisPosition[],
+  gruppen: readonly PreisGruppe[],
+  rahmen: Angebotsrahmen,
+  netto: number,
+): number {
+  const zaehlende = positionen.filter(zaehlt);
+  const saetze = new Set(zaehlende.map((p) => p.ustSatz ?? rahmen.ustSatz));
+  if (saetze.size <= 1) {
+    const satz = saetze.size === 1 ? [...saetze][0]! : rahmen.ustSatz;
+    return runde2((netto * satz) / 100);
+  }
+
+  const basis = new Map<PreisPosition, number>();
+  const gruppenIds = new Set(gruppen.map((g) => g.id));
+
+  for (const g of gruppen) {
+    const drin = zaehlende.filter((p) => p.gruppeId === g.id);
+    if (g.paketPreis === null) {
+      for (const p of drin) basis.set(p, zeilenNetto(p));
+      continue;
+    }
+    /* Optionen stehen neben dem Paket und behalten ihren Zeilenbetrag. */
+    const feste = drin.filter((p) => !p.optional);
+    for (const p of drin.filter((p) => p.optional)) basis.set(p, zeilenNetto(p));
+    const summe = feste.reduce((s, p) => s + zeilenNetto(p), 0);
+    for (const p of feste) {
+      basis.set(
+        p,
+        summe > 0
+          ? (g.paketPreis * zeilenNetto(p)) / summe
+          : g.paketPreis / Math.max(1, feste.length),
+      );
+    }
+  }
+  for (const p of zaehlende) {
+    if (p.gruppeId !== null && gruppenIds.has(p.gruppeId)) continue;
+    basis.set(p, zeilenNetto(p));
+  }
+
+  const faktor = 1 - rahmen.rabattProzent / 100;
+  let ust = 0;
+  for (const [p, betrag] of basis) {
+    ust += runde2((betrag * faktor * (p.ustSatz ?? rahmen.ustSatz)) / 100);
+  }
+  return runde2(ust);
 }

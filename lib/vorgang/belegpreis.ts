@@ -33,6 +33,7 @@ export interface BelegPositionRoh {
   menge: number | string;
   ep_netto: number | string;
   rabatt_prozent?: number | string | null;
+  ust_satz?: number | string | null;
   optional?: boolean | null;
   kunden_auswahl?: string | null;
   kalk_ek?: number | string | null;
@@ -67,6 +68,7 @@ export function alsPreisPosition(p: BelegPositionRoh, index: number): PreisPosit
     menge: zahl(p.menge),
     epNetto: zahl(p.ep_netto),
     rabattProzent: zahl(p.rabatt_prozent),
+    ...(p.ust_satz === null || p.ust_satz === undefined ? {} : { ustSatz: zahl(p.ust_satz) }),
     optional,
     /*
      * `gewaehlt` nur bei optionalen Positionen setzen: bei festen Zeilen

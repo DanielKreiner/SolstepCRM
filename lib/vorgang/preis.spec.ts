@@ -218,3 +218,67 @@ describe("berechne", () => {
     expect(p.netto).toBe(400);
   });
 });
+
+/*
+ * Jede Position traegt ihren eigenen Steuersatz, und das Formular laesst
+ * ihn auch aendern — gerechnet wurde trotzdem nur mit dem Satz des
+ * Vorgangs. Ein Angebot mit 20 % und 10 % nebeneinander wies deshalb
+ * einen anderen Steuerbetrag aus als die Auftragsbestaetigung, die ueber
+ * `summen()` je Position rechnete.
+ */
+describe("Gemischte Steuersätze", () => {
+  const rahmen = { ustSatz: 20, rabattProzent: 0, lieferungNetto: 0 };
+  const zeile = (over: Partial<PreisPosition> & { id: string }): PreisPosition => ({
+    gruppeId: null,
+    menge: 1,
+    epNetto: 1000,
+    rabattProzent: 0,
+    optional: false,
+    ...over,
+  });
+
+  it("rechnet je Position, sobald sich die Sätze unterscheiden", () => {
+    const preis = berechne(
+      [zeile({ id: "a", ustSatz: 20 }), zeile({ id: "b", ustSatz: 10 })],
+      [],
+      rahmen,
+    );
+    expect(preis.netto).toBe(2000);
+    expect(preis.ust).toBe(300); // 200 + 100, nicht 400
+  });
+
+  it("bleibt bei einheitlichem Satz bei der bisherigen Rechnung", () => {
+    const mitFeld = berechne(
+      [zeile({ id: "a", ustSatz: 20 }), zeile({ id: "b", ustSatz: 20 })],
+      [],
+      rahmen,
+    );
+    const ohneFeld = berechne([zeile({ id: "a" }), zeile({ id: "b" })], [], rahmen);
+    expect(mitFeld.ust).toBe(400);
+    expect(ohneFeld.ust).toBe(400);
+  });
+
+  it("verteilt den Paketpreis im Verhältnis der Zeilenbeträge", () => {
+    // Paket 900 auf 600 + 400 → 540 zu 20 % und 360 zu 10 %.
+    const preis = berechne(
+      [
+        zeile({ id: "a", gruppeId: "g", epNetto: 600, ustSatz: 20 }),
+        zeile({ id: "b", gruppeId: "g", epNetto: 400, ustSatz: 10 }),
+      ],
+      [{ id: "g", paketPreis: 900 }],
+      rahmen,
+    );
+    expect(preis.netto).toBe(900);
+    expect(preis.ust).toBe(144); // 108 + 36
+  });
+
+  it("zieht den Gesamtrabatt vor der Steuer ab", () => {
+    const preis = berechne(
+      [zeile({ id: "a", ustSatz: 20 }), zeile({ id: "b", ustSatz: 10 })],
+      [],
+      { ...rahmen, rabattProzent: 10 },
+    );
+    expect(preis.netto).toBe(1800);
+    expect(preis.ust).toBe(270); // 180 + 90
+  });
+});

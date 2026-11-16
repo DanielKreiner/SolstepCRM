@@ -570,6 +570,7 @@ function alsPreisPosition(p: PdfPosition): PreisPosition {
     menge: p.menge,
     epNetto: p.epNetto,
     rabattProzent: p.rabattProzent,
+    ustSatz: p.ustSatz,
     optional: p.optional,
     ...(p.optional ? { gewaehlt: p.gewaehlt === true } : {}),
   };
