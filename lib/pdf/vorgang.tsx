@@ -48,6 +48,12 @@ export type PdfPosition = {
   ustSatz: number;
   rabattProzent: number;
   optional: boolean;
+  /*
+   * Hat der Kunde diese Option gewaehlt? Ohne das Feld zaehlte das PDF
+   * jede optionale Position als abgewaehlt — auch auf der Rechnung, nachdem
+   * der Kunde sie im Portal ausdruecklich angekreuzt hatte.
+   */
+  gewaehlt?: boolean;
   bildUrl?: string | undefined;
 };
 
@@ -565,6 +571,7 @@ function alsPreisPosition(p: PdfPosition): PreisPosition {
     epNetto: p.epNetto,
     rabattProzent: p.rabattProzent,
     optional: p.optional,
+    ...(p.optional ? { gewaehlt: p.gewaehlt === true } : {}),
   };
 }
 

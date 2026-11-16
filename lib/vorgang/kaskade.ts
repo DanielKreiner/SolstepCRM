@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { anzahlung, summen } from "@/lib/vorgang/modell";
+import { belegPreis, nettoAus } from "@/lib/vorgang/belegpreis";
 import { bedarfVorbefuellen } from "@/lib/material/bedarf";
 
 /**
@@ -49,7 +50,7 @@ export async function kaskadeAusloesen(
 
   const { data: v } = await supabase
     .from("vorgang")
-    .select("id, number, phase")
+    .select("id, number, phase, ust_satz, rabatt_prozent, lieferung_netto")
     .eq("id", d.vorgangId)
     .maybeSingle();
 
@@ -77,7 +78,10 @@ export async function kaskadeAusloesen(
   const { data: posRoh } = await supabase
     .from("vorgang_position")
     .select(
-      "id, sort, gruppe_id, article_id, bezeichnung, menge, einheit, ep_netto, ust_satz, kalk_stunden, kalk_ek, ist_material, bild_url, beschreibung, rabatt_prozent, optional",
+      "id, sort, gruppe_id, article_id, bezeichnung, menge, einheit, ep_netto, ust_satz, "
+      + "kalk_stunden, kalk_ek, ist_material, bild_url, beschreibung, rabatt_prozent, "
+      + "optional, kunden_auswahl, upgrade_article_id, upgrade_kategorie, "
+      + "upgrade_aufpreis, upgrade_text",
     )
     .eq("vorgang_id", d.vorgangId)
     .is("dokument_id", null)
@@ -91,6 +95,21 @@ export async function kaskadeAusloesen(
     };
   }
 
+  /*
+   * Zwei Rechnungen mit verschiedenen Aufgaben:
+   *
+   * `summen()` liefert die INTERNEN Kennzahlen — Sollstunden und
+   * Materialeinkauf. Die hängen an den Positionen selbst und haben mit
+   * dem Kundenbetrag nichts zu tun.
+   *
+   * `belegPreis()` liefert, was der Kunde zahlt, und zwar mit derselben
+   * Rechnung wie Angebotseditor, Angebots-PDF und Kundenportal. Vorher
+   * stand hier `summen()` auch für den Betrag, und das addierte bloss
+   * `menge × ep_netto`: ohne Positionsrabatt, ohne Paketpreis, ohne
+   * Lieferkosten und ohne die nicht gewählten Optionen auszunehmen. Die
+   * Auftragsbestätigung konnte den Angebotsbetrag deshalb gar nicht
+   * treffen.
+   */
   const s = summen(
     positionen.map((p) => ({
       menge: Number(p.menge),
@@ -102,7 +121,23 @@ export async function kaskadeAusloesen(
     })),
   );
 
-  const { anzahlungBrutto } = anzahlung(s.brutto, d.anzahlungProzent);
+  const { data: gruppenRoh } = await supabase
+    .from("vorgang_gruppe")
+    .select("id, name, beschreibung, sort, paket_preis, einzelpreise_verstecken")
+    .eq("vorgang_id", d.vorgangId)
+    .is("dokument_id", null);
+
+  const ustSatz = v.ust_satz === null ? 20 : Number(v.ust_satz);
+  const preis = belegPreis(positionen, (gruppenRoh ?? []) as { id: string }[], {
+    ustSatz,
+    rabattProzent: v.rabatt_prozent === null ? 0 : Number(v.rabatt_prozent),
+    lieferungNetto: v.lieferung_netto === null ? 0 : Number(v.lieferung_netto),
+  });
+
+  /* Netto, das der Kunde schuldet: Positionen nach Rabatt plus Lieferung. */
+  const auftragNetto = Math.round((preis.netto + preis.lieferungNetto) * 100) / 100;
+
+  const { anzahlungBrutto } = anzahlung(preis.gesamt, d.anzahlungProzent);
 
   /* --------------------------------------- 2. AUFTRAGSBESTÄTIGUNG */
   /*
@@ -119,8 +154,8 @@ export async function kaskadeAusloesen(
       kunde_sichtbar: true,
       nummer: v.number as string,
       dateiname: `Auftragsbestätigung ${v.number as string}.pdf`,
-      betrag_netto: s.netto,
-      betrag_brutto: s.brutto,
+      betrag_netto: auftragNetto,
+      betrag_brutto: preis.gesamt,
       status: "entwurf",
       created_by: userId,
     })
@@ -142,12 +177,6 @@ export async function kaskadeAusloesen(
    * ein Paket verkauft, will nicht zwanzig Einzelpreise daneben stehen
    * haben, über die der Kunde dann verhandelt.
    */
-  const { data: gruppenRoh } = await supabase
-    .from("vorgang_gruppe")
-    .select("id, name, beschreibung, sort, paket_preis, einzelpreise_verstecken")
-    .eq("vorgang_id", d.vorgangId)
-    .is("dokument_id", null);
-
   const gruppenAbbildung = new Map<string, string>();
   for (const g of (gruppenRoh ?? []) as unknown as Array<{
     id: string;
@@ -199,6 +228,18 @@ export async function kaskadeAusloesen(
       ist_material: p.ist_material,
       bild_url: p.bild_url,
       beschreibung: p.beschreibung,
+      /*
+       * Die Wahl des Kunden und das Upgrade gehoeren mit eingefroren.
+       * `kunden_auswahl` ist laut Spaltenkommentar in 0041 der Beleg
+       * dafuer, was er tatsaechlich bestellt hat; fiel es hier auf
+       * 'standard' zurueck, war im Streitfall nicht mehr nachweisbar,
+       * welche Option angekreuzt und welches Produkt gewaehlt war.
+       */
+      kunden_auswahl: p.kunden_auswahl,
+      upgrade_article_id: p.upgrade_article_id,
+      upgrade_kategorie: p.upgrade_kategorie,
+      upgrade_aufpreis: p.upgrade_aufpreis,
+      upgrade_text: p.upgrade_text,
     })),
   );
 
@@ -222,7 +263,7 @@ export async function kaskadeAusloesen(
         kunde_sichtbar: true,
         nummer: reNummer,
         dateiname: `Anzahlungsrechnung ${reNummer}.pdf`,
-        betrag_netto: Math.round((anzahlungBrutto / 1.2) * 100) / 100,
+        betrag_netto: nettoAus(anzahlungBrutto, ustSatz),
         betrag_brutto: anzahlungBrutto,
         /* Entwurf, nicht versendet: der Versand ist eine eigene Entscheidung. */
         status: "entwurf",
@@ -305,7 +346,7 @@ export async function kaskadeAusloesen(
     .update({
       phase: "beauftragt",
       phase_seit: new Date().toISOString(),
-      auftragswert_netto: s.netto,
+      auftragswert_netto: auftragNetto,
       anzahlung_prozent: d.anzahlungProzent,
       /*
        * Soll-Werte aus der angenommenen Fassung. Später sind sie nicht
@@ -324,7 +365,7 @@ export async function kaskadeAusloesen(
 
   /* --------------------------------------------------- 7. STROM */
   const teile = [
-    `Auftragswert ${fmt(s.netto)} netto.`,
+    `Auftragswert ${fmt(auftragNetto)} netto.`,
     `Auftragsbestätigung ${v.number as string} erzeugt.`,
     reNummer
       ? `Anzahlungsrechnung ${reNummer} über ${fmt(anzahlungBrutto)} brutto (${d.anzahlungProzent} %) als Entwurf.`
@@ -394,4 +435,9 @@ type PosRoh = {
   ist_material: boolean;
   bild_url: string | null;
   beschreibung: string | null;
+  kunden_auswahl: string | null;
+  upgrade_article_id: string | null;
+  upgrade_kategorie: string | null;
+  upgrade_aufpreis: string | null;
+  upgrade_text: string | null;
 };

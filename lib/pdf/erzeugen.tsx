@@ -4,6 +4,7 @@ import { VorgangPdf, type BelegArt, type VorgangPdfData } from "@/lib/pdf/vorgan
 import { planungFuerVorgang } from "@/lib/planer/zumVorgang";
 import { markeAus } from "@/lib/marke";
 import { anzahlung, summen } from "@/lib/vorgang/modell";
+import { belegPreis, istGewaehlt } from "@/lib/vorgang/belegpreis";
 
 /**
  * Einen Beleg als PDF erzeugen.
@@ -130,7 +131,8 @@ export async function belegPdf(
   const abfrage = supabase
     .from("vorgang_position")
     .select(
-      "sort, gruppe_id, bezeichnung, beschreibung, menge, einheit, ep_netto, ust_satz, rabatt_prozent, optional, kalk_stunden, kalk_ek, ist_material, bild_url",
+      "sort, gruppe_id, bezeichnung, beschreibung, menge, einheit, ep_netto, ust_satz, "
+      + "rabatt_prozent, optional, kunden_auswahl, kalk_stunden, kalk_ek, ist_material, bild_url",
     )
     .eq("vorgang_id", id)
     .order("sort");
@@ -150,6 +152,7 @@ export async function belegPdf(
     ustSatz: Number(p.ust_satz),
     rabattProzent: p.rabatt_prozent === null ? 0 : Number(p.rabatt_prozent),
     optional: Boolean(p.optional),
+    ...(p.optional ? { gewaehlt: istGewaehlt(p.kunden_auswahl) } : {}),
     ...(bildQuelle(p.bild_url) ? { bildUrl: bildQuelle(p.bild_url)! } : {}),
   }));
 
@@ -193,6 +196,27 @@ export async function belegPdf(
     })),
   );
 
+  /*
+   * Der Rahmen einmal, damit Abzug und PDF dieselbe Zahl benutzen.
+   */
+  const rahmen = {
+    ustSatz: v.ust_satz === null ? 20 : Number(v.ust_satz),
+    rabattProzent: wert?.rabatt_prozent ? Number(wert.rabatt_prozent) : 0,
+    lieferungNetto: wert?.lieferung_netto ? Number(wert.lieferung_netto) : 0,
+  };
+
+  /*
+   * Gesamtbetrag des Belegs nach derselben Rechnung wie im Angebot.
+   * Vorher wurde der Anzahlungsabzug aus `summen()` abgeleitet, also ohne
+   * Rabatt, Paketpreis und Lieferung — die Schlussrechnung zog dann einen
+   * anderen Betrag ab, als die Anzahlungsrechnung gefordert hatte.
+   */
+  const belegGesamt = belegPreis(
+    (posRoh ?? []) as unknown as Parameters<typeof belegPreis>[0],
+    (gruppenRoh ?? []) as unknown as Parameters<typeof belegPreis>[1],
+    rahmen,
+  ).gesamt;
+
   /* Anzahlung nur bei der Schlussrechnung abziehen. */
   let abzug: number | null = null;
   if (art === "schlussrechnung") {
@@ -205,7 +229,7 @@ export async function belegPdf(
 
     abzug = anz?.betrag_brutto
       ? Number(anz.betrag_brutto)
-      : anzahlung(s.brutto, Number(v.anzahlung_prozent)).anzahlungBrutto;
+      : anzahlung(belegGesamt, Number(v.anzahlung_prozent)).anzahlungBrutto;
   }
 
   const kunde = v.customer as unknown as {
@@ -239,11 +263,7 @@ export async function belegPdf(
       abschluss: (v.angebot_abschluss as string | null) ?? null,
     },
     gruppen,
-    rahmen: {
-      ustSatz: v.ust_satz === null ? 20 : Number(v.ust_satz),
-      rabattProzent: wert?.rabatt_prozent ? Number(wert.rabatt_prozent) : 0,
-      lieferungNetto: wert?.lieferung_netto ? Number(wert.lieferung_netto) : 0,
-    },
+    rahmen,
     firma: {
       name: (firma?.name as string) ?? "",
       rechtsform: (firma?.rechtsform as string | null) ?? null,
@@ -336,6 +356,7 @@ type PosRoh = {
   kalk_ek: string | null;
   ist_material: boolean;
   bild_url: string | null;
+  kunden_auswahl: string | null;
 };
 
 

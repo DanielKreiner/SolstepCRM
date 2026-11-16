@@ -25,6 +25,13 @@ const PLAUSIBEL_MIN = 15;
 const schema = z.object({
   clientUuid: z.string().uuid(),
   clientTs: z.string().datetime(),
+  /*
+   * Der Zeitpunkt des Sendens, nicht des Erfassens. Nur er taugt zum
+   * Uhrenvergleich. Optional, weil auf den Geräten noch Warteschlangen
+   * ohne das Feld liegen können — ohne Sendezeit wird nicht geprüft
+   * statt falsch geprüft.
+   */
+  sentAt: z.string().datetime().optional(),
   kind: z.enum(["time_start", "time_stop", "stock_move", "material"]),
   payload: z.record(z.string(), z.unknown()),
 });
@@ -81,9 +88,25 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
-  const { clientUuid, clientTs, kind, payload } = body.data;
+  const { clientUuid, clientTs, sentAt, kind, payload } = body.data;
 
-  const abweichungMin = Math.abs(Date.now() - new Date(clientTs).getTime()) / 60000;
+  /*
+   * Die Uhr des Geräts wird gegen die SENDEZEIT geprüft, nie gegen die
+   * Erfassungszeit.
+   *
+   * Vorher stand hier `Date.now()` gegen `clientTs`. clientTs ist der
+   * Moment, in dem der Monteur gestempelt hat — eine Buchung, die drei
+   * Stunden ohne Netz in der Warteschlange lag, kam damit als "Uhr um
+   * 180 Minuten falsch" herein, wurde als `flagged` eingetragen und
+   * vom Ausstempeln (das nach `running` sucht) nie wieder gefunden:
+   * 0:00 im Saldo. Genau der Fall, für den die Warteschlange gebaut ist.
+   *
+   * Steht keine Sendezeit dabei, wird nicht geprüft. Eine fehlende
+   * Angabe ist kein Beweis für eine falsche Uhr.
+   */
+  const abweichungMin = sentAt
+    ? Math.abs(Date.now() - new Date(sentAt).getTime()) / 60000
+    : 0;
   const flagged = abweichungMin > PLAUSIBEL_MIN;
 
   if (kind === "time_start") {
@@ -133,11 +156,22 @@ export async function POST(request: Request) {
      * Betriebs brauchen den Beginn. Sonst wäre eine offline gestempelte
      * Schicht die einzige, für die die Zeitregeln nicht gelten.
      */
+    /*
+     * Offen ist, was kein Ende hat — unabhängig vom Status.
+     *
+     * `status = 'running'` allein genügt nicht: eine Buchung, deren
+     * Start als `flagged` eingetragen wurde, ist genauso offen und
+     * gehört genauso geschlossen. Vorher blieb sie für immer stehen und
+     * zählte mit 0:00. Die jüngste zuerst — gestoppt wird, was zuletzt
+     * begonnen hat.
+     */
     let suche = supabase
       .from("time_entry")
-      .select("id, started_at")
+      .select("id, started_at, status")
       .eq("user_id", me.id)
-      .eq("status", "running");
+      .in("status", ["running", "flagged"])
+      .is("ended_at", null)
+      .order("started_at", { ascending: false });
     if (p.data.entryId) suche = suche.eq("id", p.data.entryId);
 
     const { data: laufend } = await suche.limit(1).maybeSingle();

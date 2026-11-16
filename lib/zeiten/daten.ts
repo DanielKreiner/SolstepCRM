@@ -1,5 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { vacationBalance, type AbsenceRow } from "@/lib/absence";
+import { viennaDay } from "@/lib/format";
 import { tageshinweis } from "@/lib/rules/tagesbild";
 import { arbeitstageImMonat, istArbeitstag } from "@/lib/zeiten/feiertage";
 import { addDays, endOfViennaDay, startOfViennaDay } from "@/lib/time";
@@ -292,7 +294,14 @@ export async function wochenbild(
     const meine = zeilen.filter((z) => z.userId === u.id);
 
     const jeTag = tage.map((tag) => {
-      const amTag = meine.filter((z) => z.von.slice(0, 10) === tag);
+      /*
+       * Der Tag einer Buchung ist ihr WIENER Kalendertag. `slice(0, 10)`
+       * auf dem gespeicherten Instant las den UTC-Tag: eine Buchung am
+       * Montag 00:30 Wien steht als Sonntag 23:30 UTC in der Datenbank
+       * und fiel damit aus allen sieben Tagesspalten heraus — die Woche
+       * zeigte sie nirgends, die Summe darunter schon.
+       */
+      const amTag = meine.filter((z) => viennaDay(z.von) === tag);
       const abwesend = ((abwesenheiten ?? []) as {
         user_id: string;
         from_date: string;
@@ -407,11 +416,17 @@ export async function konten(
         )
         .eq("active", true)
         .order("name"),
-      alleZeiten(supabase, `${monate[0]}-01T00:00:00Z`),
+      alleZeiten(supabase, startOfViennaDay(`${monate[0]}-01`).toISOString()),
+      /*
+       * Auch beantragte Abwesenheiten laden, nicht nur genehmigte: der
+       * Resturlaub zieht das Beantragte mit ab (sonst plant jemand
+       * Urlaub, den er nicht mehr hat). Fürs Monatssoll zählt weiter nur
+       * das Genehmigte — gefiltert wird darum unten, je Rechnung.
+       */
       supabase
         .from("absence")
-        .select("user_id, kind, from_date, to_date, half_day")
-        .eq("status", "approved")
+        .select("user_id, kind, from_date, to_date, half_day, status")
+        .neq("status", "rejected")
         .gte("to_date", `${monate[0]}-01`),
       supabase
         .from("time_correction")
@@ -427,6 +442,7 @@ export async function konten(
     from_date: string;
     to_date: string;
     half_day: boolean;
+    status: string;
   }[];
 
   const offeneJePerson = new Map<string, number>();
@@ -448,16 +464,25 @@ export async function konten(
     const tagesSoll = (Number(u.weekly_hours ?? 0) / 5) * 60;
 
     const verlauf = monate.map((monat) => {
+      /*
+       * Monat nach Wiener Kalendertag. `slice(0, 7)` auf dem Instant
+       * verschob jede Buchung zwischen 00:00 und 01:00 (Sommerzeit
+       * 02:00) Ortszeit auf den Vormonat — eine Nachtschicht am 1.
+       * Oktober zählte im September und riss beide Salden auseinander.
+       */
       const istMin = zeiten
-        .filter((z) => z.user_id === u.id && z.started_at.slice(0, 7) === monat)
+        .filter(
+          (z) => z.user_id === u.id && viennaDay(z.started_at).slice(0, 7) === monat,
+        )
         .reduce(
           (s, z) => s + Math.max(0, (z.duration_min ?? 0) - (z.auto_break_min ?? 0)),
           0,
         );
 
-      /* Abwesenheitstage erfüllen das Soll — sie senken es. */
+      /* Abwesenheitstage erfüllen das Soll — sie senken es. Aber nur
+         genehmigte: ein offener Antrag senkt kein Soll. */
       const freieTage = abwesend
-        .filter((a) => a.user_id === u.id)
+        .filter((a) => a.user_id === u.id && a.status === "approved")
         .reduce((s, a) => {
           let zahl = 0;
           const start = a.from_date > `${monat}-01` ? a.from_date : `${monat}-01`;
@@ -484,25 +509,41 @@ export async function konten(
       return { monat, istMin, sollMin };
     });
 
-    const verbraucht = abwesend
-      .filter((a) => a.user_id === u.id && a.kind === "urlaub")
-      .reduce((s, a) => {
-        const tage =
-          (new Date(a.to_date).getTime() - new Date(a.from_date).getTime()) /
-            86_400_000 +
-          1;
-        return s + (a.half_day ? 0.5 : tage);
-      }, 0);
+    /*
+     * Resturlaub über lib/absence.ts und nicht noch einmal von Hand.
+     *
+     * Hier stand eine zweite Rechnung, und sie war zweifach falsch: sie
+     * filterte auf kind === "urlaub", während das Enum "vacation" heisst
+     * (0001_init.sql) — verbraucht war damit immer 0 und der Resturlaub
+     * zeigte den vollen Jahresanspruch. Und sie zählte Kalendertage
+     * statt Werktage, eine Urlaubswoche also mit sieben Tagen.
+     * /abwesenheiten rechnete daneben richtig; zwei Zahlen für denselben
+     * Resturlaub sind schlimmer als eine falsche.
+     */
+    const meine: AbsenceRow[] = abwesend
+      .filter((a) => a.user_id === u.id)
+      .map((a) => ({
+        kind: a.kind,
+        from: a.from_date,
+        to: a.to_date,
+        halfDay: Boolean(a.half_day),
+        status: a.status,
+      }));
+
+    /* d.bis ist schon ein Wiener Kalendertag (viennaDay() beim Aufruf). */
+    const urlaub = vacationBalance(
+      meine,
+      Number(u.vacation_days_year ?? 0),
+      Number(u.vacation_carry ?? 0),
+      Number(d.bis.slice(0, 4)),
+    );
 
     return {
       userId: u.id,
       name: u.name,
       verlauf,
       saldoMin: verlauf.reduce((s, m) => s + (m.istMin - m.sollMin), 0),
-      resturlaub:
-        Number(u.vacation_days_year ?? 0) +
-        Number(u.vacation_carry ?? 0) -
-        verbraucht,
+      resturlaub: urlaub.rest,
       offeneKorrekturen: offeneJePerson.get(u.id) ?? 0,
     };
   });

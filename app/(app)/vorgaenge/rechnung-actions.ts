@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { anzahlung, summen } from "@/lib/vorgang/modell";
+import { anzahlung } from "@/lib/vorgang/modell";
+import { belegPreis, nettoAus } from "@/lib/vorgang/belegpreis";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -66,7 +67,7 @@ export async function schlussrechnungErstellen(
 
   const { data: v } = await supabase
     .from("vorgang")
-    .select("id, number, phase, anzahlung_prozent")
+    .select("id, number, phase, anzahlung_prozent, ust_satz, rabatt_prozent, lieferung_netto")
     .eq("id", vorgangId)
     .maybeSingle();
 
@@ -104,27 +105,35 @@ export async function schlussrechnungErstellen(
     return { error: "Ohne Auftragsbestätigung gibt es keinen Auftragswert.", ok: null };
   }
 
-  const { data: posRoh } = await supabase
-    .from("vorgang_position")
-    .select("menge, ep_netto, ust_satz, kalk_stunden, kalk_ek, ist_material")
-    .eq("dokument_id", ab.id);
+  /*
+   * Gerechnet wird mit derselben Formel wie im Angebot. Vorher stand hier
+   * `summen()`, das `menge × ep_netto` addiert — ohne Positionsrabatt,
+   * ohne Paketpreis einer Gruppe, ohne Lieferkosten und ohne die nicht
+   * gewählten Optionen auszunehmen. Die Rechnung forderte dadurch einen
+   * anderen Betrag, als das Angebot ausgewiesen hatte.
+   */
+  const [{ data: posRoh }, { data: gruppenRoh }] = await Promise.all([
+    supabase
+      .from("vorgang_position")
+      .select(
+        "id, gruppe_id, menge, ep_netto, rabatt_prozent, optional, kunden_auswahl, kalk_ek",
+      )
+      .eq("dokument_id", ab.id),
+    supabase
+      .from("vorgang_gruppe")
+      .select("id, paket_preis")
+      .eq("dokument_id", ab.id),
+  ]);
 
-  const s = summen(
-    ((posRoh ?? []) as unknown as {
-      menge: string;
-      ep_netto: string;
-      ust_satz: string;
-      kalk_stunden: string | null;
-      kalk_ek: string | null;
-      ist_material: boolean;
-    }[]).map((p) => ({
-      menge: Number(p.menge),
-      epNetto: Number(p.ep_netto),
-      ustSatz: Number(p.ust_satz),
-      kalkStunden: p.kalk_stunden === null ? null : Number(p.kalk_stunden),
-      kalkEk: p.kalk_ek === null ? null : Number(p.kalk_ek),
-      istMaterial: p.ist_material,
-    })),
+  const ustSatz = v.ust_satz === null ? 20 : Number(v.ust_satz);
+  const preis = belegPreis(
+    (posRoh ?? []) as unknown as Parameters<typeof belegPreis>[0],
+    (gruppenRoh ?? []) as unknown as Parameters<typeof belegPreis>[1],
+    {
+      ustSatz,
+      rabattProzent: v.rabatt_prozent === null ? 0 : Number(v.rabatt_prozent),
+      lieferungNetto: v.lieferung_netto === null ? 0 : Number(v.lieferung_netto),
+    },
   );
 
   /*
@@ -141,9 +150,9 @@ export async function schlussrechnungErstellen(
 
   const anzahlungBrutto = anz?.betrag_brutto
     ? Number(anz.betrag_brutto)
-    : anzahlung(s.brutto, Number(v.anzahlung_prozent)).anzahlungBrutto;
+    : anzahlung(preis.gesamt, Number(v.anzahlung_prozent)).anzahlungBrutto;
 
-  const rest = Math.round((s.brutto - anzahlungBrutto) * 100) / 100;
+  const rest = Math.round((preis.gesamt - anzahlungBrutto) * 100) / 100;
   if (rest <= 0) {
     return {
       error: "Die Anzahlung deckt den Auftragswert bereits ab — keine Schlussrechnung nötig.",
@@ -170,7 +179,7 @@ export async function schlussrechnungErstellen(
       typ: "schlussrechnung",
       nummer: nr,
       dateiname: `Schlussrechnung ${nr}.pdf`,
-      betrag_netto: Math.round((rest / 1.2) * 100) / 100,
+      betrag_netto: nettoAus(rest, ustSatz),
       betrag_brutto: rest,
       status: "entwurf",
       faellig_am: faellig.toISOString().slice(0, 10),
@@ -188,7 +197,7 @@ export async function schlussrechnungErstellen(
     vorgang_id: vorgangId,
     typ: "rechnung",
     titel: `Schlussrechnung ${nr} erstellt`,
-    body: `${fmt(s.brutto)} brutto minus Anzahlung ${fmt(anzahlungBrutto)} = ${fmt(rest)}. Zahlungsziel 14 Tage.`,
+    body: `${fmt(preis.gesamt)} brutto minus Anzahlung ${fmt(anzahlungBrutto)} = ${fmt(rest)}. Zahlungsziel 14 Tage.`,
     dokument_id: dok.id,
     created_by: z1.me.id,
   });

@@ -113,6 +113,16 @@ export async function flush(): Promise<FlushResult> {
           clientUuid: item.id,
           kind: item.kind,
           clientTs: item.clientTs,
+          /*
+           * Die Sendezeit, getrennt von der Erfassungszeit.
+           *
+           * Der Server prüft die Uhr des Geräts und darf dafür nur
+           * `sentAt` gegen seine eigene Zeit stellen. Rechnete er gegen
+           * `clientTs`, wäre jede Buchung, die über Nacht in der
+           * Warteschlange lag, als "Uhr um 600 Minuten falsch"
+           * markiert — die Wartezeit ist aber keine Uhrenabweichung.
+           */
+          sentAt: new Date().toISOString(),
           payload: item.payload,
         }),
       });
@@ -124,8 +134,23 @@ export async function flush(): Promise<FlushResult> {
       }
 
       const text = await antwort.text();
-      // 4xx sind fachliche Ablehnungen — die werden nie erfolgreich, ein
-      // ewiger Retry blockiert nur die restliche Warteschlange.
+      /*
+       * 401 und 403 sind KEINE fachliche Ablehnung, sondern eine
+       * abgelaufene Sitzung. Verwerfen hiesse: wer am Nachmittag
+       * ausgeloggt wird, verliert seinen ganzen Tag. Die Buchung bleibt
+       * liegen und geht nach dem nächsten Anmelden raus — und der Rest
+       * der Schlange wird gar nicht erst versucht, der bekäme dieselbe
+       * Antwort.
+       */
+      if (antwort.status === 401 || antwort.status === 403) {
+        await markFailed(item, "Nicht angemeldet — wird nach dem Anmelden gesendet.");
+        fehler.push("Nicht angemeldet — Buchungen bleiben gespeichert.");
+        break;
+      }
+
+      // Die übrigen 4xx sind fachliche Ablehnungen — die werden nie
+      // erfolgreich, ein ewiger Retry blockiert nur die restliche
+      // Warteschlange.
       if (antwort.status >= 400 && antwort.status < 500) {
         await remove(item.id);
         fehler.push(kurz(text));
