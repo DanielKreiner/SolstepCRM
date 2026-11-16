@@ -158,14 +158,26 @@ async function gruppeHolen(
    */
   const { data: da } = await supabase
     .from("vorgang_gruppe")
-    .select("id")
+    .select("id, name")
     .eq("vorgang_id", vorgangId)
     .is("dokument_id", null)
-    .eq("name", name)
+    .like("name", "PV-Anlage%")
     .order("sort")
     .limit(1);
   const treffer = (da ?? [])[0];
-  if (treffer) return treffer.id as string;
+  if (treffer) {
+    /*
+     * Gesucht wird ueber den Namensanfang, nicht ueber den ganzen Namen.
+     * Die Leistung steht mit drin, und wer die Planung von 9,4 auf 10,2
+     * kWp aendert, bekam bei der zweiten Uebergabe sonst eine ZWEITE
+     * Gruppe „PV-Anlage 10,2 kWp" neben der alten — ein Angebot mit zwei
+     * Anlagen-Ueberschriften fuer dieselbe Anlage.
+     */
+    if (treffer.name !== name) {
+      await supabase.from("vorgang_gruppe").update({ name }).eq("id", treffer.id as string);
+    }
+    return treffer.id as string;
+  }
 
   const { data: bestand } = await supabase
     .from("vorgang_gruppe")

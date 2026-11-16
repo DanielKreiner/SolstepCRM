@@ -121,12 +121,34 @@ const mpptSchema = z.object({
 const wrSchema = z.object({
   hersteller: z.string().trim().min(1, "Hersteller fehlt."),
   bezeichnung: z.string().trim().min(1, "Bezeichnung fehlt."),
-  maxDc: z.number().positive().max(2000),
+  /*
+   * Die hoechste DC-SPANNUNG in Volt, nicht die Leistung. Genau diese
+   * Verwechslung lag im Bestand: beim Fronius Symo GEN24 standen 15
+   * statt 1.000, und `maxModuleProString` rechnete `floor(15 / 44,6)`,
+   * also null Module je String. Die Stringpruefung war damit rechnerisch
+   * tot, ohne dass irgendwo ein Fehler erschien. Ein Wechselrichter mit
+   * weniger als 100 V Grenze existiert nicht.
+   */
+  maxDc: z.number().min(100, "Die DC-Spannung wirkt zu klein — Volt, nicht kW.").max(2000),
   acNenn: z.number().positive().max(1000),
   maxDcLeistung: z.number().positive().max(2000).nullable(),
   hybrid: z.boolean(),
   mppt: z.array(mpptSchema).min(1, "Mindestens ein MPP-Tracker."),
   datenblatt: z.string().trim().max(500),
+}).superRefine((w, ctx) => {
+  /*
+   * Die Spannungsgrenze muss oberhalb des MPP-Fensters liegen. Steht sie
+   * darunter, passt rechnerisch kein einziges Modul in einen String, und
+   * die Pruefung meldet still „maximal 0 Module" statt eines Fehlers.
+   */
+  const hoechstesFenster = Math.max(...w.mppt.map((m) => m.uMax));
+  if (w.maxDc < hoechstesFenster) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["maxDc"],
+      message: `Die DC-Spannung (${w.maxDc} V) liegt unter dem MPP-Fenster (${hoechstesFenster} V).`,
+    });
+  }
 });
 
 export async function wechselrichterSpeichern(

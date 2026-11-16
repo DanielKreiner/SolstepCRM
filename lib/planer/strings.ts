@@ -213,3 +213,39 @@ export function strangUmschalten(plan: Plan, strangId: string, schluessel: strin
     }),
   };
 }
+
+/**
+ * Strings auf den tatsächlichen Dachbelag nachführen.
+ *
+ * Ändert sich eine Fläche — eine Sperrzone kommt dazu, der Randabstand
+ * wächst, eine Kante wandert —, schaltet `nachfuehren` die Module ab, die
+ * jetzt im Weg liegen. Die Strings blieben dabei stehen und zeigten
+ * weiter auf Module, die es nicht mehr gibt.
+ *
+ * Das ist kein Schönheitsfehler: `pruefe` rechnet die Stringspannung aus
+ * der Anzahl der zugeordneten Module. Lagen vier davon unter einer neuen
+ * Sperrzone, meldete der Prüfbericht weiter zehn Module je String, der
+ * Befund „nicht zugeordnet" blieb bei null und die Prüfung stand auf
+ * grün — während real nur sechs Module in Reihe hängen und damit unter
+ * das MPP-Fenster rutschen können. Dasselbe Blatt geht an den Elektriker.
+ *
+ * Bereinigt wurde bisher nur beim Entfernen von Hand (`modulEntfernen`)
+ * und beim Wegfall einer ganzen Gruppe.
+ */
+export function stringsNachfuehren(plan: Plan): Plan {
+  const vorhanden = new Set<string>();
+  for (const g of plan.gruppen) {
+    for (const z of aktiveZellen(g)) {
+      vorhanden.add(modulSchluessel(g.id, z.reihe, z.spalte));
+    }
+  }
+
+  let geaendert = false;
+  const strings = plan.strings.map((s) => {
+    const module = s.module.filter((m) => vorhanden.has(m));
+    if (module.length !== s.module.length) geaendert = true;
+    return module.length === s.module.length ? s : { ...s, module };
+  });
+
+  return geaendert ? { ...plan, strings } : plan;
+}

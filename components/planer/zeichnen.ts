@@ -233,10 +233,10 @@ export function zeichneFlaeche(ctx: CanvasRenderingContext2D, s: Sicht, f: Dachf
        * anfasst.
        */
       const ecken = h.punkte.map((q) => bild(k, q));
-      const r = griffRadius(ecken, 5.5);
-      for (const b of ecken) {
+      for (let i = 0; i < ecken.length; i++) {
+        const b = ecken[i]!;
         ctx.beginPath();
-        ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, griffRadius(ecken, 5.5, i), 0, Math.PI * 2);
         ctx.fillStyle = "#ffffff";
         ctx.fill();
         ctx.strokeStyle = FARBEN.sperrstrich;

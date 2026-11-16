@@ -3,7 +3,7 @@ import {
   abstandZumRand,
   eckeZiehen,
   griffRadius,
-  istAchsenRechteck,
+  istRechteck,
   azimutAusTraufe,
   azimutVon,
   type Dachflaeche,
@@ -565,9 +565,9 @@ describe("hoeheAufFlaeche", () => {
  * Hindernis verschieben möchte, dann springt das immer auf ein Rechteck
  * um und kann es nicht mehr gut verschieben, bzw fast gar nicht mehr."
  *
- * Zwei Ursachen, beide hier festgenagelt: Die Eckgriffe deckten kleine
- * Formen vollständig ab, und das Ziehen an einer Ecke machte aus jedem
- * Viereck ein achsparalleles Rechteck.
+ * Zwei Ursachen: Die Eckgriffe deckten kleine Formen vollständig ab, und
+ * das Ziehen an einer Ecke zwang jedes Viereck in die Achsen der Karte —
+ * ein Kamin auf einem schrägen Dach ist aber ein gedrehtes Rechteck.
  */
 describe("Eckgriffe an Hindernissen", () => {
   const quadrat = (kante: number) => [
@@ -582,32 +582,56 @@ describe("Eckgriffe an Hindernissen", () => {
     // breit. Mit dem früheren festen Radius von zwölf lag die Mitte in
     // ALLEN vier Eckgriffen — jeder Griff zog an der Form.
     const ecken = quadrat(10);
-    const r = griffRadius(ecken, 12);
     const mitte = { x: 5, y: 5 };
-    for (const e of ecken) {
-      expect(Math.hypot(e.x - mitte.x, e.y - mitte.y)).toBeGreaterThan(r);
-    }
+    ecken.forEach((e, i) => {
+      expect(Math.hypot(e.x - mitte.x, e.y - mitte.y)).toBeGreaterThan(
+        griffRadius(ecken, 12, i),
+      );
+    });
   });
 
-  it("greift bei einer grossen Zone wie gewohnt mit dem vollen Radius", () => {
-    expect(griffRadius(quadrat(200), 12)).toBe(12);
+  it("greift bei einer grossen Zone mit dem vollen Radius", () => {
+    expect(griffRadius(quadrat(200), 12, 0)).toBe(12);
   });
 
-  it("erkennt nur achsparallele Rechtecke als solche", () => {
-    expect(istAchsenRechteck(quadrat(4))).toBe(true);
-    // Dasselbe Rechteck um 45° gedreht ist keins mehr.
+  it("schrumpft nur die Ecken an der kurzen Kante, nicht alle", () => {
+    // Eine lange Gaube mit einer kurzen Stirnseite: an den Ecken der
+    // langen Kanten darf der Griff voll bleiben.
+    const gaube = [
+      { x: 0, y: 0 },
+      { x: 300, y: 0 },
+      { x: 300, y: 9 },
+      { x: 0, y: 9 },
+    ];
+    expect(griffRadius(gaube, 12, 0)).toBe(3);
+    expect(griffRadius(gaube, 12, 1)).toBe(3);
+  });
+
+  it("erkennt ein gedrehtes Rechteck als Rechteck", () => {
+    // Genau der Fall vom schrägen Dach: achsparallel ist es nicht.
+    const gedreht = [
+      { x: 0, y: 0 },
+      { x: 3, y: 1 },
+      { x: 2.5, y: 2.5 },
+      { x: -0.5, y: 1.5 },
+    ];
+    expect(istRechteck(gedreht)).toBe(true);
+    expect(istRechteck(quadrat(4))).toBe(true);
+  });
+
+  it("weist ein gewolltes Trapez ab", () => {
     expect(
-      istAchsenRechteck([
-        { x: 0, y: 2 },
-        { x: 2, y: 0 },
-        { x: 4, y: 2 },
-        { x: 2, y: 4 },
+      istRechteck([
+        { x: 0, y: 0 },
+        { x: 4, y: 0 },
+        { x: 3, y: 2 },
+        { x: 0.2, y: 2 },
       ]),
     ).toBe(false);
-    expect(istAchsenRechteck([{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 2 }])).toBe(false);
+    expect(istRechteck([{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 2 }])).toBe(false);
   });
 
-  it("verformt ein frei gezeichnetes Viereck nicht zum Rechteck", () => {
+  it("verformt ein frei gezeichnetes Viereck nicht", () => {
     const schief = [
       { x: 0, y: 0 },
       { x: 4, y: 0.6 },
@@ -621,12 +645,25 @@ describe("Eckgriffe an Hindernissen", () => {
     expect(gezogen[3]).toEqual(schief[3]);
   });
 
-  it("zieht ein echtes Rechteck weiter an den Nachbarecken auf", () => {
-    const r = quadrat(4);
-    const gezogen = eckeZiehen(r, 2, { x: 6, y: 5 });
-    // Gegenüberliegende Ecke bleibt stehen, das Rechteck bleibt eines.
+  it("zieht ein Rechteck auf und behält dabei seine Drehlage", () => {
+    const gedreht = [
+      { x: 0, y: 0 },
+      { x: 3, y: 1 },
+      { x: 2.5, y: 2.5 },
+      { x: -0.5, y: 1.5 },
+    ];
+    const gezogen = eckeZiehen(gedreht, 1, { x: 6, y: 2 });
+    // Gegenüberliegende Ecke bleibt stehen …
+    expect(gezogen[3]).toEqual(gedreht[3]);
+    // … und die Form ist immer noch ein Rechteck, nicht achsparallel.
+    expect(istRechteck(gezogen)).toBe(true);
+    expect(Math.abs(gezogen[0]!.y - gezogen[1]!.y)).toBeGreaterThan(0.1);
+  });
+
+  it("zieht ein achsparalleles Rechteck weiter wie gewohnt auf", () => {
+    const gezogen = eckeZiehen(quadrat(4), 2, { x: 6, y: 5 });
     expect(gezogen[0]).toEqual({ x: 0, y: 0 });
     expect(gezogen[2]).toEqual({ x: 6, y: 5 });
-    expect(istAchsenRechteck(gezogen)).toBe(true);
+    expect(istRechteck(gezogen)).toBe(true);
   });
 });

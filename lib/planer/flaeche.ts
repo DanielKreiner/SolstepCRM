@@ -669,41 +669,68 @@ export function verkuerzt(masz: number, neigungGrad: number): number {
  * Betrieb kam das als „springt immer auf ein Rechteck um und lässt sich
  * fast gar nicht mehr verschieben".
  *
- * Deshalb hängt der Radius an der Form: höchstens ein Drittel der
- * kürzesten Kante. So bleibt bei jeder Grösse eine Innenfläche übrig,
- * die verschiebt. Die Untergrenze von drei Punkten hält die Ecken auch
- * bei winzigen Formen noch greifbar — wer dort genau arbeiten will,
- * zoomt ohnehin hinein.
+ * Der Radius hängt deshalb an den beiden Kanten, die an DIESER Ecke
+ * zusammenlaufen, und beträgt höchstens ein Drittel der kürzeren. Damit
+ * bleibt bei jeder Grösse eine Innenfläche übrig, die verschiebt: auf
+ * einem Quadrat liegt die Mitte das 0,707-fache der Kantenlänge von
+ * jeder Ecke entfernt, also immer ausserhalb eines Drittels.
+ *
+ * Je Ecke und nicht für die ganze Form, weil sonst eine einzige kurze
+ * Kante die Griffe an allen Ecken einer grossen Gaube zusammenschrumpfen
+ * liesse. Und ohne Untergrenze: eine Form, die zu klein zum Greifen ist,
+ * soll sich verschieben lassen — wer dort genau arbeiten will, zoomt
+ * hinein.
  */
-export function griffRadius(ecken: ReadonlyArray<Meter>, standard: number): number {
-  if (ecken.length < 2) return standard;
-  let kuerzeste = Infinity;
-  for (let i = 0; i < ecken.length; i++) {
-    const a = ecken[i]!;
-    const b = ecken[(i + 1) % ecken.length]!;
-    kuerzeste = Math.min(kuerzeste, Math.hypot(b.x - a.x, b.y - a.y));
-  }
-  if (!Number.isFinite(kuerzeste)) return standard;
-  return Math.max(3, Math.min(standard, kuerzeste / 3));
+export function griffRadius(
+  ecken: ReadonlyArray<Meter>,
+  standard: number,
+  index: number,
+): number {
+  const n = ecken.length;
+  if (n < 2) return standard;
+  const hier = ecken[((index % n) + n) % n]!;
+  const vor = ecken[((index - 1 + n) % n)]!;
+  const nach = ecken[((index + 1) % n)]!;
+  const kuerzeste = Math.min(
+    Math.hypot(hier.x - vor.x, hier.y - vor.y),
+    Math.hypot(nach.x - hier.x, nach.y - hier.y),
+  );
+  if (!Number.isFinite(kuerzeste) || kuerzeste <= 0) return standard;
+  return Math.min(standard, kuerzeste / 3);
 }
 
 /**
- * Ist das Viereck ein achsparalleles Rechteck?
+ * Ist das Viereck ein Rechteck — in welcher Drehlage auch immer?
  *
- * Nur dann darf das Ziehen an einer Ecke die Nachbarn mitnehmen. Ein
- * frei gezeichnetes Viereck — vier Klicks um einen schrägen Kamin — ist
- * keins, und es in eines zu verwandeln ist Datenverlust, kein Komfort.
+ * Die erste Fassung verlangte achsparallele Kanten mit zwei Zentimetern
+ * Toleranz. Beides war falsch. Ein Kamin auf einem schrägen Dach wird
+ * als gedrehtes Rechteck gezeichnet und ist nie achsparallel — genau
+ * deshalb sprang er beim Ziehen an einer Ecke sichtbar um. Und zwei
+ * Zentimeter sind bei üblicher Zoomstufe rund ein Fünftel Bildpunkt,
+ * weniger als das Rasterfangmass von fünf Zentimetern; ein frei
+ * geklicktes Rechteck erfüllte das nie.
+ *
+ * Geprüft wird deshalb der Winkel: an jeder Ecke müssen die beiden
+ * Kanten annähernd senkrecht aufeinander stehen. Sechs Grad lassen den
+ * Klickfehler durch und weisen ein gewolltes Trapez ab.
  */
-export function istAchsenRechteck(punkte: ReadonlyArray<Meter>, toleranz = 0.02): boolean {
+export function istRechteck(
+  punkte: ReadonlyArray<Meter>,
+  toleranzGrad = 6,
+): boolean {
   if (punkte.length !== 4) return false;
+  const schwelle = Math.sin((toleranzGrad * Math.PI) / 180);
   for (let i = 0; i < 4; i++) {
-    const a = punkte[i]!;
-    const b = punkte[(i + 1) % 4]!;
-    const waagrecht = Math.abs(a.y - b.y) <= toleranz;
-    const senkrecht = Math.abs(a.x - b.x) <= toleranz;
-    // Jede Kante muss auf genau einer Achse liegen, nicht auf beiden
-    // (das wäre eine Kante der Länge null).
-    if (waagrecht === senkrecht) return false;
+    const hier = punkte[i]!;
+    const vor = punkte[(i + 3) % 4]!;
+    const nach = punkte[(i + 1) % 4]!;
+    const u = { x: vor.x - hier.x, y: vor.y - hier.y };
+    const w = { x: nach.x - hier.x, y: nach.y - hier.y };
+    const lu = Math.hypot(u.x, u.y);
+    const lw = Math.hypot(w.x, w.y);
+    if (lu < 1e-9 || lw < 1e-9) return false;
+    const kosinus = (u.x * w.x + u.y * w.y) / (lu * lw);
+    if (Math.abs(kosinus) > schwelle) return false;
   }
   return true;
 }
@@ -711,10 +738,11 @@ export function istAchsenRechteck(punkte: ReadonlyArray<Meter>, toleranz = 0.02)
 /**
  * Eine Ecke eines Hindernisses auf `ziel` ziehen.
  *
- * Beim achsparallelen Rechteck gehen die beiden Nachbarn mit und die
- * gegenüberliegende Ecke bleibt stehen — das ist das gewohnte Aufziehen.
- * Bei jeder anderen Form wandert nur die angefasste Ecke; die übrigen
- * bleiben, wo sie gezeichnet wurden.
+ * Beim Rechteck gehen die beiden Nachbarn mit und die gegenüberliegende
+ * Ecke bleibt stehen — gerechnet in den Achsen der FORM, nicht in denen
+ * der Karte, damit ein gedrehter Kamin gedreht bleibt. Bei jeder anderen
+ * Form wandert nur die angefasste Ecke; die übrigen bleiben, wo sie
+ * gezeichnet wurden.
  */
 export function eckeZiehen(
   punkte: ReadonlyArray<Meter>,
@@ -722,24 +750,36 @@ export function eckeZiehen(
   ziel: Meter,
 ): Meter[] {
   if (index < 0 || index >= punkte.length) return punkte.map((q) => ({ ...q }));
-  if (!istAchsenRechteck(punkte)) {
+  if (!istRechteck(punkte)) {
     return punkte.map((q, i) => (i === index ? { ...ziel } : { ...q }));
   }
 
-  const gegenueber = punkte[(index + 2) % 4]!;
-  const naechste = (index + 1) % 4;
-  const vorige = (index + 3) % 4;
+  const fest = punkte[(index + 2) % 4]!;
+  const nachbarA = (index + 1) % 4;
+  const nachbarB = (index + 3) % 4;
+
   /*
-   * Welcher Nachbar sich welche Achse mit der festen Ecke teilt, hängt
-   * an der Umlaufrichtung. Statt sie zu erraten: Der Nachbar übernimmt
-   * die Koordinate, in der er der festen Ecke schon gleicht.
+   * Die beiden Kantenrichtungen der Form, ausgehend von der festen Ecke.
+   * Der neue Eckpunkt wird darauf projiziert; so bleibt das Rechteck ein
+   * Rechteck, ohne dass seine Drehlage verloren geht.
    */
+  const richtung = (zu: Meter): Meter => {
+    const dx = zu.x - fest.x;
+    const dy = zu.y - fest.y;
+    const l = Math.hypot(dx, dy) || 1;
+    return { x: dx / l, y: dy / l };
+  };
+  const u = richtung(punkte[nachbarA]!);
+  const w = richtung(punkte[nachbarB]!);
+
+  const d = { x: ziel.x - fest.x, y: ziel.y - fest.y };
+  const a = d.x * u.x + d.y * u.y;
+  const b = d.x * w.x + d.y * w.y;
+
   return punkte.map((q, i) => {
     if (i === index) return { ...ziel };
-    if (i === naechste || i === vorige) {
-      const teiltX = Math.abs(q.x - gegenueber.x) < Math.abs(q.y - gegenueber.y);
-      return teiltX ? { x: gegenueber.x, y: ziel.y } : { x: ziel.x, y: gegenueber.y };
-    }
+    if (i === nachbarA) return { x: fest.x + u.x * a, y: fest.y + u.y * a };
+    if (i === nachbarB) return { x: fest.x + w.x * b, y: fest.y + w.y * b };
     return { ...q };
   });
 }

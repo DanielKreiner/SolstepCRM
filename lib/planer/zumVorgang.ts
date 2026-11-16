@@ -103,8 +103,9 @@ export async function planungFuerVorgang(
    * und im PDF — zwei Preisrechnungen in einem Dokument gäbe es sonst
    * wieder.
    */
-  const preis = berechne(
-    zeilen.map((x, i) => ({
+  const preisAus = (auswahl: typeof zeilen) =>
+    berechne(
+    auswahl.map((x, i) => ({
       id: String(i),
       gruppeId: x.gruppe_id,
       menge: Number(x.menge),
@@ -112,7 +113,7 @@ export async function planungFuerVorgang(
       ustSatz: Number(x.ust_satz),
       rabattProzent: Number(x.rabatt_prozent ?? 0),
       optional: Boolean(x.optional),
-      gewaehlt: x.kunden_auswahl === "gewaehlt",
+      gewaehlt: x.kunden_auswahl === "gewaehlt" || x.kunden_auswahl === "upgraded",
     })),
     ((gruppenZeilen ?? []) as Array<{ id: string; paket_preis: string | null }>).map((g) => ({
       id: g.id,
@@ -123,7 +124,9 @@ export async function planungFuerVorgang(
       rabattProzent: Number(rahmenZeile?.rabatt_prozent ?? 0),
       lieferungNetto: Number(rahmenZeile?.lieferung_netto ?? 0),
     },
-  );
+    );
+
+  const preis = preisAus(zeilen);
   const angebotssumme = zeilen.length > 0 ? preis.gesamt : null;
 
   const speicherTypen = ((speicherZeilen ?? []) as Array<Record<string, unknown>>).map((sp) => ({
@@ -199,13 +202,28 @@ export async function planungFuerVorgang(
   const speicherArtikel = new Set(
     [geraet?.artikel_id, geraet?.bms_artikel_id].filter((x): x is string => !!x),
   );
-  const speicherAusPositionen = zeilen
-    .filter((x) => x.article_id && speicherArtikel.has(x.article_id))
-    .reduce(
-      (sum, x) =>
-        sum + Number(x.menge) * Number(x.ep_netto) * (1 - Number(x.rabatt_prozent ?? 0) / 100),
-      0,
-    );
+  /*
+   * Was der Speicher kostet, ist die DIFFERENZ zweier Gesamtpreise: das
+   * Angebot mit und ohne die Speicherzeilen.
+   *
+   * Vorher wurden die Zeilen netto aufsummiert und dieser Betrag von
+   * `anlagenpreis` abgezogen — der ist aber brutto inklusive Lieferung.
+   * Bei 8.000 Euro Speicher fehlten damit 1.600 Euro Umsatzsteuer, die
+   * Spalte „ohne Speicher" stand entsprechend zu hoch, und der Satz
+   * „Der Speicher kostet 8.000 Euro" nannte netto, während jede andere
+   * Zahl auf der Seite brutto war.
+   *
+   * Über die Differenz stimmen ausserdem Rabatt, Steuersatz und die
+   * Behandlung nicht gewählter Optionen automatisch: eine Option, die
+   * der Kunde nicht angekreuzt hat, zählt in beiden Rechnungen nicht und
+   * fällt damit aus der Differenz heraus.
+   */
+  const speicherAusPositionen = Math.max(
+    0,
+    Math.round(
+      (preis.gesamt - preisAus(zeilen.filter((x) => !(x.article_id && speicherArtikel.has(x.article_id)))).gesamt) * 100,
+    ) / 100,
+  );
   /*
    * Kein Richtwert als Rückfall. Verglichen wird mit dem, was der
    * Speicher im Angebot kostet — steht er dort nicht, gibt es nichts

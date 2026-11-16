@@ -40,7 +40,7 @@ import {
   type Plan,
   strangFarbe,
 } from "@/lib/planer/plan";
-import { strangUmschalten, strangWeg } from "@/lib/planer/strings";
+import { strangUmschalten, strangWeg, stringsNachfuehren } from "@/lib/planer/strings";
 import type { Aufbauart } from "@/lib/planer/setzen";
 import {
   anbaustelleSetzen,
@@ -844,10 +844,9 @@ export function Leinwand(p: LeinwandProps) {
            * liess sich nicht mehr verschieben.
            */
           const ecken = h.punkte.map((q) => meterZuBild(k, q));
-          const r = griffRadius(ecken, GRIFF);
           for (let i = 0; i < ecken.length; i++) {
             const b = ecken[i]!;
-            if (Math.hypot(b.x - bp.x, b.y - bp.y) <= r) {
+            if (Math.hypot(b.x - bp.x, b.y - bp.y) <= griffRadius(ecken, GRIFF, i)) {
               return { art: "sperrEcke" as const, flaeche: f.id, hindernis: h.id, index: i };
             }
           }
@@ -1030,7 +1029,14 @@ export function Leinwand(p: LeinwandProps) {
             return nachfuehren(g, ziel, besetzt);
           });
 
-      s.onPlan({ ...s.plan, flaechen, gruppen }, schritt);
+      /*
+       * Und die Strings hinterher: `nachfuehren` schaltet Module ab, die
+       * jetzt unter einer Sperrzone oder ausserhalb des Randabstands
+       * liegen. Blieben sie in den Strings stehen, rechnete die
+       * elektrische Pruefung mit einer Spannung, die nie anliegt, und
+       * meldete trotzdem gruen.
+       */
+      s.onPlan(stringsNachfuehren({ ...s.plan, flaechen, gruppen }), schritt);
     },
     [],
   );
