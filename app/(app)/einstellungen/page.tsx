@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Abschnitt } from "@/components/ui/Abschnitt";
 import { Einrichtung, type Punkt } from "./Einrichtung";
+import { KreisForm, type KreisWerte } from "./Nummernkreise";
 import {
   FahrzeugForm,
   FahrzeugNeu,
@@ -25,7 +26,6 @@ import { ChecklisteForm, FirmaForm, MarkeForm } from "./MarkeForms";
 import { ausJson } from "@/lib/rules/zeitregeln";
 import { KpiKarte } from "@/components/ui/KpiKarte";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Pill } from "@/components/ui/Pill";
 import { ROLE_LABEL } from "@/lib/nav";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -85,21 +85,18 @@ const STATUS_TEXT: Record<string, string> = {
   cancelled: "Gekündigt",
 };
 
-const NUMMERNKREIS_LABEL: Record<string, string> = {
-  quote: "Angebote",
-  job: "Aufträge",
-  invoice: "Rechnungen",
-  ticket: "Service-Tickets",
-  purchase_order: "Bestellungen",
-};
-
-const NUMMERNKREIS_PREFIX: Record<string, string> = {
-  quote: "AN",
-  job: "A",
-  invoice: "RE",
-  ticket: "S",
-  purchase_order: "B",
-};
+/*
+ * Die vier Belegarten, die heute Nummern ziehen. "quote" und "job"
+ * standen hier noch aus der Zeit vor dem Vorgangs-Umbau — die Tabellen
+ * dazu gibt es seit 0039 nicht mehr, und ein Nummernkreis, den niemand
+ * zieht, verwirrt nur.
+ */
+const NUMMERNKREISE = [
+  { kind: "vorgang", label: "Vorgänge", praefix: "V" },
+  { kind: "invoice", label: "Rechnungen", praefix: "RE" },
+  { kind: "ticket", label: "Serviceanliegen", praefix: "S" },
+  { kind: "purchase_order", label: "Bestellungen", praefix: "B" },
+] as const;
 
 export default async function EinstellungenPage({
   searchParams,
@@ -185,6 +182,18 @@ export default async function EinstellungenPage({
    * wer täglich eine Rolle umstellt, will nicht jedes Mal an einer
    * Checkliste vorbei.
    */
+  /*
+   * Das laufende Jahr in Wiener Zeit — der Nummernkreis ist je Jahr
+   * eigenständig, und am 1. Jänner um 00:30 wäre es nach UTC noch das
+   * alte.
+   */
+  const JAHR = Number(
+    new Intl.DateTimeFormat("de-AT", {
+      timeZone: "Europe/Vienna",
+      year: "numeric",
+    }).format(new Date()),
+  );
+
   const eingerichtet = Boolean(company?.onboarded_at);
   const bereich: Bereich = gewaehlt ?? (eingerichtet ? "rechte" : "einrichtung");
 
@@ -646,44 +655,44 @@ export default async function EinstellungenPage({
 
           {bereich === "nummernkreise" ? (
             <Abschnitt titel="Nummernkreise">
-              <p className="-mt-1 mb-4 text-[12.5px] text-muted">
+              <p className="-mt-1 mb-4 max-w-[72ch] text-[12.5px] leading-[1.55] text-muted">
                 Format <span className="num">Präfix-Jahr-laufend</span>, je
-                Mandant und Jahr eine eigene Reihe. Der Zähler wird unter einer
-                Sperre hochgezählt — zwei gleichzeitige Angebote können nicht
-                dieselbe Nummer bekommen. Bewusst nicht editierbar: eine
-                zurückgesetzte Reihe erzeugt doppelte Belegnummern.
+                Mandant und Jahr eine eigene Reihe. Der Zähler läuft unter einer
+                Sperre hoch — zwei gleichzeitig erzeugte Belege können nicht
+                dieselbe Nummer bekommen. Die nächste Nummer lässt sich
+                anheben, etwa um an die bisherige Nummerierung des Betriebs
+                anzuschliessen. Senken geht nicht: Eine zurückgesetzte Reihe
+                würde Nummern ein zweites Mal vergeben.
               </p>
 
-              {(zaehlerstand ?? []).length === 0 ? (
-                <p className="text-[13px] text-muted">
-                  Noch keine Nummer vergeben.
-                </p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {(zaehlerstand ?? []).map((z) => {
-                    const kind = z.kind as string;
-                    const jahr = z.year as number;
-                    const wert = z.value as number;
-                    return (
-                      <li
-                        key={`${kind}-${jahr}`}
-                        className="flex flex-wrap items-center gap-3 rounded-input bg-panel px-4 py-3"
-                      >
-                        <span className="min-w-[140px] flex-1 text-[13px] font-medium">
-                          {NUMMERNKREIS_LABEL[kind] ?? kind}
-                        </span>
-                        <span className="num text-[12.5px] text-muted">{jahr}</span>
-                        <span className="num text-[12.5px] text-faint">
-                          zuletzt{" "}
-                          {NUMMERNKREIS_PREFIX[kind] ?? "X"}-{jahr}-
-                          {String(wert).padStart(4, "0")}
-                        </span>
-                        <Pill mono>{wert} vergeben</Pill>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <ul className="flex flex-col gap-2">
+                {NUMMERNKREISE.map((k) => {
+                  const zeile = (zaehlerstand ?? []).find(
+                    (z) => z.kind === k.kind && Number(z.year) === JAHR,
+                  );
+                  const werte: KreisWerte = {
+                    kind: k.kind,
+                    label: k.label,
+                    praefix: k.praefix,
+                    jahr: JAHR,
+                    stand: Number(zeile?.value ?? 0),
+                  };
+                  return (
+                    <KreisForm
+                      key={k.kind}
+                      kreis={werte}
+                      gesperrt={!darfSchreiben}
+                    />
+                  );
+                })}
+              </ul>
+
+              <p className="mt-4 max-w-[72ch] text-[12.5px] leading-[1.55] text-faint">
+                Lücken sind erlaubt und kommen vor: Wird ein Entwurf verworfen,
+                verfällt seine Nummer. Ein Duplikat ist nicht erlaubt — deshalb
+                wird jede Eingabe gegen den Zählerstand UND gegen die tatsächlich
+                vergebenen Nummern geprüft.
+              </p>
             </Abschnitt>
           ) : null}
 
