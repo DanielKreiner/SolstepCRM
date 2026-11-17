@@ -45,6 +45,7 @@ const AUFNAHMEN: Aufnahme[] = [
   { datei: "04-erscheinungsbild", pfad: "/einstellungen?bereich=erscheinungsbild" },
   { datei: "05-standorte", pfad: "/einstellungen?bereich=standorte" },
   { datei: "06-fahrzeuge", pfad: "/einstellungen?bereich=betriebsmittel" },
+  { datei: "06b-nachweise", pfad: "/einstellungen?bereich=nachweise" },
   { datei: "07-rollen", pfad: "/einstellungen?bereich=rechte" },
   { datei: "08-nummernkreise", pfad: "/einstellungen?bereich=nummernkreise" },
   { datei: "09-zeitregeln", pfad: "/einstellungen?bereich=zeit" },

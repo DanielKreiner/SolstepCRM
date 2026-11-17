@@ -79,6 +79,19 @@ export default async function MitarbeiterDetail({
     .select("id, name, city")
     .order("name");
 
+  /*
+   * Der Katalog aus den Einstellungen, aber nur das, was abläuft — ein
+   * Nachweis hier bekommt ein Ablaufdatum. Reine Fähigkeiten gehören in
+   * die Einsatzplanung und nicht in diese Liste.
+   */
+  const { data: katalog } = darfPflegen
+    ? await supabase
+        .from("qualifikation")
+        .select("label")
+        .eq("nachweis", true)
+        .order("sort")
+    : { data: null };
+
   const heute = new Date().toISOString().slice(0, 10);
   const istStunden =
     Number(saldo?.actual_min ?? 0) + Number(saldo?.adjust_min ?? 0);
@@ -205,7 +218,12 @@ export default async function MitarbeiterDetail({
               </ul>
             )}
 
-            {darfPflegen ? <QualificationForm userId={id} /> : null}
+            {darfPflegen ? (
+              <QualificationForm
+                userId={id}
+                vorschlaege={(katalog ?? []).map((k) => k.label as string)}
+              />
+            ) : null}
           </section>
 
           <section className="rounded-[20px] bg-surface p-5 shadow-soft">

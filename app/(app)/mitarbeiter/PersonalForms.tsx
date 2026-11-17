@@ -53,7 +53,22 @@ function Submit({ label }: { label: string }) {
   );
 }
 
-export function QualificationForm({ userId }: { userId: string }) {
+export function QualificationForm({
+  userId,
+  vorschlaege = [],
+}: {
+  userId: string;
+  /*
+   * Die Nachweise aus dem Katalog des Betriebs (Einstellungen →
+   * Nachweise). Als Vorschlagsliste und nicht als Auswahlfeld: Ein
+   * Betrieb hat immer den einen Nachweis, den noch niemand eingetragen
+   * hat, und ein Pflichtfeld aus einer Liste würde ihn zwingen, erst in
+   * die Einstellungen zu gehen. Wer dasselbe zweimal unterschiedlich
+   * schreibt, bekommt im Cockpit zwei Warnungen statt einer — dagegen
+   * hilft die Liste.
+   */
+  vorschlaege?: string[];
+}) {
   const [state, formAction] = useActionState(addQualification, INITIAL);
 
   return (
@@ -69,9 +84,17 @@ export function QualificationForm({ userId }: { userId: string }) {
           name="name"
           required
           minLength={2}
+          list={vorschlaege.length > 0 ? "q-katalog" : undefined}
           placeholder="z. B. Elektrofachkraft, PSA gegen Absturz"
           className={feld}
         />
+        {vorschlaege.length > 0 ? (
+          <datalist id="q-katalog">
+            {vorschlaege.map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-[4px]">

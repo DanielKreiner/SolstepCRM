@@ -4,6 +4,11 @@ import { Abschnitt } from "@/components/ui/Abschnitt";
 import { Einrichtung, type Punkt } from "./Einrichtung";
 import { KreisForm, type KreisWerte } from "./Nummernkreise";
 import {
+  NachweisForm,
+  NachweisNeu,
+  type NachweisWerte,
+} from "./Nachweiskatalog";
+import {
   FahrzeugForm,
   FahrzeugNeu,
   LagerortForm,
@@ -70,6 +75,7 @@ const BEREICHE = [
   ["planer", "Planer-Stammdaten"],
   ["standorte", "Standorte"],
   ["betriebsmittel", "Fahrzeuge und Lager"],
+  ["nachweise", "Nachweise"],
   ["zeit", "Zeiterfassung"],
   ["nummernkreise", "Nummernkreise"],
   ["integrationen", "Integrationen"],
@@ -207,6 +213,17 @@ export default async function EinstellungenPage({
             .eq("active", true),
         ])
       : [{ count: null }, { count: null }];
+
+  const [{ data: nachweise }, { data: traegerListe }] =
+    bereich === "nachweise"
+      ? await Promise.all([
+          supabase
+            .from("qualifikation")
+            .select("id, schluessel, label, nachweis")
+            .order("sort"),
+          supabase.from("app_user").select("qualifikationen"),
+        ])
+      : [{ data: null }, { data: null }];
 
   const [{ data: fahrzeuge }, { data: lagerorte }] =
     bereich === "betriebsmittel"
@@ -634,6 +651,50 @@ export default async function EinstellungenPage({
                 })}
                 {darfSchreiben ? <LagerortNeu /> : null}
               </div>
+            </Abschnitt>
+          ) : null}
+
+          {bereich === "nachweise" ? (
+            <Abschnitt titel="Qualifikationen und Nachweise">
+              <p className="-mt-1 mb-4 max-w-[72ch] text-[12.5px] leading-[1.55] text-muted">
+                Was Ihr Betrieb führt. Die Einsatzplanung gleicht diese Einträge
+                gegen die benötigten Qualifikationen eines Einsatzes ab. Alles,
+                was <b>abläuft</b>, bekommt am Mitarbeiter ein Ablaufdatum und
+                steht rechtzeitig im Cockpit unter Handlungsbedarf — ohne
+                gültigen Nachweis darf niemand aufs Dach.
+              </p>
+
+              <ul className="flex flex-col gap-3">
+                {(nachweise ?? []).map((q) => {
+                  const schluessel = q.schluessel as string;
+                  const werte: NachweisWerte = {
+                    id: q.id as string,
+                    schluessel,
+                    label: q.label as string,
+                    nachweis: q.nachweis === true,
+                    traeger: (traegerListe ?? []).filter((u) =>
+                      ((u.qualifikationen as string[] | null) ?? []).includes(
+                        schluessel,
+                      ),
+                    ).length,
+                  };
+                  return (
+                    <NachweisForm
+                      key={werte.id}
+                      eintrag={werte}
+                      gesperrt={!darfSchreiben}
+                    />
+                  );
+                })}
+                {darfSchreiben ? <NachweisNeu /> : null}
+              </ul>
+
+              <p className="mt-4 max-w-[72ch] text-[12.5px] leading-[1.55] text-faint">
+                Die Bezeichnung lässt sich jederzeit ändern. Der Schlüssel
+                darunter bleibt, wie er ist — er steht bei den Mitarbeitern und
+                an den Einsätzen, und eine Umbenennung würde jede Zuordnung
+                verwaisen lassen, ohne dass es jemand merkt.
+              </p>
             </Abschnitt>
           ) : null}
 
