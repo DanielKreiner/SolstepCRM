@@ -5,6 +5,7 @@ import {
   resendVerfuegbar,
   sendeUeberResend,
 } from "@/lib/mail/resend";
+import { inKlartext } from "@/lib/mail/fehlertext";
 import {
   MAX_VERSUCHE,
   naechsterVersuch,
@@ -142,7 +143,7 @@ export async function zustellen(
         user_id: u.id,
         kind: "mail_failed",
         title: "Mail konnte nicht gesendet werden",
-        body: `${zeile.subject as string} — ${ergebnis.fehler}`,
+        body: `${zeile.subject as string} — ${inKlartext(ergebnis.fehler)}`,
         link: "/einstellungen",
       });
     }

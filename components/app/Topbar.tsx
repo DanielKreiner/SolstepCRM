@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CommandPalette } from "./CommandPalette";
+import { Mitteilungen } from "./Mitteilungen";
 import { MobileNav } from "./MobileNav";
 import { ThemeToggle } from "./ThemeToggle";
 import { Icon } from "@/components/ui/Icon";
@@ -39,18 +40,7 @@ export function Topbar({ name, role, unread, nav }: Props) {
         <ThemeToggle />
       </span>
 
-      <button
-        type="button"
-        aria-label={
-          unread > 0 ? `${unread} ungelesene Hinweise` : "Keine neuen Hinweise"
-        }
-        className="relative hidden h-[42px] w-[42px] cursor-pointer items-center justify-center rounded-pill border-0 bg-panel text-muted transition-colors duration-200 hover:text-ink sm:flex"
-      >
-        <Icon name="glocke" size={18} />
-        {unread > 0 ? (
-          <span className="absolute top-[6px] right-[6px] h-2 w-2 rounded-pill bg-s-crit" />
-        ) : null}
-      </button>
+      <Mitteilungen anfangsZahl={unread} />
 
       <div className="flex shrink-0 items-center gap-[11px] sm:pl-[6px]">
         <span
