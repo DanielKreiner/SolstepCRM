@@ -233,8 +233,22 @@ export async function deletePhase(
   return { error: null, ok: `Phase „${phase.label as string}" gelöscht.` };
 }
 
+/*
+ * Der Standort war bis hierher nur halb editierbar: Arbeitszeitregeln
+ * ja, Name und Anschrift nein, Anlegen und Loeschen gar nicht. Beim
+ * Onboarding eines Betriebs ist das der erste Punkt, an dem es haengt —
+ * wer eine Niederlassung in Aspang Markt hat, soll dort nicht "Linz"
+ * stehen lassen muessen, weil das Feld fehlt.
+ *
+ * Die Anschrift ist kein Zierrat: sie steht auf dem Dienstplan und ist
+ * der Ausgangspunkt, von dem aus die Einsatzplanung Wege rechnet.
+ */
 const standortSchema = z.object({
   locationId: z.string().uuid(),
+  name: z.string().trim().min(2, "Der Standort braucht einen Namen.").max(60),
+  address: z.string().trim().max(120).optional().default(""),
+  zip: z.string().trim().max(10).optional().default(""),
+  city: z.string().trim().max(60).optional().default(""),
   holidayRegion: z.string().trim().min(2).max(10),
   minStaffing: z.coerce.number().int().min(0).max(99),
   restHours: z.coerce.number().min(0).max(24),
@@ -265,6 +279,10 @@ export async function saveLocation(
 
   const parsed = standortSchema.safeParse({
     locationId: formData.get("locationId"),
+    name: formData.get("name"),
+    address: formData.get("address"),
+    zip: formData.get("zip"),
+    city: formData.get("city"),
     holidayRegion: formData.get("holidayRegion"),
     minStaffing: formData.get("minStaffing"),
     restHours: formData.get("restHours"),
@@ -282,6 +300,10 @@ export async function saveLocation(
   const { error } = await supabase
     .from("location")
     .update({
+      name: d.name,
+      address: d.address || null,
+      zip: d.zip || null,
+      city: d.city || null,
       holiday_region: d.holidayRegion,
       min_staffing: d.minStaffing,
       worktime_rules: {
@@ -299,6 +321,116 @@ export async function saveLocation(
   revalidatePath("/einstellungen");
   revalidatePath("/planung");
   return { error: null, ok: "Standort gespeichert." };
+}
+
+/**
+ * Einen weiteren Standort anlegen.
+ *
+ * Die Arbeitszeitregeln bekommen die gesetzlichen Werte als Vorgabe —
+ * ein neuer Standort ohne Ruhezeit waere in der Konfliktpruefung
+ * stillschweigend regellos, und das faellt erst auf, wenn ein
+ * Dienstplan veroeffentlicht wird, der nicht haette durchgehen duerfen.
+ */
+const neuerStandortSchema = z.object({
+  name: z.string().trim().min(2, "Der Standort braucht einen Namen.").max(60),
+  address: z.string().trim().max(120).optional().default(""),
+  zip: z.string().trim().max(10).optional().default(""),
+  city: z.string().trim().max(60).optional().default(""),
+  holidayRegion: z.string().trim().min(2).max(10),
+});
+
+export async function standortAnlegen(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const me = await requireMe();
+  if (me.perms.einstellungen !== "write") {
+    return { error: "Keine Berechtigung für Einstellungen.", ok: null };
+  }
+
+  const parsed = neuerStandortSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Eingabe fehlt.", ok: null };
+  }
+  const d = parsed.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("location").insert({
+    company_id: me.companyId,
+    name: d.name,
+    address: d.address || null,
+    zip: d.zip || null,
+    city: d.city || null,
+    holiday_region: d.holidayRegion,
+  });
+
+  if (error) return { error: `Anlegen fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  revalidatePath("/planung");
+  return { error: null, ok: `Standort ${d.name} angelegt.` };
+}
+
+/**
+ * Einen Standort entfernen.
+ *
+ * Nur, wenn kein Mitarbeiter mehr daranhaengt — auch kein inaktiver.
+ * `app_user.location_id` hat kein ON DELETE, der Loeschversuch liefe
+ * sonst in einen Fremdschluesselfehler und der Betrieb saehe eine
+ * Datenbankmeldung statt eines Satzes, mit dem er etwas anfangen kann.
+ *
+ * Und der letzte Standort bleibt stehen: ohne Standort gibt es keine
+ * Arbeitszeitregeln, und die Einsatzplanung haette nichts mehr, woran
+ * sie Ruhezeit und Hoechstarbeitszeit prueft.
+ */
+export async function standortLoeschen(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const me = await requireMe();
+  if (me.perms.einstellungen !== "write") {
+    return { error: "Keine Berechtigung für Einstellungen.", ok: null };
+  }
+
+  const id = z.string().uuid().safeParse(formData.get("locationId"));
+  if (!id.success) return { error: "Standort nicht gefunden.", ok: null };
+
+  const supabase = await createClient();
+
+  const { count: belegt } = await supabase
+    .from("app_user")
+    .select("id", { count: "exact", head: true })
+    .eq("location_id", id.data);
+
+  if (belegt && belegt > 0) {
+    return {
+      /*
+       * Auch inaktive zaehlen mit — die Liste oben zeigt nur die aktiven,
+       * deshalb steht es hier ausdruecklich dabei. Sonst liest jemand
+       * "0 Mitarbeiter" und bekommt trotzdem eine Absage.
+       */
+      error:
+        belegt === 1
+          ? "Ein Mitarbeiter ist diesem Standort zugeordnet, eventuell ein inaktiver. Bitte ihn zuerst umhängen."
+          : `${belegt} Mitarbeiter sind diesem Standort zugeordnet, eventuell auch inaktive. Bitte sie zuerst umhängen.`,
+      ok: null,
+    };
+  }
+
+  const { count: vorhanden } = await supabase
+    .from("location")
+    .select("id", { count: "exact", head: true });
+
+  if ((vorhanden ?? 0) <= 1) {
+    return { error: "Der letzte Standort kann nicht entfernt werden.", ok: null };
+  }
+
+  const { error } = await supabase.from("location").delete().eq("id", id.data);
+  if (error) return { error: `Löschen fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  revalidatePath("/planung");
+  return { error: null, ok: "Standort entfernt." };
 }
 
 async function zaehleBelegung(

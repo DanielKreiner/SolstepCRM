@@ -7,6 +7,8 @@ import {
   deletePhase,
   renamePhase,
   saveLocation,
+  standortAnlegen,
+  standortLoeschen,
   saveTimeSettings,
   setPermission,
   type SettingsState,
@@ -222,6 +224,9 @@ const feld =
 export type StandortWerte = {
   id: string;
   name: string;
+  address: string;
+  zip: string;
+  city: string;
   holidayRegion: string;
   minStaffing: number;
   restHours: number;
@@ -273,6 +278,55 @@ export function StandortForm({
           {standort.mitarbeiter}{" "}
           {standort.mitarbeiter === 1 ? "Mitarbeiter" : "Mitarbeiter"}
         </span>
+      </div>
+
+      {/*
+        Anschrift vor den Regeln: Name und Ort sind das, was ein Betrieb
+        beim Einrichten als Erstes sucht. Die Arbeitszeitregeln darunter
+        fasst er danach jahrelang nicht mehr an.
+      */}
+      <div className="mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Feld id={id("name")} label="Name" hinweis="wie der Betrieb ihn nennt">
+          <input
+            id={id("name")}
+            name="name"
+            defaultValue={standort.name}
+            disabled={gesperrt}
+            maxLength={60}
+            required
+            className={`${feld} w-full`}
+          />
+        </Feld>
+        <Feld id={id("addr")} label="Anschrift" hinweis="Strasse und Nummer">
+          <input
+            id={id("addr")}
+            name="address"
+            defaultValue={standort.address}
+            disabled={gesperrt}
+            maxLength={120}
+            className={`${feld} w-full`}
+          />
+        </Feld>
+        <Feld id={id("zip")} label="PLZ" hinweis="">
+          <input
+            id={id("zip")}
+            name="zip"
+            defaultValue={standort.zip}
+            disabled={gesperrt}
+            maxLength={10}
+            className={`${feld} num w-full`}
+          />
+        </Feld>
+        <Feld id={id("city")} label="Ort" hinweis="">
+          <input
+            id={id("city")}
+            name="city"
+            defaultValue={standort.city}
+            disabled={gesperrt}
+            maxLength={60}
+            className={`${feld} w-full`}
+          />
+        </Feld>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -350,6 +404,82 @@ export function StandortForm({
           <Submit label="Standort speichern" />
         </div>
       ) : null}
+      <Meldung state={state} />
+    </form>
+  );
+}
+
+/**
+ * Standort entfernen.
+ *
+ * Eigenes Formular neben dem Speichern, nicht darin: zwei Knoepfe in
+ * einem Formular schicken dieselben Felder an zwei Aktionen, und dann
+ * loescht ein Fehlklick beim Speichern den Standort.
+ */
+export function StandortLoeschen({ standort }: { standort: StandortWerte }) {
+  const [state, formAction] = useActionState(standortLoeschen, INITIAL);
+
+  return (
+    <form action={formAction} className="mt-2">
+      <input type="hidden" name="locationId" value={standort.id} />
+      <button
+        type="submit"
+        className="cursor-pointer text-[12px] font-medium text-faint hover:text-s-crit hover:underline"
+      >
+        Standort entfernen
+      </button>
+      <Meldung state={state} />
+    </form>
+  );
+}
+
+/** Einen weiteren Standort anlegen. */
+export function StandortNeu() {
+  const [state, formAction] = useActionState(standortAnlegen, INITIAL);
+
+  return (
+    <form action={formAction} className="rounded-input bg-panel p-4">
+      <h3 className="mb-3 text-[14px] font-semibold">Standort hinzufügen</h3>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Feld id="neu-name" label="Name" hinweis="Pflicht">
+          <input
+            id="neu-name"
+            name="name"
+            required
+            maxLength={60}
+            placeholder="Aspang Markt"
+            className={`${feld} w-full`}
+          />
+        </Feld>
+        <Feld id="neu-addr" label="Anschrift" hinweis="Strasse und Nummer">
+          <input id="neu-addr" name="address" maxLength={120} className={`${feld} w-full`} />
+        </Feld>
+        <Feld id="neu-zip" label="PLZ" hinweis="">
+          <input id="neu-zip" name="zip" maxLength={10} className={`${feld} num w-full`} />
+        </Feld>
+        <Feld id="neu-city" label="Ort" hinweis="">
+          <input id="neu-city" name="city" maxLength={60} className={`${feld} w-full`} />
+        </Feld>
+        <Feld id="neu-region" label="Feiertagsregion" hinweis="steuert den Jahresplaner">
+          <select
+            id="neu-region"
+            name="holidayRegion"
+            defaultValue="AT-3"
+            className={`${feld} w-full`}
+          >
+            {REGIONEN.map(([wert, text]) => (
+              <option key={wert} value={wert}>
+                {text}
+              </option>
+            ))}
+          </select>
+        </Feld>
+      </div>
+
+      <div className="mt-4">
+        <Submit label="Standort anlegen" />
+      </div>
       <Meldung state={state} />
     </form>
   );

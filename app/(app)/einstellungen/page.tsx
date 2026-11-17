@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Abschnitt } from "@/components/ui/Abschnitt";
+import { Einrichtung, type Punkt } from "./Einrichtung";
 import {
   type ModulZeile,
   PlanerStammdaten,
@@ -23,6 +24,8 @@ import { createClient } from "@/lib/supabase/server";
 import {
   PermissionCell,
   StandortForm,
+  StandortLoeschen,
+  StandortNeu,
   ZeitregelnForm,
   type StandortWerte,
 } from "./SettingsForms";
@@ -51,6 +54,7 @@ const ROLES = ["gf", "buero", "bauleitung", "monteur", "lager"] as const;
  * man war.
  */
 const BEREICHE = [
+  ["einrichtung", "Einrichtung"],
   ["rechte", "Rollen und Rechte"],
   ["firma", "Firmendaten"],
   ["erscheinungsbild", "Erscheinungsbild"],
@@ -97,9 +101,9 @@ export default async function EinstellungenPage({
   const supabase = await createClient();
   const { bereich: roh } = await searchParams;
 
-  const bereich: Bereich = BEREICHE.some(([k]) => k === roh)
+  const gewaehlt: Bereich | null = BEREICHE.some(([k]) => k === roh)
     ? (roh as Bereich)
-    : "rechte";
+    : null;
 
   const darfSchreiben = me.perms.einstellungen === "write";
 
@@ -120,12 +124,12 @@ export default async function EinstellungenPage({
     supabase
       .from("company")
       .select(
-        "name, uid_nr, address, zip, city, country, iban, bic, rechtsform, firmenbuch_nr, firmenbuch_gericht, email, phone, website, status, plan, seats, time_settings, pdf_settings",
+        "name, uid_nr, address, zip, city, country, iban, bic, rechtsform, firmenbuch_nr, firmenbuch_gericht, email, phone, website, status, plan, seats, time_settings, pdf_settings, onboarded_at",
       )
       .maybeSingle(),
     supabase
       .from("location")
-      .select("id, name, holiday_region, min_staffing, worktime_rules")
+      .select("id, name, address, zip, city, holiday_region, min_staffing, worktime_rules")
       .order("name"),
     supabase.from("app_user").select("id, location_id").eq("active", true),
     supabase
@@ -165,6 +169,26 @@ export default async function EinstellungenPage({
       .maybeSingle(),
     supabase.from("planer_foerderung").select("region, betrag, hinweis").order("region"),
   ]);
+
+  /*
+   * Solange der Betrieb nicht als eingerichtet markiert ist, ist die
+   * Einrichtung der erste Bildschirm. Danach ist sie einer von vielen —
+   * wer täglich eine Rolle umstellt, will nicht jedes Mal an einer
+   * Checkliste vorbei.
+   */
+  const eingerichtet = Boolean(company?.onboarded_at);
+  const bereich: Bereich = gewaehlt ?? (eingerichtet ? "rechte" : "einrichtung");
+
+  const [{ count: vorgaenge }, { count: artikel }] =
+    bereich === "einrichtung"
+      ? await Promise.all([
+          supabase.from("vorgang").select("id", { count: "exact", head: true }),
+          supabase
+            .from("article")
+            .select("id", { count: "exact", head: true })
+            .eq("active", true),
+        ])
+      : [{ count: null }, { count: null }];
 
   /*
    * Nur laden, wenn der Bereich offen ist — die Einstellungen holen
@@ -394,6 +418,24 @@ export default async function EinstellungenPage({
             </Abschnitt>
           ) : null}
 
+          {bereich === "einrichtung" ? (
+            <Abschnitt titel="Einrichtung">
+              <Einrichtung
+                abgeschlossen={eingerichtet}
+                punkte={einrichtungsPunkte({
+                  firma: company,
+                  marke,
+                  standorte: standorte ?? [],
+                  mitarbeiter: (leute ?? []).length,
+                  postfaecher: postfaecher ?? [],
+                  zaehler: (zaehlerstand ?? []).length,
+                  vorgaenge: vorgaenge ?? 0,
+                  artikel: artikel ?? 0,
+                })}
+              />
+            </Abschnitt>
+          ) : null}
+
           {bereich === "rechte" ? (
             <Abschnitt titel="Rollen und Rechte">
               <p className="-mt-1 mb-4 text-[12.5px] text-muted">
@@ -475,6 +517,9 @@ export default async function EinstellungenPage({
                     const werte: StandortWerte = {
                       id: s.id as string,
                       name: s.name as string,
+                      address: (s.address as string | null) ?? "",
+                      zip: (s.zip as string | null) ?? "",
+                      city: (s.city as string | null) ?? "",
                       holidayRegion: (s.holiday_region as string) ?? "AT-1",
                       minStaffing: Number(s.min_staffing ?? 4),
                       restHours: Number(regeln.rest_hours ?? 11),
@@ -485,14 +530,20 @@ export default async function EinstellungenPage({
                       mitarbeiter: proStandort.get(s.id as string) ?? 0,
                     };
                     return (
-                      <StandortForm
-                        key={werte.id}
-                        standort={werte}
-                        gesperrt={!darfSchreiben}
-                      />
+                      <div key={werte.id}>
+                        <StandortForm
+                          standort={werte}
+                          gesperrt={!darfSchreiben}
+                        />
+                        {darfSchreiben && (standorte ?? []).length > 1 ? (
+                          <StandortLoeschen standort={werte} />
+                        ) : null}
+                      </div>
                     );
                   })
                 )}
+
+                {darfSchreiben ? <StandortNeu /> : null}
               </div>
             </Abschnitt>
           ) : null}
@@ -665,3 +716,113 @@ function IntegrationsZeile({
 }
 
 /** Wie viele Einträge hängen an welcher Phase — für die Löschsperre. */
+
+/*
+ * Was für einen eingerichteten Betrieb zusammenkommen muss.
+ *
+ * Bewusst keine Spalte in der Datenbank je Punkt: Der Stand ergibt sich
+ * aus dem, was ohnehin dasteht. Ein Haken, den jemand setzen kann, ohne
+ * dass das Feld gefüllt ist, wäre schlimmer als keine Liste — er
+ * behauptet etwas.
+ */
+function einrichtungsPunkte(d: {
+  firma: Record<string, unknown> | null;
+  marke: Record<string, unknown>;
+  standorte: Record<string, unknown>[];
+  mitarbeiter: number;
+  postfaecher: Record<string, unknown>[];
+  zaehler: number;
+  vorgaenge: number;
+  artikel: number;
+}): Punkt[] {
+  const f = d.firma ?? {};
+  const text = (k: string): string =>
+    typeof f[k] === "string" ? (f[k] as string).trim() : "";
+
+  const standort = d.standorte[0] as Record<string, unknown> | undefined;
+  const standortOrt = standort
+    ? [standort.zip, standort.city].filter(Boolean).join(" ")
+    : "";
+  const postfach = d.postfaecher.find((m) => m.status === "ok");
+
+  return [
+    {
+      titel: "Firmendaten",
+      grund:
+        "Firmenwortlaut, Anschrift und UID-Nummer stehen auf jedem Angebot und jeder Rechnung. Ohne UID ist die Rechnung für Ihren Kunden nicht vorsteuerabzugsfähig.",
+      erledigt: Boolean(text("name") && text("address") && text("uid_nr")),
+      href: "/einstellungen?bereich=firma",
+      stand: text("uid_nr") ? `UID ${text("uid_nr")}` : undefined,
+    },
+    {
+      titel: "Bankverbindung",
+      grund:
+        "Die IBAN steht im Fuss der Rechnung. Fehlt sie, zahlt der Kunde später oder ruft an.",
+      erledigt: Boolean(text("iban")),
+      href: "/einstellungen?bereich=firma",
+      stand: text("iban") || undefined,
+    },
+    {
+      titel: "Logo und Hausfarbe",
+      grund:
+        "Angebot, Rechnung, Kundenportal und die Mail an den Kunden tragen Ihr Logo, nicht unseres.",
+      erledigt: typeof d.marke.logo_url === "string" && d.marke.logo_url !== "",
+      href: "/einstellungen?bereich=erscheinungsbild",
+    },
+    {
+      titel: "Standort und Arbeitszeitregeln",
+      grund:
+        "Ruhezeit, Höchstarbeitszeit und Pausenpflicht hängen am Standort. Die Einsatzplanung prüft dagegen und hält einen Dienstplan an, der sie verletzt.",
+      erledigt: Boolean(standort && standortOrt),
+      href: "/einstellungen?bereich=standorte",
+      stand: standort ? `${standort.name as string}${standortOrt ? `, ${standortOrt}` : ""}` : undefined,
+    },
+    {
+      titel: "Mitarbeiter angelegt",
+      grund:
+        "Jeder bekommt eine Einladung per Mail und setzt sein Passwort selbst. Ein Passwort, das durch das Büro geht, ist keins.",
+      erledigt: d.mitarbeiter > 1,
+      href: "/mitarbeiter",
+      stand: `${d.mitarbeiter} aktiv`,
+    },
+    {
+      titel: "Rollen und Rechte geprüft",
+      grund:
+        "Wer sieht Rechnungen, wer sieht Stundenkosten, wer sieht Personalakten. Das wird serverseitig durchgesetzt, nicht nur ausgeblendet.",
+      erledigt: d.mitarbeiter > 1,
+      href: "/einstellungen?bereich=rechte",
+    },
+    {
+      titel: "Nummernkreise",
+      grund:
+        "Angebots- und Rechnungsnummern müssen dort weiterlaufen, wo Ihre Buchhaltung steht. Nachträglich umstellen geht nicht ohne Lücke.",
+      erledigt: d.zaehler > 0,
+      href: "/einstellungen?bereich=nummernkreise",
+      stand: d.zaehler > 0 ? `${d.zaehler} Kreise vergeben` : undefined,
+    },
+    {
+      titel: "Postfach verbunden",
+      grund:
+        "Angebote und Rechnungen gehen aus Ihrer eigenen Adresse raus und landen in Ihrem Gesendet-Ordner. Antworten der Kunden kommen in die Software zurueck.",
+      erledigt: Boolean(postfach),
+      href: "/einstellungen?bereich=integrationen",
+      stand: postfach ? (postfach.address as string) : undefined,
+    },
+    {
+      titel: "Artikelstamm",
+      grund:
+        "Module, Wechselrichter, Speicher und Kleinmaterial mit Ihren Preisen. Daraus entstehen Angebot, Bedarfsliste und Bestellung.",
+      erledigt: d.artikel > 0,
+      href: "/material",
+      stand: d.artikel > 0 ? `${d.artikel} aktive Artikel` : undefined,
+    },
+    {
+      titel: "Erster Vorgang",
+      grund:
+        "Ein echter Auftrag von der Anfrage bis zum Angebot. Danach wissen Sie, ob die Einstellungen stimmen — vorher ist es Theorie.",
+      erledigt: d.vorgaenge > 0,
+      href: "/vorgaenge",
+      stand: d.vorgaenge > 0 ? `${d.vorgaenge} angelegt` : undefined,
+    },
+  ];
+}

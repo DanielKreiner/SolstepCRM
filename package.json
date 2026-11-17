@@ -24,6 +24,7 @@
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed": "pnpm seed:db && pnpm seed:demo",
     "seed:vorfuehrung": "tsx scripts/seed-vorfuehrung.ts",
+    "mandant:bereinigen": "tsx scripts/mandant-bereinigen.ts",
     "demo:aufbauen": "tsx scripts/demo-aufbauen.ts",
     "demo:planungen": "tsx scripts/demo-planungen.ts"
   },
