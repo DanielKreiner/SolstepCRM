@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: T.login.title };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ weiter?: string }>;
+  searchParams: Promise<{ weiter?: string; hinweis?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -25,7 +25,7 @@ export default async function LoginPage({
     redirect(startseite(rolle));
   }
 
-  const { weiter } = await searchParams;
+  const { weiter, hinweis } = await searchParams;
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-app p-[14px]">
@@ -48,6 +48,15 @@ export default async function LoginPage({
         <p className="mt-[3px] mb-[22px] text-[13px] text-muted">
           {T.login.subtitle}
         </p>
+
+        {hinweis === "link" ? (
+          <p
+            role="status"
+            className="mb-[16px] rounded-input bg-s-warn/12 px-[13px] py-[10px] text-[13px] leading-[1.5] font-medium text-s-warn"
+          >
+            {T.login.linkHinweis}
+          </p>
+        ) : null}
 
         <LoginForm weiter={weiter} />
 

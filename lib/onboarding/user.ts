@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { zugangsLink, zugangsmail } from "./zugang";
 
 /**
  * Einen Mitarbeiter anlegen und einladen.
@@ -67,48 +68,43 @@ export async function mitarbeiterAnlegen(
   /*
    * Einladung per Mail statt Passwortvergabe durch das Büro. Ein
    * Passwort, das jemand anderes kennt und weitergibt, ist keins.
-   * Schlägt der Mailversand fehl — etwa weil noch kein Postfach
-   * eingehängt ist —, wird das Konto trotzdem angelegt und der Nutzer
-   * kann sich über „Passwort vergessen" selbst hineinlassen.
+   *
+   * `zugangsLink` legt das Konto an und gibt den Anmeldelink zurück,
+   * ohne eine Mail zu verschicken — die schreiben wir unten selbst.
+   * Vorher stand hier `inviteUserByEmail`, und das verschickte
+   * Supabases englische Standardvorlage mit einem Link auf die
+   * Site-URL des Supabase-Projekts.
    */
-  const { data: eingeladen, error: einladungsFehler } =
-    await admin.auth.admin.inviteUserByEmail(email, {
-      data: { name: daten.name },
-    });
+  const link = await zugangsLink(admin, email, "invite", daten.name);
 
-  let userId = eingeladen?.user?.id ?? null;
-  let einladung = Boolean(userId);
-
-  if (!userId) {
-    const { data: erzeugt, error } = await admin.auth.admin.createUser({
-      email,
-      email_confirm: false,
-      app_metadata: appMetadata,
-      user_metadata: { name: daten.name },
-    });
-    if (error || !erzeugt.user) {
-      return {
-        ok: false,
-        grund: `Konto konnte nicht angelegt werden: ${
-          error?.message ?? einladungsFehler?.message ?? "unbekannt"
-        }`,
-      };
-    }
-    userId = erzeugt.user.id;
-    einladung = false;
-  } else {
+  if (!link.ok || !link.userId) {
     /*
-     * inviteUserByEmail kennt kein app_metadata, deshalb kommt es
-     * unmittelbar danach. Bis dahin hat der Nutzer keinen Mandanten und
-     * damit über RLS auch keinen Zugriff — die Reihenfolge ist sicher
-     * herum.
+     * Der häufigste Grund ist eine Adresse, die in auth.users noch
+     * hängt, obwohl die zugehörige Zeile in app_user fort ist. Das
+     * stillschweigend zu übernehmen wäre falsch — das Konto könnte zu
+     * einem anderen Mandanten gehören.
      */
-    const { error } = await admin.auth.admin.updateUserById(userId, {
-      app_metadata: appMetadata,
-    });
-    if (error) {
-      return { ok: false, grund: `Zuordnung fehlgeschlagen: ${error.message}` };
-    }
+    return {
+      ok: false,
+      grund: `Konto konnte nicht angelegt werden: ${link.ok ? "kein Konto erhalten" : link.grund}`,
+    };
+  }
+
+  const userId = link.userId;
+
+  /*
+   * app_metadata kommt unmittelbar danach: `generateLink` kennt es
+   * nicht. Bis dahin hat der Nutzer keinen Mandanten und damit über RLS
+   * auch keinen Zugriff — die Reihenfolge ist sicher herum. Die Mail mit
+   * dem Link geht erst ganz am Ende raus, wenn alles steht.
+   */
+  const { error: zuordnung } = await admin.auth.admin.updateUserById(userId, {
+    app_metadata: appMetadata,
+  });
+
+  if (zuordnung) {
+    await admin.auth.admin.deleteUser(userId);
+    return { ok: false, grund: `Zuordnung fehlgeschlagen: ${zuordnung.message}` };
   }
 
   const { error: zeilenFehler } = await admin.from("app_user").insert({
@@ -138,6 +134,20 @@ export async function mitarbeiterAnlegen(
       grund: `Mitarbeiter konnte nicht angelegt werden: ${zeilenFehler.message}`,
     };
   }
+
+  /*
+   * Zuletzt die Mail. Scheitert sie, bleibt der Mitarbeiter angelegt —
+   * er kommt dann über „Passwort vergessen" hinein, und der Aufrufer
+   * sagt ihm das. Das Konto deswegen wieder zu löschen wäre der
+   * schlechtere Tausch.
+   */
+  const einladung = await zugangsmail(admin, {
+    companyId: daten.companyId,
+    name: daten.name,
+    email,
+    art: "invite",
+    url: link.url,
+  });
 
   return { ok: true, userId, einladung };
 }

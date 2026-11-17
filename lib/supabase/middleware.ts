@@ -6,6 +6,14 @@ import { publicEnv } from "@/lib/env";
 const PUBLIC_PREFIXES = [
   "/login",
   "/auth",
+  /*
+   * Einladung und vergessenes Passwort. Wer hierher kommt, hat per
+   * Definition noch keine Sitzung — stünde der Pfad nicht hier, schickte
+   * die Middleware ihn auf die Anmeldung, für die ihm gerade das
+   * Passwort fehlt. Der Token wird in der Route selbst geprüft.
+   */
+  "/einladung",
+  "/passwort-vergessen",
   "/portal", // Kundenportal, eigener Token-Mechanismus statt Supabase-Auth
   /*
    * Die Belegausgabe des Portals. Ohne diesen Eintrag schickt die

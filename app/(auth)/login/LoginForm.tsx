@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import Link from "next/link";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -21,6 +22,13 @@ function Submit() {
 export function LoginForm({ weiter }: { weiter: string | undefined }) {
   const [state, formAction] = useActionState(signIn, INITIAL);
 
+  /*
+   * Die getippte Adresse wandert mit zur Anforderung eines neuen Links.
+   * Wer sein Passwort nicht mehr weiss, hat die Mailadresse gerade
+   * eingetippt — sie noch einmal zu verlangen ist eine Schikane.
+   */
+  const [email, setEmail] = useState("");
+
   return (
     <form action={formAction} className="flex flex-col gap-[15px]">
       {weiter ? <input type="hidden" name="weiter" value={weiter} /> : null}
@@ -33,6 +41,8 @@ export function LoginForm({ weiter }: { weiter: string | undefined }) {
         required
         autoFocus
         placeholder="name@betrieb.at"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
       />
       <Field
         label={T.login.password}
@@ -54,6 +64,17 @@ export function LoginForm({ weiter }: { weiter: string | undefined }) {
       <div className="pt-[3px]">
         <Submit />
       </div>
+
+      <Link
+        href={
+          email.includes("@")
+            ? `/passwort-vergessen?email=${encodeURIComponent(email)}`
+            : "/passwort-vergessen"
+        }
+        className="text-center text-[12.5px] font-medium text-muted hover:underline"
+      >
+        {T.login.forgot}
+      </Link>
     </form>
   );
 }

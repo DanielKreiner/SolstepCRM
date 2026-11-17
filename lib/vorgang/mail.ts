@@ -31,6 +31,8 @@ export type MailArt =
   | "portal"
   | "termin"
   | "auftrag"
+  /* Einladung eines Mitarbeiters oder neues Passwort — ohne Vorgang. */
+  | "zugang"
   | "sonstiges";
 
 export type Empfaenger = { name: string; email: string };
@@ -102,7 +104,13 @@ export async function kundeZumVorgang(
 
 export type MailAuftrag = {
   companyId: string;
-  vorgangId: string;
+  /*
+   * Null für Mail, die zu keinem Vorgang gehört — Einladung eines
+   * Mitarbeiters, Passwort zurücksetzen. Die Spalte ist seit 0035
+   * nullable; nur die Vorgangstimeline zeigt solche Mail nicht an, was
+   * richtig ist: sie gehört dort nicht hin.
+   */
+  vorgangId: string | null;
   art: MailArt;
   an: Empfaenger;
   betreff: string;
@@ -125,7 +133,9 @@ export type MailAuftrag = {
 export async function einreihen(
   admin: SupabaseClient,
   auftrag: MailAuftrag,
-): Promise<{ ok: true; id: string } | { ok: false; grund: string }> {
+): Promise<
+  { ok: true; id: string; gesendet: boolean } | { ok: false; grund: string }
+> {
   /*
    * Nur ein Postfach anhängen, das auch senden kann.
    *
@@ -194,9 +204,16 @@ export async function einreihen(
    * geht der Anbieter gerade nicht ran, holt der Cron es nach —, aber
    * wer auf „senden" drückt, soll nicht zwei Minuten warten müssen.
    */
-  await zustellen(admin, data.id as string);
+  const zustellung = await zustellen(admin, data.id as string);
 
-  return { ok: true, id: data.id as string };
+  /*
+   * `gesendet` wird mit zurückgegeben, damit der Aufrufer dem Benutzer
+   * die Wahrheit sagen kann. "Die Einladung ist unterwegs" ist falsch,
+   * wenn die Mail in der Warteschlange hängengeblieben ist — und beim
+   * Einladen eines Mitarbeiters ist genau das der Unterschied zwischen
+   * "er kommt gleich rein" und "er wartet vergeblich".
+   */
+  return { ok: true, id: data.id as string, gesendet: zustellung.gesendet };
 }
 
 /*
