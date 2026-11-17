@@ -424,6 +424,7 @@ export function StandortLoeschen({ standort }: { standort: StandortWerte }) {
       <input type="hidden" name="locationId" value={standort.id} />
       <button
         type="submit"
+        data-testid={`standort-loeschen-${standort.id}`}
         className="cursor-pointer text-[12px] font-medium text-faint hover:text-s-crit hover:underline"
       >
         Standort entfernen

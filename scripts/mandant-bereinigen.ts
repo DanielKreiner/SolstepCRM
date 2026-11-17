@@ -113,7 +113,12 @@ const WEG = [
   "applicant",
   "support_session",
   "usage_snapshot",
-  "search_index",
+  /*
+   * `search_index` steht bewusst NICHT hier: Das ist eine View über die
+   * Fachtabellen, keine eigene Ablage. Ein Löschversuch scheitert mit
+   * "cannot delete from view" und bricht den ganzen Lauf ab — was leer
+   * werden muss, wird es von selbst, sobald die Quellen leer sind.
+   */
   // Erfundene Stammdaten
   "angebot_vorlage_position",
   "angebot_vorlage_gruppe",
@@ -208,9 +213,25 @@ async function main(): Promise<void> {
     .eq("company_id", COMPANY)
     .not("email", "like", "%@%.example.com");
 
+  /*
+   * Wer bleibt, muss auch hineinkommen. Ein inaktives Konto kann sich
+   * zwar noch anmelden, bekommt aber bewusst keinen Link über
+   * "Passwort vergessen" — und nach dem Entfernen der Demokonten ist
+   * dieses eine der einzige Zugang zum Mandanten.
+   */
+  if (WIRKLICH) {
+    for (const e of echte ?? []) {
+      if (e.active === false) {
+        await db.from("app_user").update({ active: true }).eq("id", e.id as string);
+      }
+    }
+  }
+
   console.log(`\n  Bleibt (${echte?.length ?? 0}):`);
   for (const e of echte ?? []) {
-    console.log(`    ${e.email}  ${e.name}${e.active ? "" : "  (inaktiv)"}`);
+    console.log(
+      `    ${e.email}  ${e.name}${e.active ? "" : WIRKLICH ? "  (war inaktiv, wieder aktiv)" : "  (inaktiv)"}`,
+    );
   }
 
   console.log(
