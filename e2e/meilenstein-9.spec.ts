@@ -217,17 +217,42 @@ test("Die Serviceliste zeigt die Tickets", async ({ page }) => {
    * stammte aus einem frueheren Seed; sobald der Nummernkreis
    * weitergezaehlt hat, prueft eine feste Nummer nur noch das Alter des
    * Datenbestands.
+   *
+   * Und der Status muss mitgewaehlt werden: /service zeigt ohne
+   * Parameter den Filter "aktiv", und der blendet behobene Tickets aus.
+   * Der Test nahm vorher das juengste Ticket ueberhaupt — sobald das
+   * letzte offene erledigt war, suchte er auf einem Bildschirm nach
+   * etwas, das dort nach Absicht nicht steht. Genau so ist er
+   * umgefallen, ohne dass an der Anwendung etwas falsch war.
    */
-  const { data: ticket } = await admin()
+  const db = admin();
+
+  const { data: offen } = await db
     .from("service_ticket")
     .select("number")
     .eq("company_id", COMPANY_A)
+    .neq("status", "behoben")
     .order("created_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
+
+  /*
+   * Gibt es gerade kein offenes Ticket, bleibt die Frage trotzdem
+   * dieselbe: zeigt die Liste, was in der Datenbank steht. Dann eben
+   * ueber den Filter "alle".
+   */
+  const { data: ticket } = offen
+    ? { data: offen }
+    : await db
+        .from("service_ticket")
+        .select("number")
+        .eq("company_id", COMPANY_A)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
 
   await login(page, DEMO.gf);
-  await page.goto("/service");
+  await page.goto(offen ? "/service" : "/service?status=alle");
 
   await expect(page.getByText(ticket!.number as string).first()).toBeVisible();
 });
