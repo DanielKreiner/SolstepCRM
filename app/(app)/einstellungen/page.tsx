@@ -3,6 +3,14 @@ import Link from "next/link";
 import { Abschnitt } from "@/components/ui/Abschnitt";
 import { Einrichtung, type Punkt } from "./Einrichtung";
 import {
+  FahrzeugForm,
+  FahrzeugNeu,
+  LagerortForm,
+  LagerortNeu,
+  type FahrzeugWerte,
+  type LagerWerte,
+} from "./Betriebsmittel";
+import {
   type ModulZeile,
   PlanerStammdaten,
   type SpeicherZeile,
@@ -61,6 +69,7 @@ const BEREICHE = [
   ["checklisten", "Checklisten"],
   ["planer", "Planer-Stammdaten"],
   ["standorte", "Standorte"],
+  ["betriebsmittel", "Fahrzeuge und Lager"],
   ["zeit", "Zeiterfassung"],
   ["nummernkreise", "Nummernkreise"],
   ["integrationen", "Integrationen"],
@@ -189,6 +198,21 @@ export default async function EinstellungenPage({
             .eq("active", true),
         ])
       : [{ count: null }, { count: null }];
+
+  const [{ data: fahrzeuge }, { data: lagerorte }] =
+    bereich === "betriebsmittel"
+      ? await Promise.all([
+          supabase
+            .from("fahrzeug")
+            .select("id, name, kennzeichen, aktiv")
+            .order("sort"),
+          supabase
+            .from("lagerort")
+            .select("id, name, aktiv, art")
+            .eq("art", "hauptlager")
+            .order("sort"),
+        ])
+      : [{ data: null }, { data: null }];
 
   /*
    * Nur laden, wenn der Bereich offen ist — die Einstellungen holen
@@ -544,6 +568,62 @@ export default async function EinstellungenPage({
                 )}
 
                 {darfSchreiben ? <StandortNeu /> : null}
+              </div>
+            </Abschnitt>
+          ) : null}
+
+          {bereich === "betriebsmittel" ? (
+            <Abschnitt titel="Fahrzeuge und Lagerorte">
+              <p className="-mt-1 mb-4 text-[12.5px] leading-[1.5] text-muted">
+                Jedes Fahrzeug ist zugleich ein Lagerort. Was auf den Bus
+                gebucht wird, liegt auf dem Bus — der Monteur sieht auf der
+                Baustelle, was er dabei hat, und das Hauptlager weiss, was es
+                nicht mehr hat.
+              </p>
+
+              <div className="flex flex-col gap-3">
+                <h3 className="mt-1 text-[13px] font-semibold text-muted">
+                  Fahrzeuge
+                </h3>
+                {(fahrzeuge ?? []).length === 0 ? (
+                  <p className="text-[13px] text-muted">Kein Fahrzeug angelegt.</p>
+                ) : (
+                  (fahrzeuge ?? []).map((f) => {
+                    const werte: FahrzeugWerte = {
+                      id: f.id as string,
+                      name: f.name as string,
+                      kennzeichen: (f.kennzeichen as string | null) ?? "",
+                      aktiv: f.aktiv !== false,
+                    };
+                    return (
+                      <FahrzeugForm
+                        key={werte.id}
+                        fahrzeug={werte}
+                        gesperrt={!darfSchreiben}
+                      />
+                    );
+                  })
+                )}
+                {darfSchreiben ? <FahrzeugNeu /> : null}
+
+                <h3 className="mt-4 text-[13px] font-semibold text-muted">
+                  Lagerorte ohne Fahrzeug
+                </h3>
+                {(lagerorte ?? []).map((l) => {
+                  const werte: LagerWerte = {
+                    id: l.id as string,
+                    name: l.name as string,
+                    aktiv: l.aktiv !== false,
+                  };
+                  return (
+                    <LagerortForm
+                      key={werte.id}
+                      lagerort={werte}
+                      gesperrt={!darfSchreiben}
+                    />
+                  );
+                })}
+                {darfSchreiben ? <LagerortNeu /> : null}
               </div>
             </Abschnitt>
           ) : null}
