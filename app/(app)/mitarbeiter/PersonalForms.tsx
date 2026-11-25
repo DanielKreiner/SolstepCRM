@@ -3,6 +3,8 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Dialog } from "@/components/ui/Dialog";
+import { dateiHinweis, useDateiAuswahl } from "@/components/ui/useDateiAuswahl";
+import { DateiHinweis } from "@/components/vorgang/Anhaenge";
 import {
   addQualification,
   markSigned,
@@ -121,6 +123,12 @@ export function QualificationForm({
 
 export function DocumentForm({ userId }: { userId: string }) {
   const [state, formAction] = useActionState(uploadDocument, INITIAL);
+  /*
+   * Hier stand „max. 25 MB", und das war nie wahr: Eine Server Action
+   * nimmt nur einen Bruchteil davon, und was darüber lag, endete in
+   * einem Fehlerbildschirm statt in einer Meldung.
+   */
+  const auswahl = useDateiAuswahl();
 
   return (
     <form action={formAction} className="mt-3 flex flex-wrap items-end gap-2">
@@ -150,16 +158,19 @@ export function DocumentForm({ userId }: { userId: string }) {
 
       <div className="flex min-w-[220px] flex-1 flex-col gap-[4px]">
         <label htmlFor="d-datei" className="text-[11px] text-muted">
-          Datei (PDF oder Bild, max. 25 MB)
+          Datei (PDF oder Bild)
         </label>
         <input
+          ref={auswahl.feld}
           id="d-datei"
           type="file"
           name="datei"
           required
+          onChange={auswahl.beiAuswahl}
           accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.csv,.xlsx"
           className="text-[12.5px] text-muted file:mr-3 file:cursor-pointer file:rounded-pill file:border-0 file:bg-sunk file:px-4 file:py-2 file:text-[12.5px] file:text-ink"
         />
+        <DateiHinweis hinweis={dateiHinweis(auswahl)} />
       </div>
 
       <Submit label="Hochladen" />

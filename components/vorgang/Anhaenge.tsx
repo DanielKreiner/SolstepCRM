@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { dateiHinweis, useDateiAuswahl } from "@/components/ui/useDateiAuswahl";
 
 export type AnhangAnzeige = {
   id: string;
@@ -90,6 +91,14 @@ function Bild({ url, name }: { url: string; name: string }) {
  *
  * Ohne die weiss niemand, ob das Foto wirklich dran hängt — und am Handy
  * ist genau das die häufigste Unsicherheit.
+ *
+ * Bilder werden hier verkleinert, bevor sie das Gerät verlassen. Grund
+ * ist ein Fehler aus dem Betrieb: Ein Kunde hat im Portal ein Foto vom
+ * Zählerkasten angehängt und einen Fehlerbildschirm bekommen, weil ein
+ * Handyfoto grösser ist als das, was eine Server Action durchlässt. Die
+ * Datei kam nie am Server an, also lief auch die Grössenprüfung dort
+ * nie. Was trotzdem zu gross bleibt — eine lange PDF etwa —, wird hier
+ * gemeldet statt in den Absturz zu laufen.
  */
 export function DateiFeld({
   id,
@@ -102,7 +111,8 @@ export function DateiFeld({
   label: string;
   pflicht?: boolean;
 }) {
-  const [namen, setNamen] = useState<string[]>([]);
+  const auswahl = useDateiAuswahl();
+  const hinweis = dateiHinweis(auswahl);
 
   return (
     <div>
@@ -113,27 +123,39 @@ export function DateiFeld({
         {label}
       </label>
       <input
+        ref={auswahl.feld}
         id={id}
         name={name}
         type="file"
         multiple
         required={pflicht}
         accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
-        onChange={(e) =>
-          setNamen([...(e.target.files ?? [])].map((f) => f.name))
-        }
+        onChange={auswahl.beiAuswahl}
         className="w-full text-[12.5px] file:mr-3 file:cursor-pointer file:rounded-pill file:border-0 file:bg-sunk file:px-4 file:py-2 file:text-[12.5px] file:font-medium"
       />
-      {namen.length > 0 ? (
-        <p className="mt-1 text-[11.5px] text-s-done">
-          {namen.length === 1 ? namen[0] : `${namen.length} Dateien`} ausgewählt
-        </p>
-      ) : (
-        <p className="mt-1 text-[10.5px] text-faint">
-          Bilder oder PDF, höchstens 25 MB. Standortdaten werden vor dem
-          Ablegen aus Fotos entfernt.
-        </p>
-      )}
+      <DateiHinweis hinweis={hinweis} />
     </div>
   );
+}
+
+/** Die Zeile unter einem Dateifeld, überall gleich. */
+export function DateiHinweis({
+  hinweis,
+}: {
+  hinweis: { art: "fehler" | "laeuft" | "gewaehlt" | "leer"; text: string };
+}) {
+  if (hinweis.art === "fehler") {
+    return (
+      <p role="alert" className="mt-1 text-[11.5px] font-medium text-s-crit">
+        {hinweis.text}
+      </p>
+    );
+  }
+  if (hinweis.art === "laeuft") {
+    return <p className="mt-1 text-[11.5px] text-muted">{hinweis.text}</p>;
+  }
+  if (hinweis.art === "gewaehlt") {
+    return <p className="mt-1 text-[11.5px] text-s-done">{hinweis.text}</p>;
+  }
+  return <p className="mt-1 text-[10.5px] text-faint">{hinweis.text}</p>;
 }

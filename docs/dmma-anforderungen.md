@@ -226,6 +226,14 @@ Baustelle, auf der der Artikel liegt, und fällt erst Monate später auf.
 Positionen verteilt, nicht als eigene Zeile geführt. Daniel hat das so bestätigt. Richtig,
 denn nur dann stimmt der Preis am einzelnen Artikel.
 
+**Achtung beim Bauen:** Eine gescannte Lieferantenrechnung hat gut und gern acht Megabyte,
+und eine Server Action nimmt nur rund vier — darüber bricht die Plattform die Anfrage ab,
+bevor eigener Code sie sieht. Genau daran ist im Onboarding der Foto-Upload im Portal
+gescheitert. Für Bilder löst die Verkleinerung in `lib/bilder/verkleinern.ts` das; eine PDF
+lässt sich nicht verkleinern. Dieser Upload muss deshalb den Weg nehmen, den der Planer
+für das Drohnenfoto schon geht: signierte Upload-Adresse holen, direkt in den Speicher
+laden, nur den Pfad an den Server melden (`fotoZiel` in `app/(app)/planer/actions.ts`).
+
 **Aufwand: 3 Tage ohne Belegerkennung, 5–6 Tage mit.**
 
 ### 3.3 Wiederbeschaffungszeit je Artikel und Erinnerung vor dem Montagetermin
@@ -425,18 +433,25 @@ alle korrigiert werden.
 
 ## 6. Fehler und Kleinigkeiten
 
-### 6.1 Portal-Upload wirft einen Fehler — zuerst prüfen
+### 6.1 Portal-Upload wirft einen Fehler — behoben
 
 Manuel, als er im Kundenportal auf eine Rückfrage mit Foto antwortet:
 
 > „Aber es wird gesendet. Application error super."
 
-Das ist der einzige harte Fehler, der im Termin sichtbar war, und der Kunde hat ihn gesehen.
-Die Datei kam offenbar an, aber die Antwort war ein Fehlerbildschirm. Nach Projektregel darf
-kein stiller Fehler stehenbleiben, und hier ist er noch nicht einmal still — er steht beim
-Kunden auf dem Schirm.
+Der einzige harte Fehler, der im Termin sichtbar war — und der Kunde hat ihn gesehen.
 
-**Gehört vor allem anderen geprüft.**
+Die Ursache lag nicht im Portal: Eine Server Action nimmt ohne Angabe höchstens 1 MB
+Rumpf, ein Handyfoto hat drei bis zehn. Die Anfrage brach ab, bevor eigener Code sie sah,
+also lief die Grössenprüfung nie — sie konnte nicht. Dieselbe Grenze traf die
+Checklisten-Aufnahme auf der Baustelle und die Personalakte; im Planer war sie schon
+aufgefallen und dort mit einem Direkt-Upload gelöst worden.
+
+Behoben: Bilder werden im Browser verkleinert, bevor sie das Gerät verlassen (gemessen
+9,58 MB → 0,49 MB bei einem 12-Megapixel-Hochformat), die Grenze der Server Action steht
+auf 4 MB, und was dann noch zu gross ist, bekommt eine Meldung statt eines
+Fehlerbildschirms. Nebeneffekt, der auf der Baustelle mehr wert ist als der Fehler selbst:
+Ein halbes Megabyte geht bei einem Balken Empfang durch, zehn nicht.
 
 ### 6.2 „Ganztägig" bei der Terminierung
 
@@ -500,8 +515,8 @@ Für den nächsten Call, damit nichts zweimal verhandelt wird:
 
 ## 9. Vorschlag für die Reihenfolge
 
-**Noch im November:** Portal-Fehler (6.1) prüfen und beheben. Danach die Daten von DMMA
-einfordern (Abschnitt 2) — alles andere wartet darauf.
+**Noch im November:** Portal-Fehler (6.1) ist behoben. Jetzt die Daten von DMMA einfordern
+(Abschnitt 2) — alles andere wartet darauf.
 
 **Dezember, erste Hälfte:** Rechnungen vollständig (Abschnitt 1). Das ist der Termin, der
 nicht verschiebbar ist.

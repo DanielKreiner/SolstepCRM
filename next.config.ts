@@ -16,6 +16,23 @@ const nextConfig: NextConfig = {
    * distDir für den Build lässt das Deployment ins Leere greifen.
    */
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  experimental: {
+    /*
+     * Ohne diese Angabe nimmt eine Server Action höchstens 1 MB Rumpf.
+     * Ein Handyfoto ist drei- bis fünfmal so gross, und die Anfrage
+     * bricht ab, bevor eigener Code sie sieht — der Benutzer bekommt
+     * einen Fehlerbildschirm, nicht die Meldung aus pruefeDatei. Genau
+     * das hat im Onboarding ein Kunde erlebt, der im Portal ein Foto
+     * vom Zählerkasten angehängt hat.
+     *
+     * 4 MB und nicht mehr: Serverlose Funktionen lassen ohnehin nur
+     * rund 4,5 MB durch, eine höhere Zahl hier wäre ein Versprechen,
+     * das die Plattform nicht hält. Alles darüber fängt
+     * lib/bilder/verkleinern.ts im Browser ab — Bilder werden klein
+     * gerechnet, der Rest wird gemeldet.
+     */
+    serverActions: { bodySizeLimit: "4mb" },
+  },
   /*
    * Alte Lesezeichen sollen nicht ins Leere laufen. Die Seiten dahinter
    * gibt es nicht mehr — ihre Inhalte sind in „Zeiten", „Heute" und den

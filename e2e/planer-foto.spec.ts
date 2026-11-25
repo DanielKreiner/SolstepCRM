@@ -1,5 +1,5 @@
-import { deflateSync } from "node:zlib";
 import { expect, type Page, test } from "@playwright/test";
+import { grossesBild, png } from "./bilder";
 import { admin, DEMO, login } from "./helpers";
 import { mehrOeffnen } from "./planer-helfer";
 
@@ -8,102 +8,13 @@ import { mehrOeffnen } from "./planer-helfer";
  * Abnahmetest 6).
  *
  * Gehört zur eigenen Planer-Suite: `pnpm test:e2e:planer`.
- */
-
-/* ── Ein echtes, dekodierbares PNG ────────────────────────────────
  *
- * Kein Stub aus ein paar Bytes: die Oberfläche liest die Bildmasse mit
- * `new Image()` aus, bevor sie hochlädt. Ein nicht dekodierbares Bild
- * käme deshalb nie beim Server an, und der Test prüfte nichts.
+ * Die Bilderzeugung steht in ./bilder — dieselben Bilder braucht die
+ * Anhang-Suite für die Grössengrenze der Server Actions.
  */
-function crc32(daten: Buffer): number {
-  let c = ~0;
-  for (const b of daten) {
-    c ^= b;
-    for (let i = 0; i < 8; i++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
-  }
-  return ~c >>> 0;
-}
-
-function block(typ: string, inhalt: Buffer): Buffer {
-  const kopf = Buffer.alloc(4);
-  kopf.writeUInt32BE(inhalt.length, 0);
-  const koerper = Buffer.concat([Buffer.from(typ, "ascii"), inhalt]);
-  const pruef = Buffer.alloc(4);
-  pruef.writeUInt32BE(crc32(koerper), 0);
-  return Buffer.concat([kopf, koerper, pruef]);
-}
-
-function png(breite: number, hoehe: number): Buffer {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(breite, 0);
-  ihdr.writeUInt32BE(hoehe, 4);
-  ihdr[8] = 8; // Bittiefe
-  ihdr[9] = 2; // Truecolor
-  const roh = Buffer.alloc(hoehe * (1 + breite * 3));
-  for (let y = 0; y < hoehe; y++) {
-    const zeile = y * (1 + breite * 3);
-    roh[zeile] = 0; // Filter „keiner"
-    for (let x = 0; x < breite; x++) {
-      const p = zeile + 1 + x * 3;
-      // Schachbrett, damit man auf dem Bild etwas erkennt.
-      const hell = (Math.floor(x / 40) + Math.floor(y / 40)) % 2 === 0;
-      roh[p] = hell ? 190 : 90;
-      roh[p + 1] = hell ? 185 : 88;
-      roh[p + 2] = hell ? 175 : 82;
-    }
-  }
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    block("IHDR", ihdr),
-    block("IDAT", deflateSync(roh)),
-    block("IEND", Buffer.alloc(0)),
-  ]);
-}
 
 const BREITE = 800;
 const HOEHE = 600;
-
-/**
- * Ein echtes Bild von über einem Megabyte — die alte Grenze der Server
- * Action.
- *
- * Erzeugt statt mitgeliefert: Ein Testbild im Repo wäre Ballast in
- * jedem Checkout. PNG, weil es sich ohne Abhängigkeit schreiben lässt —
- * Kopf, ein Datenblock ohne Kompression, Ende. Der Inhalt ist
- * gleichgültig, die Grösse nicht.
- */
-/**
- * Ein Bild von über einem Megabyte — die alte Grenze der Server Action.
- *
- * Erzeugt statt mitgeliefert: Ein Testbild im Repo wäre Ballast in
- * jedem Checkout. Ohne Kompression gespeichert, damit es sicher gross
- * genug ist; der Inhalt ist gleichgültig, die Grösse nicht.
- */
-function grossesBild(breite = 1600, hoehe = 1200): Buffer {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(breite, 0);
-  ihdr.writeUInt32BE(hoehe, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 2;
-  const roh = Buffer.alloc(hoehe * (1 + breite * 3));
-  for (let y = 0; y < hoehe; y++) {
-    const zeile = y * (1 + breite * 3);
-    roh[zeile] = 0;
-    for (let x = 0; x < breite; x++) {
-      const p = zeile + 1 + x * 3;
-      roh[p] = (x * 7 + y) % 256;
-      roh[p + 1] = (x + y * 5) % 256;
-      roh[p + 2] = (x * y) % 256;
-    }
-  }
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    block("IHDR", ihdr),
-    block("IDAT", deflateSync(roh, { level: 0 })),
-    block("IEND", Buffer.alloc(0)),
-  ]);
-}
 
 async function neuesProjekt(page: Page, name: string) {
   await page.goto("/planer/neu");

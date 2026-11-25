@@ -4,6 +4,8 @@ import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { LEER, Meldung, type AktionsStatus } from "@/components/ui/Formular";
 import { Pill } from "@/components/ui/Pill";
+import { dateiHinweis, useDateiAuswahl } from "@/components/ui/useDateiAuswahl";
+import { DateiHinweis } from "@/components/vorgang/Anhaenge";
 import {
   aufnahmeAbschliessen,
   aufnahmeStarten,
@@ -176,6 +178,12 @@ function PunktZeile({
     LEER,
   );
   const fertig = punkt.erledigtAm !== null;
+  /*
+   * Fotos verkleinern, bevor sie weggehen. Ohne das scheitert jedes
+   * Handyfoto an der Grösse, die eine Server Action durchlässt — und
+   * der Monteur steht mit einem Fehlerbildschirm auf dem Dach.
+   */
+  const auswahl = useDateiAuswahl();
 
   return (
     <li
@@ -298,19 +306,24 @@ function PunktZeile({
           ) : null}
 
           {punkt.typ === "foto" || punkt.typ === "datei" ? (
-            <input
-              type="file"
-              name="anhang"
-              multiple
-              /*
-               * capture nur beim Foto: das öffnet am Telefon direkt die
-               * Kamera. Bei einem PDF wäre das genau falsch.
-               */
-              {...(punkt.typ === "foto"
-                ? { accept: "image/*", capture: "environment" as const }
-                : { accept: ".pdf,image/*" })}
-              className="min-w-0 flex-1 text-[12.5px] file:mr-3 file:cursor-pointer file:rounded-pill file:border-0 file:bg-sunk file:px-4 file:py-[9px] file:text-[12.5px] file:font-medium"
-            />
+            <div className="min-w-0 flex-1">
+              <input
+                ref={auswahl.feld}
+                type="file"
+                name="anhang"
+                multiple
+                onChange={auswahl.beiAuswahl}
+                /*
+                 * capture nur beim Foto: das öffnet am Telefon direkt die
+                 * Kamera. Bei einem PDF wäre das genau falsch.
+                 */
+                {...(punkt.typ === "foto"
+                  ? { accept: "image/*", capture: "environment" as const }
+                  : { accept: ".pdf,image/*" })}
+                className="w-full text-[12.5px] file:mr-3 file:cursor-pointer file:rounded-pill file:border-0 file:bg-sunk file:px-4 file:py-[9px] file:text-[12.5px] file:font-medium"
+              />
+              <DateiHinweis hinweis={dateiHinweis(auswahl)} />
+            </div>
           ) : null}
 
           {punkt.typ === "haken" && fertig ? (
