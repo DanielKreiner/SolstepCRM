@@ -5,17 +5,9 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { Pill } from "@/components/ui/Pill";
 import { MAX_BYTES } from "@/lib/bilder/exif";
-import { pruefeUnterlage } from "@/lib/dateien/unterlagen";
+import { BUCKET_UNTERLAGEN, pruefeUnterlage } from "@/lib/dateien/unterlagen";
 import { createClient } from "@/lib/supabase/client";
-import {
-  BUCKET,
-  dateiEntfernen,
-  dateiVermerken,
-  dateiZiel,
-  punktEntfaellt,
-  punktSpeichern,
-  type UnterlagenState,
-} from "./unterlagen-actions";
+import type { UnterlagenState } from "./unterlagen-actions";
 
 /*
  * Was der Betrieb beim Start beisteuern muss — Dateien, Angaben,
@@ -31,6 +23,39 @@ import {
  */
 
 const INITIAL: UnterlagenState = { error: null, ok: null };
+
+/*
+ * Die Aktionen kommen als Eigenschaften herein und werden nicht
+ * importiert.
+ *
+ * Denselben Bildschirm gibt es zweimal: in den Einstellungen für den
+ * angemeldeten Betrieb, und hinter einem signierten Link für jemanden
+ * ohne Konto. Die Datenwege dahinter sind völlig verschieden — einmal
+ * unter RLS, einmal über den Service-Role-Client mit festem Mandanten —,
+ * das Formular ist dasselbe. Zwei Abschriften davon wären zwei Formulare,
+ * die nach der ersten Änderung auseinanderlaufen.
+ */
+export type UnterlagenAktionen = {
+  speichern: (prev: UnterlagenState, formData: FormData) => Promise<UnterlagenState>;
+  entfaellt: (prev: UnterlagenState, formData: FormData) => Promise<UnterlagenState>;
+  dateiZiel: (
+    punktId: string,
+    dateiname: string,
+    mime: string,
+    groesse: number,
+  ) => Promise<{ pfad: string; token: string } | { fehler: string }>;
+  dateiVermerken: (daten: {
+    punktId: string;
+    pfad: string;
+    dateiname: string;
+    mime: string;
+    groesse: number;
+  }) => Promise<UnterlagenState>;
+  dateiEntfernen: (
+    prev: UnterlagenState,
+    formData: FormData,
+  ) => Promise<UnterlagenState>;
+};
 
 const feld =
   "w-full rounded-input border border-transparent bg-sunk px-[11px] py-[8px] text-[13.5px] text-ink outline-0 focus:border-accent focus:bg-surface";
@@ -104,12 +129,20 @@ function StatusPille({ punkt }: { punkt: UnterlagenPunkt }) {
 
 /* ------------------------------------------------------------ Dateien */
 
-function DateiFeld({ punkt, gesperrt }: { punkt: UnterlagenPunkt; gesperrt: boolean }) {
+function DateiFeld({
+  punkt,
+  gesperrt,
+  aktionen,
+}: {
+  punkt: UnterlagenPunkt;
+  gesperrt: boolean;
+  aktionen: UnterlagenAktionen;
+}) {
   const router = useRouter();
   const feldRef = useRef<HTMLInputElement>(null);
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
-  const [wegState, wegAction] = useActionState(dateiEntfernen, INITIAL);
+  const [wegState, wegAction] = useActionState(aktionen.dateiEntfernen, INITIAL);
 
   async function hochladen(dateien: FileList | null) {
     if (!dateien || dateien.length === 0) return;
@@ -130,21 +163,21 @@ function DateiFeld({ punkt, gesperrt }: { punkt: UnterlagenPunkt; gesperrt: bool
           continue;
         }
 
-        const ziel = await dateiZiel(punkt.id, datei.name, datei.type, datei.size);
+        const ziel = await aktionen.dateiZiel(punkt.id, datei.name, datei.type, datei.size);
         if ("fehler" in ziel) {
           setFehler(`${datei.name}: ${ziel.fehler}`);
           continue;
         }
 
         const { error } = await db.storage
-          .from(BUCKET)
+          .from(BUCKET_UNTERLAGEN)
           .uploadToSignedUrl(ziel.pfad, ziel.token, datei);
         if (error) {
           setFehler(`${datei.name}: Hochladen fehlgeschlagen — ${error.message}`);
           continue;
         }
 
-        const stand = await dateiVermerken({
+        const stand = await aktionen.dateiVermerken({
           punktId: punkt.id,
           pfad: ziel.pfad,
           dateiname: datei.name,
@@ -234,9 +267,17 @@ function DateiFeld({ punkt, gesperrt }: { punkt: UnterlagenPunkt; gesperrt: bool
 
 /* -------------------------------------------------------------- Punkt */
 
-function PunktZeile({ punkt, gesperrt }: { punkt: UnterlagenPunkt; gesperrt: boolean }) {
-  const [state, formAction] = useActionState(punktSpeichern, INITIAL);
-  const [entfState, entfAction] = useActionState(punktEntfaellt, INITIAL);
+function PunktZeile({
+  punkt,
+  gesperrt,
+  aktionen,
+}: {
+  punkt: UnterlagenPunkt;
+  gesperrt: boolean;
+  aktionen: UnterlagenAktionen;
+}) {
+  const [state, formAction] = useActionState(aktionen.speichern, INITIAL);
+  const [entfState, entfAction] = useActionState(aktionen.entfaellt, INITIAL);
 
   const gewaehlt = (punkt.wert ?? "")
     .split(",")
@@ -269,7 +310,7 @@ function PunktZeile({ punkt, gesperrt }: { punkt: UnterlagenPunkt; gesperrt: boo
       ) : (
         <>
           {punkt.art === "datei" ? (
-            <DateiFeld punkt={punkt} gesperrt={gesperrt} />
+            <DateiFeld punkt={punkt} gesperrt={gesperrt} aktionen={aktionen} />
           ) : null}
 
           <form action={formAction} className="mt-[2px] flex flex-col gap-[8px]">
@@ -359,9 +400,11 @@ function PunktZeile({ punkt, gesperrt }: { punkt: UnterlagenPunkt; gesperrt: boo
 export function Unterlagen({
   punkte,
   gesperrt,
+  aktionen,
 }: {
   punkte: UnterlagenPunkt[];
   gesperrt: boolean;
+  aktionen: UnterlagenAktionen;
 }) {
   if (punkte.length === 0) return null;
 
@@ -412,7 +455,7 @@ export function Unterlagen({
             </div>
             <ul className="flex flex-col">
               {drin.map((p) => (
-                <PunktZeile key={p.id} punkt={p} gesperrt={gesperrt} />
+                <PunktZeile key={p.id} punkt={p} gesperrt={gesperrt} aktionen={aktionen} />
               ))}
             </ul>
           </div>

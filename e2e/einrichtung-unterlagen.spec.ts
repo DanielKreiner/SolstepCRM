@@ -284,3 +284,166 @@ test("ein Monteur kann die Liste lesen, aber nicht beantworten", async ({ page }
 
   await expect(page.getByRole("button", { name: "Speichern" })).toHaveCount(0);
 });
+
+test("der Link ohne Anmeldung führt auf dieselbe Liste und speichert", async ({
+  page,
+  browser,
+}) => {
+  /*
+   * Der eigentliche Zweck der Sache: Wer die Angaben hat, hat oft kein
+   * Konto — die Lohnverrechnung, der Steuerberater, die EDV-Betreuung.
+   *
+   * Der Token wird nicht im Test gebaut, sondern über die Oberfläche
+   * erzeugt und aus der Anzeige gelesen. Ein selbst gebauter Token
+   * prüfte nur die Signatur, nicht den Weg: dass der Link wirklich
+   * genau einmal sichtbar ist, dass nur sein Hash in der Datenbank
+   * landet und dass die Middleware ihn durchlässt.
+   */
+  const db = admin();
+  await login(page, DEMO.gf);
+  await page.goto(SEITE);
+
+  await page.getByRole("button", { name: "Link erzeugen" }).click();
+
+  const anzeige = page.locator("code").filter({ hasText: "/einrichtung/" });
+  await expect(anzeige).toBeVisible({ timeout: 15_000 });
+  const url = (await anzeige.innerText()).trim();
+  const token = url.split("/einrichtung/")[1]!;
+  expect(token.length).toBeGreaterThan(40);
+
+  /* In der Datenbank darf der Token selbst nirgends stehen. */
+  const { data: zugaenge } = await db
+    .from("einrichtung_zugang")
+    .select("id, token_hash, revoked_at")
+    .eq("company_id", COMPANY_A)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const zugang = zugaenge![0]!;
+  expect(zugang.token_hash).not.toContain(token.slice(0, 16));
+
+  /* Ein frischer Browser ohne Sitzung — so wie beim Empfänger. */
+  const fremd = await browser.newContext();
+  const ohneKonto = await fremd.newPage();
+
+  try {
+    await db
+      .from("einrichtung_punkt")
+      .update({ wert: null, status: "offen", beantwortet_extern: false })
+      .eq("company_id", COMPANY_A)
+      .eq("schluessel", "kollektivvertrag");
+
+    await ohneKonto.goto(`/einrichtung/${token}`);
+
+    /* Keine Anmeldung dazwischen. */
+    expect(ohneKonto.url()).toContain("/einrichtung/");
+
+    const zeile = ohneKonto.getByTestId("punkt-kollektivvertrag");
+    await expect(zeile).toBeVisible();
+
+    await zeile.locator('input[name="wert"]').fill("Elektrogewerbe");
+    await zeile.getByRole("button", { name: "Speichern" }).click();
+
+    await expect
+      .poll(
+        async () => {
+          const { data } = await db
+            .from("einrichtung_punkt")
+            .select("wert, status, beantwortet_extern, beantwortet_von")
+            .eq("company_id", COMPANY_A)
+            .eq("schluessel", "kollektivvertrag")
+            .single();
+          return data;
+        },
+        { timeout: 15_000 },
+      )
+      .toMatchObject({
+        wert: "Elektrogewerbe",
+        status: "beantwortet",
+        /* Kein Konto dahinter — das muss man der Antwort ansehen. */
+        beantwortet_extern: true,
+        beantwortet_von: null,
+      });
+
+    /* Zurückgezogen heisst zurückgezogen. */
+    await db
+      .from("einrichtung_zugang")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", zugang.id as string);
+
+    await ohneKonto.goto(`/einrichtung/${token}`);
+    await expect(ohneKonto.getByText("Dieser Link gilt nicht mehr")).toBeVisible();
+  } finally {
+    await fremd.close();
+    await db
+      .from("einrichtung_zugang")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", zugang.id as string);
+  }
+});
+
+test("der Link eines Mandanten zeigt nichts vom anderen", async ({ page, browser }) => {
+  /*
+   * Auf diesem Pfad gibt es keine Sitzung und damit kein RLS. Die ganze
+   * Mandantentrennung hängt daran, dass jede Abfrage in
+   * lib/einrichtung/zugang.ts selbst auf company_id einschränkt — also
+   * wird genau das geprüft und nicht geglaubt.
+   */
+  const db = admin();
+  await login(page, DEMO.gf);
+  await page.goto(SEITE);
+  await page.getByRole("button", { name: "Link erzeugen" }).click();
+
+  const anzeige = page.locator("code").filter({ hasText: "/einrichtung/" });
+  await expect(anzeige).toBeVisible({ timeout: 15_000 });
+  const token = (await anzeige.innerText()).trim().split("/einrichtung/")[1]!;
+
+  /* Eine Marke im fremden Mandanten, die auf keinen Fall auftauchen darf. */
+  const marke = `FREMD-${Date.now()}`;
+  const { data: fremdePunkte } = await db
+    .from("einrichtung_punkt")
+    .select("id")
+    .neq("company_id", COMPANY_A)
+    .limit(1);
+
+  const fremderPunkt = fremdePunkte?.[0];
+  test.skip(!fremderPunkt, "Kein zweiter Mandant in dieser Datenbank");
+
+  await db
+    .from("einrichtung_punkt")
+    .update({ wert: marke })
+    .eq("id", fremderPunkt!.id as string);
+
+  const fremd = await browser.newContext();
+  const ohneKonto = await fremd.newPage();
+  try {
+    await ohneKonto.goto(`/einrichtung/${token}`);
+    await expect(ohneKonto.getByText(marke)).toHaveCount(0);
+
+    /*
+     * Das Schreiben auf einen fremden Punkt lässt sich von hier aus
+     * nicht ehrlich nachstellen — eine Server Action braucht ihre
+     * verschlüsselte Kennung, und ein nachgebauter Aufruf prüfte nur
+     * den Nachbau. Die Grenze sitzt in linkPunkt(companyId, punktId):
+     * jede schreibende Aktion holt den Punkt zuerst mit beiden
+     * Bedingungen und bricht ab, wenn er nicht dazugehört. Hier bleibt
+     * die Kontrolle, dass das Anzeigen allein nichts verändert.
+     */
+    const { data: danach } = await db
+      .from("einrichtung_punkt")
+      .select("wert")
+      .eq("id", fremderPunkt!.id as string)
+      .single();
+    expect(danach!.wert).toBe(marke);
+  } finally {
+    await fremd.close();
+    await db
+      .from("einrichtung_punkt")
+      .update({ wert: null })
+      .eq("id", fremderPunkt!.id as string);
+    await db
+      .from("einrichtung_zugang")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("company_id", COMPANY_A)
+      .is("revoked_at", null);
+  }
+});

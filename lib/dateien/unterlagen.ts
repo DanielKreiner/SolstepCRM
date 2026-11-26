@@ -23,6 +23,13 @@ import { MAX_BYTES } from "@/lib/bilder/exif";
  * wieder herauskommt.
  */
 
+/*
+ * Der Bucket für Unterlagen. Steht hier und nicht bei den Server
+ * Actions: Aus einer "use server"-Datei lassen sich nur Funktionen
+ * ausführen, und der Browser braucht den Namen für den Direkt-Upload.
+ */
+export const BUCKET_UNTERLAGEN = "documents";
+
 /** Erlaubte Unterlagen — Whitelist, nicht Blacklist (CLAUDE.md 11). */
 export const ERLAUBTE_UNTERLAGEN: Record<string, string> = {
   "application/pdf": "pdf",

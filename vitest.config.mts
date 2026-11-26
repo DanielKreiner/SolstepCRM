@@ -8,7 +8,18 @@ export default defineConfig({
    * relativen Pfaden nur, um den Test zufriedenzustellen.
    */
   resolve: {
-    alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL(".", import.meta.url)),
+      /*
+       * "server-only" wirft beim Import, sobald es nicht in einer
+       * Server-Umgebung von Next läuft. Das ist im Betrieb richtig und
+       * im Test eine Wand: Gerade die Module mit einer
+       * Sicherheitsgrenze darin — die Token der Links ohne Anmeldung —
+       * tragen diesen Schutz zu Recht und wären damit die einzigen, die
+       * sich nicht prüfen lassen. Hier steht dafür ein leeres Modul.
+       */
+      "server-only": fileURLToPath(new URL("./tests/leer.ts", import.meta.url)),
+    },
   },
   test: {
     environment: "node",

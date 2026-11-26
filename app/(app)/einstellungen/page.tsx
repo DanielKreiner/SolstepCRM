@@ -7,6 +7,15 @@ import {
   type UnterlagenDatei,
   type UnterlagenPunkt,
 } from "./Unterlagen";
+import {
+  dateiEntfernen,
+  dateiVermerken,
+  dateiZiel,
+  punktEntfaellt,
+  punktSpeichern,
+} from "./unterlagen-actions";
+import { EinrichtungLink, type ZugangZeile } from "./EinrichtungLink";
+import { BRAND } from "@/lib/brand";
 import { KreisForm, type KreisWerte } from "./Nummernkreise";
 import {
   NachweisForm,
@@ -298,6 +307,28 @@ export default async function EinstellungenPage({
   const unterlagen =
     bereich === "einrichtung" ? await unterlagenLaden(supabase) : [];
 
+  const { data: zugaenge } =
+    bereich === "einrichtung"
+      ? await supabase
+          .from("einrichtung_zugang")
+          .select(
+            "id, zweck, created_at, expires_at, revoked_at, letzter_zugriff, zugriffe",
+          )
+          .order("created_at", { ascending: false })
+          .limit(10)
+      : { data: null };
+
+  const zugangZeilen: ZugangZeile[] = (zugaenge ?? []).map((z) => ({
+    id: z.id as string,
+    zweck: (z.zweck as string | null) ?? null,
+    erstellt: date(z.created_at as string),
+    laeuftAb: date(z.expires_at as string),
+    letzterZugriff: z.letzter_zugriff ? date(z.letzter_zugriff as string) : null,
+    zugriffe: Number(z.zugriffe ?? 0),
+    widerrufen: Boolean(z.revoked_at),
+    abgelaufen: new Date(z.expires_at as string) < new Date(),
+  }));
+
   const [{ data: nachweise }, { data: traegerListe }] =
     bereich === "nachweise"
       ? await Promise.all([
@@ -577,7 +608,27 @@ export default async function EinstellungenPage({
                 Gegenteil: die Punkte, bei denen wir auf etwas von Ihnen warten
                 — eine Datei, eine Angabe, eine Entscheidung.
               </p>
-              <Unterlagen punkte={unterlagen} gesperrt={!darfSchreiben} />
+              <Unterlagen
+                punkte={unterlagen}
+                gesperrt={!darfSchreiben}
+                aktionen={{
+                  speichern: punktSpeichern,
+                  entfaellt: punktEntfaellt,
+                  dateiZiel,
+                  dateiVermerken,
+                  dateiEntfernen,
+                }}
+              />
+            </Abschnitt>
+          ) : null}
+
+          {bereich === "einrichtung" && unterlagen.length > 0 ? (
+            <Abschnitt titel="Link zum Weitergeben">
+              <EinrichtungLink
+                zeilen={zugangZeilen}
+                basisUrl={BRAND.domain}
+                gesperrt={!darfSchreiben}
+              />
             </Abschnitt>
           ) : null}
 

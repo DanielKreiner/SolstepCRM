@@ -16,6 +16,12 @@ const PUBLIC_PREFIXES = [
   "/passwort-vergessen",
   "/portal", // Kundenportal, eigener Token-Mechanismus statt Supabase-Auth
   /*
+   * Der Einrichtungslink. Wer ihn bekommt, hat kein Konto — die
+   * Lohnverrechnung, der Steuerberater, die EDV-Betreuung. Geprüft wird
+   * der Token in der Route, genau wie beim Portal.
+   */
+  "/einrichtung",
+  /*
    * Die Belegausgabe des Portals. Ohne diesen Eintrag schickt die
    * Middleware den Kunden auf die Anmeldung — er hat aber kein Konto,
    * sondern einen Link. Die Prüfung steckt in der Route selbst.

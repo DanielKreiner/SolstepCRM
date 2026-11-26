@@ -1,5 +1,13 @@
 import "server-only";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import {
+  ausBase64url,
+  base64url,
+  geheimnis,
+  gleich,
+  hashe,
+  signiere,
+} from "@/lib/token/hmac";
 
 /*
  * Portal-Zugang.
@@ -10,17 +18,14 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
  * liest, kann daraus keinen gültigen Link bauen.
  *
  * Ablauf 90 Tage, widerrufbar über revoked_at.
+ *
+ * Die HMAC-Rechnung selbst steht in lib/token/hmac.ts, damit es sie nur
+ * einmal gibt. Hier bleibt bewusst das ungeleitete Geheimnis als
+ * Schlüssel: Es sind Links im Umlauf, und ein abgeleiteter Schlüssel
+ * würde sie alle auf einmal entwerten.
  */
 
 const ABLAUF_TAGE = 90;
-
-function secret(): string {
-  const s = process.env.PORTAL_TOKEN_SECRET;
-  if (!s || s.length < 32) {
-    throw new Error("PORTAL_TOKEN_SECRET fehlt oder ist zu kurz.");
-  }
-  return s;
-}
 
 export type TokenPayload = { customerId: string; exp: number };
 
@@ -29,7 +34,7 @@ export function createToken(customerId: string, tage = ABLAUF_TAGE): string {
   const exp = Math.floor(Date.now() / 1000) + tage * 86400;
   const nonce = randomBytes(6).toString("base64url");
   const body = `${customerId}.${exp}.${nonce}`;
-  return `${base64url(body)}.${sign(body)}`;
+  return `${base64url(body)}.${signiere(geheimnis(), body)}`;
 }
 
 /** Prüft Signatur und Ablauf. Gibt null zurück, wenn irgendetwas nicht stimmt. */
@@ -38,19 +43,10 @@ export function verifyToken(token: string): TokenPayload | null {
   if (teile.length !== 2) return null;
 
   const [kopf, signatur] = teile as [string, string];
-  let body: string;
-  try {
-    body = Buffer.from(kopf, "base64url").toString("utf8");
-  } catch {
-    return null;
-  }
+  const body = ausBase64url(kopf);
+  if (body === null) return null;
 
-  const erwartet = sign(body);
-  // Konstante Laufzeit: ein Vergleich mit === verrät über die Dauer, wie
-  // viele Zeichen gestimmt haben.
-  const a = Buffer.from(signatur);
-  const b = Buffer.from(erwartet);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  if (!gleich(signatur, signiere(geheimnis(), body))) return null;
 
   const [customerId, expStr] = body.split(".");
   if (!customerId || !expStr) return null;
@@ -63,13 +59,5 @@ export function verifyToken(token: string): TokenPayload | null {
 
 /** Nur der Hash landet in der Datenbank. */
 export function hashToken(token: string): string {
-  return createHmac("sha256", secret()).update(token).digest("hex");
-}
-
-function sign(body: string): string {
-  return createHmac("sha256", secret()).update(body).digest("base64url");
-}
-
-function base64url(v: string): string {
-  return Buffer.from(v, "utf8").toString("base64url");
+  return hashe(geheimnis(), token);
 }

@@ -8,7 +8,8 @@ const __dirname = dirname(__filename);
 const compat = new FlatCompat({ baseDirectory: __dirname });
 
 const ADMIN_CLIENT_MESSAGE =
-  "Der Service-Role-Client umgeht RLS. Erlaubt nur in /api/webhooks, /api/cron, /app/portal und /app/ops. " +
+  "Der Service-Role-Client umgeht RLS. Erlaubt nur in /api/webhooks, /api/cron, /app/portal, " +
+  "/app/einrichtung und /app/ops. " +
   "Normale Lese- und Schreiboperationen laufen über lib/supabase/server.ts unter RLS.";
 
 const eslintConfig = [
@@ -72,6 +73,15 @@ const eslintConfig = [
        */
       "app/api/portal/**",
       "app/ops/**",
+      /*
+       * Der Einrichtungslink. Dieselbe Begründung wie beim Portal: kein
+       * Supabase-Login, an dem RLS greifen könnte. Die Grenze liegt in
+       * lib/einrichtung/zugang.ts und in den Aktionen dieser Route, und
+       * jede Abfrage dort schränkt selbst auf company_id ein. Was über
+       * diesen Pfad erreichbar ist, ist genau eine Liste — wer hier eine
+       * Abfrage ergänzt, öffnet sie für jeden, der den Link hat.
+       */
+      "app/einrichtung/**",
       "lib/mail/**",
       /*
        * Die Datenschicht des Kundenportals. Das Portal hat keine
@@ -81,6 +91,8 @@ const eslintConfig = [
        * ein. Wer diese Datei ändert, ändert eine Sicherheitsgrenze.
        */
       "lib/portal/**",
+      /* Die Datenschicht des Einrichtungslinks — siehe app/einrichtung. */
+      "lib/einrichtung/**",
       /*
        * Die gemeinsame Klammer der Cron-Handler. Sie prüft CRON_SECRET und
        * die Idempotenz und reicht den Service-Role-Client an die Arbeit

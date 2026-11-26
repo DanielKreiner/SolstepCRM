@@ -3,7 +3,12 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { pfadName, pruefeUnterlage } from "@/lib/dateien/unterlagen";
+import {
+  BUCKET_UNTERLAGEN as BUCKET,
+  pfadName,
+  pruefeUnterlage,
+} from "@/lib/dateien/unterlagen";
+import { zugangHash, zugangToken } from "@/lib/einrichtung/zugang";
 import { requireMe } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,8 +19,6 @@ import { createClient } from "@/lib/supabase/server";
  * Policies aus 0078 sind die Grenze, nicht diese Datei. Was hier steht,
  * ist die Prüfung der Eingabe und die Ablage der Datei.
  */
-
-export const BUCKET = "documents";
 
 export type UnterlagenState = { error: string | null; ok: string | null };
 
@@ -326,4 +329,80 @@ export async function dateiEntfernen(
 
   revalidatePath("/einstellungen");
   return { error: null, ok: `„${datei.dateiname as string}" entfernt.` };
+}
+
+/* ------------------------------------------------------- Link ohne Konto */
+
+/*
+ * Ein Link, der die Einrichtungsliste ohne Anmeldung öffnet.
+ *
+ * Grund: Wer die Angaben hat, hat oft keinen Zugang. Den Kundenstamm
+ * exportiert der Steuerberater, den Resturlaub kennt die Lohnverrechnung,
+ * die Freigabe für das Postfach macht die EDV-Betreuung. Für drei
+ * Angaben legt niemand ein Konto an — und ohne Link landet alles wieder
+ * in einer Mail.
+ */
+
+export type LinkErzeugtState = {
+  error: string | null;
+  ok: string | null;
+  /** Nur direkt nach dem Erzeugen gefüllt. Danach steht nur der Hash in der Datenbank. */
+  token: string | null;
+};
+
+export async function linkErzeugen(
+  _prev: LinkErzeugtState,
+  formData: FormData,
+): Promise<LinkErzeugtState> {
+  const z1 = await zugang();
+  if (!z1.ok) return { ...z1.status, token: null };
+
+  const zweck = z
+    .string()
+    .trim()
+    .max(80)
+    .optional()
+    .safeParse(formData.get("zweck") ?? undefined);
+
+  const token = zugangToken(z1.me.companyId);
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("einrichtung_zugang").insert({
+    company_id: z1.me.companyId,
+    token_hash: zugangHash(token),
+    zweck: zweck.success && zweck.data ? zweck.data : null,
+    expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),
+    erstellt_von: z1.me.id,
+  });
+
+  if (error) return { error: `Link anlegen fehlgeschlagen: ${error.message}`, ok: null, token: null };
+
+  revalidatePath("/einstellungen");
+  return {
+    error: null,
+    ok: "Link erzeugt. Er wird nur dieses eine Mal angezeigt.",
+    token,
+  };
+}
+
+export async function linkWiderrufen(
+  _prev: UnterlagenState,
+  formData: FormData,
+): Promise<UnterlagenState> {
+  const z1 = await zugang();
+  if (!z1.ok) return z1.status;
+
+  const id = z.string().uuid().safeParse(formData.get("id"));
+  if (!id.success) return { error: "Der Link ist nicht mehr da.", ok: null };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("einrichtung_zugang")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", id.data);
+
+  if (error) return { error: `Zurückziehen fehlgeschlagen: ${error.message}`, ok: null };
+
+  revalidatePath("/einstellungen");
+  return { error: null, ok: "Der Link geht nicht mehr auf." };
 }
