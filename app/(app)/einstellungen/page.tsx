@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Abschnitt } from "@/components/ui/Abschnitt";
 import { Einrichtung, type Punkt } from "./Einrichtung";
+import {
+  Unterlagen,
+  type UnterlagenDatei,
+  type UnterlagenPunkt,
+} from "./Unterlagen";
 import { KreisForm, type KreisWerte } from "./Nummernkreise";
 import {
   NachweisForm,
@@ -28,6 +33,7 @@ import {
   type VorgabeZeile,
 } from "./PlanerVorgaben";
 import { ChecklisteForm, FirmaForm, MarkeForm } from "./MarkeForms";
+import { date } from "@/lib/format";
 import { ausJson } from "@/lib/rules/zeitregeln";
 import { KpiKarte } from "@/components/ui/KpiKarte";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -44,6 +50,81 @@ import {
 } from "./SettingsForms";
 
 export const metadata: Metadata = { title: "Einstellungen" };
+
+/*
+ * Die offenen Punkte beim Start (0078) samt ihren Dateien.
+ *
+ * Die Leseadressen werden hier signiert und nicht im Browser geholt:
+ * `documents` ist ein privater Bucket, und eine Signatur gehört auf den
+ * Server. 60 Minuten nach CLAUDE.md 4.4 — die Seite wird bei jeder
+ * Änderung neu gebaut, damit reicht das.
+ */
+async function unterlagenLaden(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<UnterlagenPunkt[]> {
+  const [{ data: punkte }, { data: dateien }] = await Promise.all([
+    supabase
+      .from("einrichtung_punkt")
+      .select(
+        "id, schluessel, bereich, sortierung, titel, grund, art, optionen, dringend, wert, anmerkung, status, beantwortet_am, app_user(name)",
+      )
+      .order("sortierung"),
+    supabase
+      .from("einrichtung_datei")
+      .select("id, punkt_id, dateiname, groesse_bytes, storage_path")
+      .order("created_at"),
+  ]);
+
+  if (!punkte || punkte.length === 0) return [];
+
+  /*
+   * Eine Signatur je Datei, aber in einem Aufruf. Einzeln wären es bei
+   * einem vollen Katalog zwei Dutzend Rundreisen zum Storage-Dienst.
+   */
+  const pfade = (dateien ?? []).map((d) => d.storage_path as string);
+  const links = new Map<string, string>();
+  if (pfade.length > 0) {
+    const { data: signiert } = await supabase.storage
+      .from("documents")
+      .createSignedUrls(pfade, 60 * 60);
+    for (const s of signiert ?? []) {
+      if (s.path && s.signedUrl) links.set(s.path, s.signedUrl);
+    }
+  }
+
+  const jePunkt = new Map<string, UnterlagenDatei[]>();
+  for (const d of dateien ?? []) {
+    const liste = jePunkt.get(d.punkt_id as string) ?? [];
+    liste.push({
+      id: d.id as string,
+      dateiname: d.dateiname as string,
+      groesseBytes: d.groesse_bytes === null ? null : Number(d.groesse_bytes),
+      link: links.get(d.storage_path as string) ?? null,
+    });
+    jePunkt.set(d.punkt_id as string, liste);
+  }
+
+  return punkte.map((p) => {
+    const person = p.app_user as { name?: string } | { name?: string }[] | null;
+    const name = Array.isArray(person) ? person[0]?.name : person?.name;
+    return {
+      id: p.id as string,
+      schluessel: p.schluessel as string,
+      bereich: p.bereich as string,
+      titel: p.titel as string,
+      grund: (p.grund as string | null) ?? null,
+      art: p.art as UnterlagenPunkt["art"],
+      optionen: (p.optionen as string[] | null) ?? [],
+      dringend: Boolean(p.dringend),
+      wert: (p.wert as string | null) ?? null,
+      anmerkung: (p.anmerkung as string | null) ?? null,
+      status: p.status as UnterlagenPunkt["status"],
+      beantwortetVon: name ?? null,
+      beantwortetAm: p.beantwortet_am ? date(p.beantwortet_am as string) : null,
+      dateien: jePunkt.get(p.id as string) ?? [],
+    };
+  });
+}
 
 const AREAS = [
   ["pipelines", "Pipelines"],
@@ -213,6 +294,9 @@ export default async function EinstellungenPage({
             .eq("active", true),
         ])
       : [{ count: null }, { count: null }];
+
+  const unterlagen =
+    bereich === "einrichtung" ? await unterlagenLaden(supabase) : [];
 
   const [{ data: nachweise }, { data: traegerListe }] =
     bereich === "nachweise"
@@ -483,6 +567,17 @@ export default async function EinstellungenPage({
                   artikel: artikel ?? 0,
                 })}
               />
+            </Abschnitt>
+          ) : null}
+
+          {bereich === "einrichtung" && unterlagen.length > 0 ? (
+            <Abschnitt titel="Was wir von Ihnen brauchen">
+              <p className="-mt-1 mb-4 max-w-[62ch] text-[12.5px] leading-[1.5] text-muted">
+                Die Liste oben zeigt, was Sie selbst einstellen. Hier steht das
+                Gegenteil: die Punkte, bei denen wir auf etwas von Ihnen warten
+                — eine Datei, eine Angabe, eine Entscheidung.
+              </p>
+              <Unterlagen punkte={unterlagen} gesperrt={!darfSchreiben} />
             </Abschnitt>
           ) : null}
 
